@@ -14,3 +14,13 @@ def test_spawn_agent_helper_returns_distinct_ids(client):
     b = server._spawn_agent(name="x", cmd="cat")        # same name OK now
     assert a["id"] != b["id"]
     server.delete_session(a["id"]); server.delete_session(b["id"])
+
+def test_mission_does_not_hold_lock(client):
+    aid = client.post("/sessions", json={"name": "m", "cmd": "cat",
+                                         "task": "echo working"}).json()["id"]
+    time.sleep(1.0)
+    lock = server._locks[aid]
+    acquired = lock.acquire(timeout=2.0)
+    assert acquired is True
+    lock.release()
+    client.delete(f"/sessions/{aid}")

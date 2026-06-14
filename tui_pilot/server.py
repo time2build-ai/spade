@@ -182,15 +182,18 @@ def _prime(aid: str) -> None:
                 m["prep_detail"] = "sending instructions"
                 ctrl.prompt(instructions, timeout=120)
 
-            # 4. if a specific mission was given, kick it off immediately so the
-            # agent starts working on spawn (e.g. "Plan a Salesforce
-            # integration" / "Implement plan.md").
-            task = (m.get("task") or "").strip()
-            if task:
-                m["prep"] = "working"
-                m["prep_detail"] = task[:80]
-                result = ctrl.prompt(task, timeout=1800)
-                m["task_state"] = result.get("state").value if result.get("state") else None
+        # 4. if a specific mission was given, fire it off (fire-and-forget) so
+        # the agent starts working on spawn (e.g. "Plan a Salesforce
+        # integration" / "Implement plan.md"). We must NOT hold the per-session
+        # lock for the whole turn (spec §3.5) — otherwise ``answer()`` could
+        # never acquire it to reply to the agent's questions. So we take the
+        # lock only long enough to SEND the task, then release without waiting.
+        task = (m.get("task") or "").strip()
+        if task:
+            m["prep"] = "working"
+            m["prep_detail"] = task[:80]
+            with lock:
+                ctrl.session.send_text(task)
 
         m["prep"] = "ready"
         m["prep_detail"] = None
