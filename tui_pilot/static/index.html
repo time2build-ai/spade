@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>tui-pilot · agents</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header>
+  <h1>tui-pilot <span class="dim">· agent control panel</span></h1>
+  <span class="grow"></span>
+  <span id="summary" class="dim">0 agents</span>
+  <a href="/docs" target="_blank">API docs ↗</a>
+</header>
+
+<main>
+  <!-- LEFT: new agent + session list -->
+  <aside class="sidebar">
+    <fieldset class="new-agent">
+      <legend>New agent</legend>
+      <div class="field">
+        <label for="role">Role</label>
+        <select id="role"></select>
+        <p id="roleDesc" class="hint"></p>
+      </div>
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" placeholder="e.g. planner-1" />
+      </div>
+      <div class="field">
+        <label for="cwd">Working dir <span class="dim">(optional)</span></label>
+        <input type="text" id="cwd" placeholder="/path/to/project" />
+      </div>
+      <div class="field">
+        <label for="task">Initial task / mission <span class="dim">(optional)</span></label>
+        <textarea id="task" rows="3" placeholder="What should this agent do right away?
+e.g. Plan a new integration with Salesforce
+e.g. Implement plan.md"></textarea>
+      </div>
+      <div class="field">
+        <label for="mode">Autonomy / mode</label>
+        <select id="mode">
+          <option value="normal">normal — asks every time</option>
+          <option value="accept-edits">accept-edits — auto-accept file edits</option>
+          <option value="auto">auto — runs commands too</option>
+          <option value="plan">plan — read-only planning</option>
+          <option value="bypass">⚠ bypass — skip ALL permissions (dangerous)</option>
+        </select>
+        <p id="modeWarn" class="hint" style="display:none;color:var(--red)">
+          ⚠ Bypass launches with <code>--dangerously-skip-permissions</code>: the agent runs
+          every action with no prompts. Use only in a trusted/sandboxed dir. Set at spawn only.
+        </p>
+      </div>
+      <details class="field">
+        <summary>Instructions (priming)</summary>
+        <textarea id="instructions" rows="6" placeholder="Typed in as the first message to prime the agent…"></textarea>
+      </details>
+      <button id="btnSpawn" class="primary wide">＋ Spawn agent</button>
+    </fieldset>
+
+    <div class="agents-head">
+      <span>Agents</span>
+      <button id="btnKillAll" class="tiny red" title="kill all sessions">kill all</button>
+    </div>
+    <div id="agents" class="agents"></div>
+  </aside>
+
+  <!-- CENTER: focused session screen + composer -->
+  <section class="stage">
+    <div class="stage-head">
+      <span id="focusTitle" class="dim">No agent selected</span>
+      <span class="grow"></span>
+      <span id="focusPill" class="pill s-EXITED"><span class="dot"></span><span id="focusState">—</span></span>
+    </div>
+    <pre id="screen">Pick a role on the left and spawn an agent.
+
+Every agent is a real interactive `claude` running in its own tmux session.
+This panel drives them purely through tmux keystrokes + screen capture —
+no headless mode, no SDK. Roles customise an agent by (1) cycling its
+permission mode via Shift-Tab and (2) typing its instructions as the first
+message.</pre>
+    <div class="composer">
+      <input type="text" id="prompt" placeholder="Message the focused agent and press Enter…" disabled />
+      <button id="btnSend" class="primary" disabled>Send</button>
+    </div>
+  </section>
+
+  <!-- RIGHT: controls -->
+  <aside class="controls">
+    <fieldset>
+      <legend>Permission dialog</legend>
+      <small>When state is <b>AWAITING_PERMISSION</b>:</small>
+      <div class="row" style="margin-top:8px">
+        <button id="btnApprove" class="green" disabled>Approve</button>
+        <button id="btnDeny" class="red" disabled>Deny</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Controls</legend>
+      <div class="keys">
+        <button data-key="Up">↑ Up</button>
+        <button data-key="Down">↓ Down</button>
+        <button data-key="Enter">⏎ Enter</button>
+        <button data-key="Escape">Esc</button>
+        <button data-key="BTab">⇧Tab</button>
+        <button data-key="C-c">Ctrl-C</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="customKey" placeholder="custom key e.g. C-r" />
+        <button id="btnKey" style="flex:0 0 auto">Send</button>
+      </div>
+      <button id="btnInterrupt" class="wide" style="margin-top:8px">Interrupt (Esc)</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>View</legend>
+      <label><input type="checkbox" id="histChk" /> scrollback history</label>
+      <label style="margin-top:6px"><input type="checkbox" id="pollChk" checked /> auto-refresh (700ms)</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Output (JSON)</legend>
+      <pre id="json">{ }</pre>
+      <button id="btnCopyJson" class="wide" style="margin-top:6px">Copy JSON</button>
+    </fieldset>
+
+    <fieldset class="logbox">
+      <legend>Activity log</legend>
+      <div id="log"></div>
+    </fieldset>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+# patterns.yaml — version-specific screen signatures for the target TUI.
+#
+# ⚠ THESE ARE DISCOVERED, NOT GUESSED.
+#
+# The values below were tuned against the live Claude Code REPL **v2.1.177**
+# (captured into fixtures/ with `python -m tui_pilot.cli dump`). They WILL drift
+# as the TUI changes. The supported workflow when something misbehaves is:
+#
+#   1. python -m tui_pilot.cli dump --cmd claude     # capture real screens
+#   2. eyeball fixtures/*.txt for each state
+#   3. tune the regexes below to match YOUR version
+#   4. .venv/bin/pytest tests/test_screen.py         # confirm they classify
+#
+# All regexes are matched case-insensitively, multiline, against the
+# *normalized* screen (screen.normalize has already stripped spinner glyphs and
+# elapsed-time / token counters). Keep that in mind: do NOT try to match a
+# spinner glyph or a "(4s)" timer here — they are gone by the time classify
+# runs.
+
+# Characters stripped by screen.normalize() before matching. (Informational —
+# normalize() strips the full Braille + Dingbats blocks; this lists the exact
+# glyphs this version cycles, for documentation.)
+spinner_chars: "✳✻✽✶✢⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/-\\"
+timer_regex: '\(\d+s\)|·\s*\d+s|for \d+s'
+
+# --- active turn ----------------------------------------------------------
+
+# The single most reliable "a turn is running" signal: the interrupt hint that
+# Claude shows in the footer while thinking OR streaming.
+active_regex: 'esc to interrupt'
+
+# Within an active turn, streaming = an output bullet (⏺ U+23FA) is already on
+# screen, i.e. the answer is being written. (⏺ also lingers after a turn ends,
+# but by then active_regex no longer matches, so this is only consulted while
+# active.)
+streaming_regex: '⏺'
+
+# Thinking has no dedicated regex: classify() returns THINKING when active_regex
+# matches but streaming_regex does not. (Left here for documentation; the
+# gerund status words Claude cycles — Fiddle-faddling…, Cogitating…, Brewing… —
+# are too open-ended to enumerate reliably.)
+thinking_regex: 'esc to interrupt'
+
+# --- resting states -------------------------------------------------------
+
+# The ready composer footer. This version shows one of several mode footers:
+#   "? for shortcuts"            (normal mode)
+#   "⏵⏵ auto mode on ..."        (auto mode)
+#   "⏵⏵ accept edits on ..."     (accept-edits mode)
+#   "⏸ plan mode on ..."         (plan mode)
+#   "⏵⏵ bypass permissions on .."(bypass mode, launched with the danger flag)
+# Any of these (with no active interrupt hint) means the composer is idle.
+idle_regex: '\?\s*for shortcuts|auto mode on|accept edits on|plan mode on|bypass permissions on'
+
+# A non-permission prompt waiting on free-text input.
+awaiting_input_regex: 'Press Enter to continue|continue\?\s*$'
+
+# --- blocking / exceptional ----------------------------------------------
+
+# Permission dialog. Real v2.1.177 layout:
+#   Do you want to proceed?
+#   ❯ 1. Yes
+#     2. Yes, and always allow ...
+#     3. No
+#   Esc to cancel · Tab to amend · ctrl+e to explain
+permission_regex: 'Do you want to proceed|❯\s*1\.\s*Yes|^\s*\d+\.\s*Yes\b|Esc to cancel'
+
+# Errors Claude surfaces inline ("API Error: 529 ...", overloaded, etc.).
+error_regex: 'API Error|overloaded_error|\bFatal\b|\bException\b|\bTraceback\b|rate limit'
+
+# --- lifecycle ------------------------------------------------------------
+
+# Booting: banner painted but composer/footer not yet ready. (Boot is near
+# instant on this version; this mostly catches the partial first paint.)
+booting_regex: 'Welcome back|Welcome to Claude Code|Loading|Starting|Initializing|tips for getting started'
+
+# Exited: the program is gone and a shell prompt is showing, or an explicit
+# goodbye. NOTE: in practice EXITED is usually detected by the controller via
+# TmuxSession.is_alive() == False (running `claude` directly tears the pane
+# down on /quit); this regex only matters if the pane persists into a shell.
+exited_regex: '\$\s*$|Goodbye|session ended|\[Process completed\]'
