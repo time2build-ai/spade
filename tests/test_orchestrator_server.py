@@ -2,10 +2,20 @@ import json
 import pytest, time
 from fastapi.testclient import TestClient
 from tui_pilot import server
+from tui_pilot import orchestrator_server
 
 @pytest.fixture()
 def client():
     return TestClient(server.app)
+
+@pytest.fixture(autouse=True)
+def _reset_orch_state():
+    """Missions/brakes are module-global; reset between tests for isolation."""
+    orchestrator_server._missions.clear()
+    orchestrator_server._brakes.clear()
+    yield
+    orchestrator_server._missions.clear()
+    orchestrator_server._brakes.clear()
 
 def test_spawn_records_model_mission_parent_reason(client, tmp_path):
     r = client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
@@ -55,5 +65,36 @@ def test_worker_question_is_forwarded_to_orchestrator(client, tmp_path):
             got = True; break
         time.sleep(0.1)
     assert got
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")
+
+
+def test_missions_list_and_autopilot_toggle(client, tmp_path):
+    o = client.post("/sessions", json={"name":"orch","cmd":"cat","cwd":str(tmp_path),
+                                       "is_orchestrator": True}).json()["id"]
+    client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
+                                   "parent": o, "mission":"m1"})
+    missions = client.get("/missions").json()["missions"]
+    assert any(m["mission"] == "m1" for m in missions)
+    r = client.post("/missions/m1/autopilot", json={"autopilot": True})
+    assert r.status_code == 200 and r.json()["autopilot"] is True
+    assert any(m["mission"]=="m1" and m["autopilot"] for m in client.get("/missions").json()["missions"])
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")
+
+
+def test_opus_spawn_supervised_creates_a_brake(client, tmp_path):
+    o = client.post("/sessions", json={"name":"orch","cmd":"cat","cwd":str(tmp_path),
+                                       "is_orchestrator": True}).json()["id"]
+    ob = server._hub_for(str(tmp_path)).agent_dir(o) / "outbox" / "s.json"
+    ob.write_text(json.dumps({"id":"s","action":"spawn","role":"plain","cmd":"cat",
+                              "model":"opus","task":"hard","mission":"m1","reason":"gnarly"}))
+    brake = None
+    for _ in range(40):
+        brakes = client.get("/brakes").json()["brakes"]
+        if brakes: brake = brakes[0]; break
+        time.sleep(0.1)
+    assert brake and brake["brake"] == "opus_spawn"
+    assert not [s for s in client.get("/sessions").json()["sessions"] if s.get("model")=="opus"]
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")

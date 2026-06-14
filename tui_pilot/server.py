@@ -507,6 +507,11 @@ def _spawn_agent(
             on_handoff=_make_handoff(predecessor_aid=aid, name_hint=name, cwd=eff_cwd),
         )
 
+    # Register the mission so it shows up in GET /missions even before any
+    # orchestration signal references it (lazy-creates the mission record).
+    if mission:
+        orchestrator_server._mission(mission)
+
     # Kick off priming in the background (mode + instructions need a live REPL).
     threading.Thread(target=_prime, args=(aid,), daemon=True).start()
     # _info() acquires the session lock (for harness_state) — call it OUTSIDE
