@@ -227,6 +227,20 @@ def collect_worker_forward(server, aid: str, harness_state) -> list[tuple]:
             )
             out.append((parent, note))
 
+    # 1b. Worker FINISHED → tell its parent ONCE, so the orchestrator knows its
+    #     worker completed and can report to the human / spawn a successor / kill
+    #     it. Without this the orchestrator sits idle, unaware the work is done.
+    if harness_state is not None and harness_state.kind == "done":
+        if not m.get("finish_forwarded"):
+            m["finish_forwarded"] = True
+            report = (harness_state.report or "").strip()
+            note = (
+                f"worker {aid} FINISHED. Report: {report} "
+                f"Decide the next step: tell the human with a status note, spawn "
+                f"a successor, or stop it with kill{{worker:{aid}}}."
+            )
+            out.append((parent, note))
+
     # 2. A permission dialog: supervised → brake; autopilot → forward once.
     ctrl = server._sessions.get(aid)
     screen_state = server._safe_state(ctrl) if ctrl is not None else ""
@@ -303,12 +317,21 @@ def _apply_result(server, orch_aid: str, mission, sig, result: Result) -> None:
 
 
 def _send_to_orch(server, orch_aid: str, text: str) -> None:
-    """Send a note into the orchestrator under ITS lock (one lock only)."""
+    """Send a note into the orchestrator under ITS lock (one lock only).
+
+    The note is collapsed to a SINGLE LINE: a multi-line send_text is captured
+    by Claude as a bracketed paste and the trailing Enter is absorbed, leaving
+    it unsubmitted in the composer (same bug fixed for priming). Long notes
+    (e.g. a finished worker's report) are truncated so the chat stays readable.
+    """
+    one_line = " ".join(text.split())
+    if len(one_line) > 1200:
+        one_line = one_line[:1200] + " …(truncated)"
     with server._lock_for(orch_aid):
         ctrl = server._sessions.get(orch_aid)
         if ctrl is not None:
             try:
-                ctrl.session.send_text(text)
+                ctrl.session.send_text(one_line)
             except Exception:  # noqa: BLE001
                 pass
 

@@ -145,7 +145,7 @@ function cardHtml(s) {
     </div>
     ${cwd}
     <div class="meta">
-      <span class="pill s-${s.state}"><span class="dot"></span>${s.state}</span>
+      <span class="pill s-${s.harness_state === "done" ? "IDLE" : s.state}"><span class="dot"></span>${s.harness_state === "done" ? "DONE" : s.state}</span>
       <span class="badge">${s.mode || "normal"}</span>
       ${model}${prep}${busy}${hs}${menu}
     </div>
@@ -308,8 +308,9 @@ async function refreshMissionActivity() {
 function updateFocusControls() {
   const s = current ? findSession(current) : null;
   const state = s ? s.state : "EXITED";
-  el.focusState.textContent = s ? state : "—";
-  el.focusPill.className = `pill s-${state}`;
+  const shown = s && s.harness_state === "done" ? "DONE" : state;
+  el.focusState.textContent = s ? shown : "—";
+  el.focusPill.className = `pill s-${shown === "DONE" ? "IDLE" : state}`;
   const alive = !!s && s.alive;
   const ready = s && (s.prep === "ready" || isOrch(s));
   const busy = pending.has(current);

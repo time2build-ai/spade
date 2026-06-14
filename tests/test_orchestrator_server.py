@@ -172,3 +172,29 @@ def test_one_spawn_signal_spawns_exactly_one_worker(client, tmp_path):
     assert len(workers) == 1, f"expected exactly 1 worker, got {len(workers)} (runaway)"
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
+
+
+def test_worker_finish_is_forwarded_to_orchestrator(client, tmp_path):
+    """When a worker finishes, its parent orchestrator must be told (once) so it
+    isn't left idle, unaware the work is done."""
+    import json, time, os
+    cwd = str(tmp_path / "p"); os.makedirs(cwd)
+    o = client.post("/sessions", json={"name": "orch", "cmd": "cat",
+                                       "cwd": cwd, "is_orchestrator": True}).json()["id"]
+    w = client.post("/sessions", json={"name": "w", "cmd": "cat", "cwd": cwd,
+                                       "parent": o, "mission": "m1"}).json()["id"]
+    # worker finishes
+    wb = server._hub_for(cwd).agent_dir(w) / "outbox" / "done.json"
+    wb.write_text(json.dumps({"id": "done", "action": "finished",
+                              "report": "# Done\nbuilt the thing"}))
+    # the orchestrator's screen (cat echoes) should receive a FINISHED note
+    got = False
+    for _ in range(40):
+        screen = client.get(f"/sessions/{o}/screen").text
+        if "FINISHED" in screen and w in screen:
+            got = True
+            break
+        time.sleep(0.1)
+    assert got, "worker finish was not forwarded to the orchestrator"
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")
