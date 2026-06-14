@@ -203,3 +203,14 @@ def install_comms_skill(
         "__OUTBOX__", outbox_path or "(no control center attached)"
     ).replace("__AGENT_ID__", agent_id or "(none)")
     (dst / "SKILL.md").write_text(rendered)
+
+
+def build_cmd(cmd: str, model_id: str | None) -> str:
+    """Append `--model <id>` to a launch command when a model is requested.
+
+    `--model` is an interactive-compatible flag (the REPL still runs normally),
+    so it does not violate the no-headless constraint. Idempotent: skips if the
+    command already names a model."""
+    if not model_id or "--model" in cmd:
+        return cmd
+    return f"{cmd} --model {model_id}"
