@@ -15,9 +15,13 @@
 </header>
 
 <main>
-  <!-- LEFT: new agent + session list -->
+  <!-- LEFT: orchestrator + new agent + session list -->
   <aside class="sidebar">
-    <fieldset class="new-agent">
+    <button id="btnOrch" class="orch-btn">🧠 Orchestrator <span class="dim">· chat</span></button>
+
+    <details class="new-agent advanced">
+      <summary>⚙ Advanced — manual spawn</summary>
+      <fieldset>
       <legend>New agent</legend>
       <div class="field">
         <label for="role">Role</label>
@@ -57,7 +61,8 @@ e.g. Implement plan.md"></textarea>
         <textarea id="instructions" rows="6" placeholder="Typed in as the first message to prime the agent…"></textarea>
       </details>
       <button id="btnSpawn" class="primary wide">＋ Spawn agent</button>
-    </fieldset>
+      </fieldset>
+    </details>
 
     <div class="agents-head">
       <div class="tabs">
@@ -77,7 +82,9 @@ e.g. Implement plan.md"></textarea>
       <span class="grow"></span>
       <span id="focusPill" class="pill s-EXITED"><span class="dot"></span><span id="focusState">—</span></span>
     </div>
+    <div id="brakesStrip" class="brakes-strip" style="display:none"></div>
     <div id="answerCard" class="answer-mount" style="display:none"></div>
+    <div id="missionActivity" class="mission-activity" style="display:none"></div>
     <div id="reportCard" class="report-mount" style="display:none"></div>
     <pre id="screen">Pick a role on the left and spawn an agent.
 

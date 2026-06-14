@@ -15,6 +15,7 @@ const el = {
   keyBtn: $("btnKey"), customKey: $("customKey"), hist: $("histChk"), poll: $("pollChk"),
   json: $("json"), copyJson: $("btnCopyJson"), log: $("log"),
   answer: $("answerCard"), report: $("reportCard"),
+  orchBtn: $("btnOrch"), brakes: $("brakesStrip"), missionActivity: $("missionActivity"),
 };
 
 let roles = [];
@@ -26,6 +27,8 @@ let spawnCount = 0;
 let inboxOpen = false;
 let focusSignal = null;     // cached open signal for the focused agent
 let focusReport = null;     // cached report text for the focused agent
+let orchId = null;          // the orchestrator session id (once known)
+let missions = [];          // latest GET /missions snapshot
 
 // ---- utilities ------------------------------------------------------------
 
@@ -67,6 +70,7 @@ async function api(method, path, body, label) {
 
 const findSession = (id) => sessions.find((s) => s.id === id);
 const blockedSessions = () => sessions.filter((s) => s.harness_state === "blocked");
+const isOrch = (s) => s && (s.role === "orchestrator" || s.id === orchId);
 
 // A session "needs attention" if a harness signal is blocking OR the TUI itself
 // is showing a permission/input dialog that only a human can resolve.
@@ -129,9 +133,12 @@ function cardHtml(s) {
   else if (s.state === "AWAITING_INPUT") hs = `<span class="badge hs-blocked">🔴 input</span>`;
   else if (s.harness_state === "done") hs = `<span class="badge hs-done">✅ done</span>`;
   const cwd = s.cwd ? `<div class="cwd" title="${esc(s.cwd)}">${esc(s.cwd)}</div>` : "";
+  const model = s.model
+    ? `<span class="badge model-${esc(s.model)}" title="${esc(s.reason || "why this model")}">${esc(s.model)}</span>`
+    : "";
   return `
     <div class="top">
-      <span class="emoji">${s.emoji || "💬"}</span>
+      <span class="emoji">${isOrch(s) ? "🧠" : (s.emoji || "💬")}</span>
       <span class="nm" title="${esc(s.name)}">${esc(s.name)}</span>
       <button class="x" title="kill">✕</button>
     </div>
@@ -139,7 +146,7 @@ function cardHtml(s) {
     <div class="meta">
       <span class="pill s-${s.state}"><span class="dot"></span>${s.state}</span>
       <span class="badge">${s.mode || "normal"}</span>
-      ${prep}${busy}${hs}
+      ${model}${prep}${busy}${hs}
     </div>
     <div class="role">${esc(s.label || s.role || s.cmd)}</div>
     ${task}`;
@@ -148,6 +155,7 @@ function cardHtml(s) {
 function makeCard(s) {
   const card = document.createElement("div");
   card.className = `card st-${s.state}` + (s.id === current ? " active" : "")
+    + (isOrch(s) ? " orch" : "")
     + (needsAttention(s) ? " blocked" : "")
     + (s.harness_state === "done" ? " done" : "");
   card.innerHTML = cardHtml(s);
@@ -175,9 +183,31 @@ function renderAgents() {
   el.inboxBadge.style.display = nBlocked ? "inline-block" : "none";
 
   el.agents.innerHTML = "";
-  // bucket each session into the first matching group (mutually exclusive, ordered).
+
+  // Orchestrators first (the things you chat with), then mission groups,
+  // then state-grouped sessions that have no mission.
+  const orchs = sessions.filter((s) => isOrch(s));
+  for (const s of orchs) el.agents.appendChild(makeCard(s));
+
+  const rest = sessions.filter((s) => !isOrch(s));
+
+  // mission groups (in first-seen order)
+  const missionOrder = [];
+  const byMission = new Map();
+  for (const s of rest) {
+    if (!s.mission) continue;
+    if (!byMission.has(s.mission)) { byMission.set(s.mission, []); missionOrder.push(s.mission); }
+    byMission.get(s.mission).push(s);
+  }
+  for (const name of missionOrder) {
+    el.agents.appendChild(missionHeader(name));
+    for (const s of byMission.get(name)) el.agents.appendChild(makeCard(s));
+  }
+
+  // sessions without a mission → existing state-group fallback
+  const loose = rest.filter((s) => !s.mission);
   const buckets = new Map(GROUPS.map((g) => [g.key, []]));
-  for (const s of sessions) {
+  for (const s of loose) {
     const g = GROUPS.find((g) => g.test(s));
     buckets.get(g.key).push(s);
   }
@@ -192,18 +222,85 @@ function renderAgents() {
   }
 }
 
+function missionHeader(name) {
+  const m = missions.find((x) => x.mission === name);
+  const autopilot = !!(m && m.autopilot);
+  const head = document.createElement("div");
+  head.className = "mission-head";
+  head.innerHTML = `<span title="${esc(name)}">▣ ${esc(name)}</span><span class="grow"></span>`;
+  const toggle = document.createElement("button");
+  toggle.className = `badge autopilot-toggle ${autopilot ? "autopilot" : "supervised"}`;
+  toggle.textContent = autopilot ? "🟠 autopilot" : "🟢 supervised";
+  toggle.title = "toggle mission autopilot";
+  toggle.onclick = (ev) => { ev.stopPropagation(); setAutopilot(name, !autopilot); };
+  head.appendChild(toggle);
+  return head;
+}
+
+async function setAutopilot(mission, autopilot) {
+  try {
+    await api("POST", `/missions/${encodeURIComponent(mission)}/autopilot`, { autopilot }, `autopilot:${mission}`);
+    log(`mission ${mission}: ${autopilot ? "autopilot" : "supervised"}`, "ok");
+    await pollMissions();
+    renderAgents();
+  } catch (e) { log(`autopilot ${mission}: ${e.message}`, "err"); }
+}
+
 function focus(id) {
   current = id;
   inboxOpen = false;
   syncTabs();
   const s = findSession(id);
-  el.focusTitle.textContent = s
-    ? `${s.emoji || ""} ${s.name} — ${s.label || s.role || s.cmd}` : id;
+  if (s && isOrch(s)) {
+    el.focusTitle.innerHTML = `🧠 <b>Orchestrator</b> <span class="dim">— chat: describe a mission and it dispatches workers</span>`;
+  } else {
+    el.focusTitle.textContent = s
+      ? `${s.emoji || ""} ${s.name} — ${s.label || s.role || s.cmd}` : id;
+  }
   focusSignal = null; focusReport = null;
+  el.orchBtn.classList.toggle("active", !!(s && isOrch(s)));
   renderAgents();
   refreshScreen();
   refreshFocusHarness();
+  refreshMissionActivity();
   updateFocusControls();
+}
+
+// ---- orchestrator chat ----------------------------------------------------
+
+async function focusOrchestrator() {
+  try {
+    const r = await api("POST", "/orchestrator", undefined, "orchestrator");
+    if (r && r.id) {
+      orchId = r.id;
+      await pollSessions();
+      focus(orchId);
+    }
+  } catch (e) { log(`orchestrator: ${e.message}`, "err"); }
+}
+
+// ---- mission activity (shown when a mission worker is focused) -------------
+
+async function refreshMissionActivity() {
+  const s = current ? findSession(current) : null;
+  const mission = s && s.mission;
+  if (!mission) {
+    el.missionActivity.style.display = "none";
+    el.missionActivity.innerHTML = "";
+    return;
+  }
+  try {
+    const data = await api("GET", `/missions/${encodeURIComponent(mission)}`);
+    const acts = data.activity || [];
+    el.missionActivity.style.display = "";
+    const lines = acts.length
+      ? acts.slice(-12).map((a) => `<div class="ma-line">${esc(typeof a === "string" ? a : JSON.stringify(a))}</div>`).join("")
+      : `<div class="ma-line dim">(no activity yet)</div>`;
+    el.missionActivity.innerHTML =
+      `<div class="ma-head">mission · ${esc(mission)}</div>${lines}`;
+  } catch (e) {
+    el.missionActivity.style.display = "none";
+  }
 }
 
 function updateFocusControls() {
@@ -212,10 +309,11 @@ function updateFocusControls() {
   el.focusState.textContent = s ? state : "—";
   el.focusPill.className = `pill s-${state}`;
   const alive = !!s && s.alive;
-  const ready = s && s.prep === "ready";
+  const ready = s && (s.prep === "ready" || isOrch(s));
   const busy = pending.has(current);
   el.prompt.disabled = !alive || busy || !ready;
   el.prompt.placeholder = !s ? "Message the focused agent…"
+    : isOrch(s) ? "Describe a mission for the orchestrator and press Enter…"
     : !ready ? `agent is ${s.prep}…` : busy ? "agent is working…" : "Message the focused agent and press Enter…";
   el.send.disabled = el.prompt.disabled;
   const isPerm = state === "AWAITING_PERMISSION";
@@ -410,6 +508,12 @@ async function pollSessions() {
     updateFocusControls();
     // keep focused harness panels in sync as state transitions
     refreshFocusHarness();
+    // remember the orchestrator id if we can spot it
+    if (!orchId) {
+      const o = sessions.find((s) => s.role === "orchestrator" || s.is_orchestrator);
+      if (o) orchId = o.id;
+    }
+    refreshMissionActivity();
   } catch (e) { /* server momentarily busy */ }
 }
 
@@ -424,8 +528,64 @@ async function refreshScreen() {
   }
 }
 
+// ---- missions + brakes ----------------------------------------------------
+
+async function pollMissions() {
+  try {
+    const data = await api("GET", "/missions");
+    missions = data.missions || [];
+  } catch (e) { /* ignore */ }
+}
+
+async function pollBrakes() {
+  let brakes = [];
+  try {
+    const data = await api("GET", "/brakes");
+    brakes = data.brakes || [];
+  } catch (e) { return; }
+  renderBrakes(brakes);
+}
+
+function renderBrakes(brakes) {
+  if (!brakes.length) {
+    el.brakes.style.display = "none";
+    el.brakes.innerHTML = "";
+    return;
+  }
+  el.brakes.style.display = "";
+  el.brakes.innerHTML = "";
+  for (const b of brakes) {
+    const card = document.createElement("div");
+    card.className = "brake-card";
+    const meta = [b.mission ? `mission ${b.mission}` : null, b.worker ? `worker ${b.worker}` : null]
+      .filter(Boolean).join(" · ");
+    card.innerHTML = `
+      <div class="bc-head">🟠 brake · ${esc(b.brake)}</div>
+      <div class="bc-detail">${esc(b.detail || "")}</div>
+      ${meta ? `<div class="bc-meta">${esc(meta)}</div>` : ""}
+      <div class="bc-actions">
+        <button class="green bc-allow">Allow</button>
+        <button class="bc-skip">Skip</button>
+      </div>`;
+    card.querySelector(".bc-allow").onclick = () => brakeAction(b.id, "allow");
+    card.querySelector(".bc-skip").onclick = () => brakeAction(b.id, "skip");
+    el.brakes.appendChild(card);
+  }
+}
+
+async function brakeAction(id, verb) {
+  try {
+    await api("POST", `/brakes/${id}/${verb}`, undefined, `brake:${verb}`);
+    log(`brake ${verb}: ${id}`, "ok");
+  } catch (e) { log(`brake ${verb}: ${e.message}`, "err"); }
+  await pollBrakes();
+  await pollSessions();
+}
+
 setInterval(pollSessions, 1100);
 setInterval(() => { if (el.poll.checked) refreshScreen(); }, 700);
+setInterval(pollMissions, 1100);
+setInterval(pollBrakes, 1000);
 
 // ---- tab toggles ----------------------------------------------------------
 
@@ -538,7 +698,15 @@ el.copyJson.onclick = async () => {
   catch { log("clipboard blocked", "err"); }
 };
 
+el.orchBtn.onclick = focusOrchestrator;
+
 // ---- init -----------------------------------------------------------------
 loadRoles();
-pollSessions();
-log("ready — pick a role and spawn an agent.");
+pollMissions();
+pollBrakes();
+(async () => {
+  await pollSessions();
+  // ensure the orchestrator exists and make it the default focus.
+  await focusOrchestrator();
+})();
+log("ready — chat with 🧠 Orchestrator, or use Advanced to spawn manually.");
