@@ -20,7 +20,9 @@ Run with::
 
 from __future__ import annotations
 
+import os
 import threading
+from dataclasses import asdict
 from pathlib import Path
 
 import yaml
@@ -29,10 +31,12 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .comms import Hub
 from .controller import Controller
+from .harness import HarnessPoller
 from .identity import new_agent_id
 from .screen import State
-from .session import SessionError, TmuxSession
+from .session import SessionError, TmuxSession, install_comms_skill
 
 app = FastAPI(
     title="tui-pilot",
@@ -62,6 +66,11 @@ _meta: dict[str, dict] = {}
 _locks: dict[str, threading.Lock] = {}
 _registry_lock = threading.Lock()
 _order = 0
+
+# Mailbox hub (agent <-> control center) and per-session harness pollers. The
+# hub is a module global so tests can swap it for an isolated tmp root.
+HUB = Hub()
+_pollers: dict[str, HarnessPoller] = {}
 
 
 # ---- request / response models -------------------------------------------
@@ -215,6 +224,111 @@ def list_roles() -> dict:
 # ---- session endpoints ----------------------------------------------------
 
 
+def _make_handoff(*, name_hint: str, cwd: str | None):
+    """Build the ``on_handoff`` callback for a poller: spawn the successor the
+    finished signal describes. An unknown ``role`` here must NOT 400 — the
+    successor falls back to the provided cmd/mode."""
+    def _handoff(nxt: dict, report: str) -> dict:
+        return _spawn_agent(
+            name=nxt.get("role") or name_hint,
+            role=nxt.get("role"),
+            cmd=nxt.get("cmd"),
+            task=nxt.get("task"),
+            mode=nxt.get("mode"),
+            cwd=nxt.get("cwd") or cwd,
+            report_context=report,
+        )
+
+    return _handoff
+
+
+def _spawn_agent(
+    *,
+    name: str,
+    role: str | None = None,
+    cmd: str | None = None,
+    instructions: str | None = None,
+    task: str | None = None,
+    mode: str | None = None,
+    cwd: str | None = None,
+    cols: int = 200,
+    rows: int = 50,
+    report_context: str | None = None,
+) -> dict:
+    """Spawn a (optionally role-based) agent session and return its info.
+
+    A plain callable so both the ``POST /sessions`` route and the harness
+    handoff callback can spawn successors. An unknown ``role`` is tolerated here
+    (it falls back to the provided ``cmd``/``mode`` defaults) — the route layer
+    is responsible for 400ing unknown roles on direct API calls.
+    """
+    global _order
+    role_def = ROLES.get(role) if role else None
+
+    eff_cmd = cmd or (role_def.get("cmd") if role_def else None) or "claude"
+    eff_mode = mode or (role_def.get("mode") if role_def else None) or "normal"
+
+    # "bypass" is the one mode not reachable via Shift-Tab keystrokes; it must be
+    # requested at launch with --dangerously-skip-permissions. We still drive the
+    # session purely through tmux afterwards — this only configures startup.
+    if eff_mode == "bypass" and "dangerously-skip-permissions" not in eff_cmd:
+        eff_cmd = f"{eff_cmd} --dangerously-skip-permissions"
+    eff_instructions = (
+        instructions
+        if instructions is not None
+        else (role_def.get("instructions", "") if role_def else "")
+    )
+
+    # When picking up a handoff, prepend the predecessor's report to the task so
+    # the successor has the context it needs.
+    eff_task = task
+    if report_context and task:
+        eff_task = (
+            "Context from the previous agent's handoff report:\n\n"
+            f"{report_context}\n\n---\nYour task: {task}"
+        )
+
+    aid = new_agent_id(name)
+    eff_cwd = cwd or os.getcwd()
+
+    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=cwd)
+    try:
+        sess.spawn()
+    except SessionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Provision the mailbox + agent-comms skill, then attach a harness poller so
+    # the background loop can surface signals and orchestrate finish/handoff.
+    HUB.agent_dir(aid)
+    install_comms_skill(eff_cwd)
+
+    _sessions[aid] = Controller(sess)
+    _locks[aid] = threading.Lock()
+    _order += 1
+    _meta[aid] = {
+        "id": aid,
+        "name": name,
+        "cwd": cwd,
+        "role": role,
+        "label": (role_def.get("label") if role_def else None) or name,
+        "emoji": (role_def.get("emoji") if role_def else None) or "💬",
+        "mode": eff_mode,
+        "instructions": eff_instructions,
+        "task": eff_task,
+        "prep": "booting",
+        "prep_detail": None,
+        "order": _order,
+    }
+    _pollers[aid] = HarnessPoller(
+        aid, sess, HUB, cwd=eff_cwd,
+        on_handoff=_make_handoff(name_hint=name, cwd=cwd),
+    )
+
+    # Kick off priming in the background (mode + instructions need a live REPL).
+    threading.Thread(target=_prime, args=(aid,), daemon=True).start()
+    return _info(aid)
+
+
 @app.post("/sessions")
 def create_session(req: SpawnRequest) -> dict:
     """Spawn a new (optionally role-based) agent session.
@@ -223,54 +337,20 @@ def create_session(req: SpawnRequest) -> dict:
     Poll ``GET /sessions`` or ``GET /sessions/{id}`` and watch ``prep`` go
     ``booting`` → ``priming`` → ``ready``.
     """
-    global _order
-    role = ROLES.get(req.role) if req.role else None
-    if req.role and role is None:
+    if req.role and ROLES.get(req.role) is None:
         raise HTTPException(status_code=400, detail=f"unknown role {req.role!r}")
-
-    cmd = req.cmd or (role.get("cmd") if role else None) or "claude"
-    mode = req.mode or (role.get("mode") if role else None) or "normal"
-
-    # "bypass" is the one mode not reachable via Shift-Tab keystrokes; it must be
-    # requested at launch with --dangerously-skip-permissions. We still drive the
-    # session purely through tmux afterwards — this only configures startup.
-    if mode == "bypass" and "dangerously-skip-permissions" not in cmd:
-        cmd = f"{cmd} --dangerously-skip-permissions"
-    instructions = (
-        req.instructions
-        if req.instructions is not None
-        else (role.get("instructions", "") if role else "")
-    )
-
-    aid = new_agent_id(req.name)
-
     with _registry_lock:
-        sess = TmuxSession(aid, cmd, cols=req.cols, rows=req.rows, cwd=req.cwd)
-        try:
-            sess.spawn()
-        except SessionError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        _sessions[aid] = Controller(sess)
-        _locks[aid] = threading.Lock()
-        _order += 1
-        _meta[aid] = {
-            "id": aid,
-            "name": req.name,
-            "cwd": req.cwd,
-            "role": req.role,
-            "label": (role.get("label") if role else None) or req.name,
-            "emoji": (role.get("emoji") if role else None) or "💬",
-            "mode": mode,
-            "instructions": instructions,
-            "task": req.task,
-            "prep": "booting",
-            "prep_detail": None,
-            "order": _order,
-        }
-
-    # Kick off priming in the background (mode + instructions need a live REPL).
-    threading.Thread(target=_prime, args=(aid,), daemon=True).start()
-    return _info(aid)
+        return _spawn_agent(
+            name=req.name,
+            role=req.role,
+            cmd=req.cmd,
+            instructions=req.instructions,
+            task=req.task,
+            mode=req.mode,
+            cwd=req.cwd,
+            cols=req.cols,
+            rows=req.rows,
+        )
 
 
 @app.get("/sessions")
@@ -386,6 +466,7 @@ def delete_session(id: str) -> dict:
         ctrl = _sessions.pop(id, None)
         _locks.pop(id, None)
         _meta.pop(id, None)
+        _pollers.pop(id, None)
     if ctrl is None:
         raise HTTPException(status_code=404, detail=f"no session with id {id!r}")
     ctrl.session.kill()
