@@ -58,8 +58,9 @@ def _mission(mission: str | None) -> dict | None:
 def _policy_for(mission: str | None) -> Policy:
     """Executor policy for a mission. Default supervised+sonnet ceiling when the
     mission is unknown (so an out-of-band signal is still policed)."""
-    rec = _missions.get(mission) if mission else None
-    autopilot = bool(rec and rec.get("autopilot"))
+    with _state_lock:
+        rec = _missions.get(mission) if mission else None
+        autopilot = bool(rec and rec.get("autopilot"))
     return Policy(ceiling="sonnet", autopilot=autopilot)
 
 
@@ -216,6 +217,9 @@ def collect_worker_forward(server, aid: str, harness_state) -> list[tuple]:
     ):
         sig = poller.open_signal
         if sig.id != m.get("forwarded_signal_id"):
+            # Per-worker scratch key: intentionally written under the worker's
+            # session lock (this fn's caller holds it), not _registry_lock — it
+            # is only ever read/written here, never cross-thread.
             m["forwarded_signal_id"] = sig.id
             note = (
                 f'worker {aid} asks: "{sig.text}" options={sig.options}; '
@@ -227,10 +231,14 @@ def collect_worker_forward(server, aid: str, harness_state) -> list[tuple]:
     ctrl = server._sessions.get(aid)
     screen_state = server._safe_state(ctrl) if ctrl is not None else ""
     if screen_state == server.State.AWAITING_PERMISSION.value:
-        rec = _missions.get(mission) if mission else None
-        autopilot = bool(rec and rec.get("autopilot"))
+        with _state_lock:
+            rec = _missions.get(mission) if mission else None
+            autopilot = bool(rec and rec.get("autopilot"))
         if not autopilot:
-            # SUPERVISED: human brake (once per dialog).
+            # SUPERVISED: human brake (once per dialog). perm_braked/
+            # perm_forwarded are per-worker scratch keys, intentionally guarded
+            # by the worker's session lock (held by this fn's caller), not
+            # _registry_lock — written and read only here.
             if not m.get("perm_braked"):
                 m["perm_braked"] = True
                 _record_brake(
@@ -425,7 +433,9 @@ def allow_brake(brake_id: str) -> dict:
     if brake["brake"] == "permission":
         worker = brake.get("worker")
         if worker is not None:
-            _callbacks_for(server, orch or worker, mission).approve_worker(worker)
+            # approve_worker only uses the worker id; the orch id is unused on
+            # this path, so pass "" rather than misleadingly defaulting to it.
+            _callbacks_for(server, orch or "", mission).approve_worker(worker)
         _narrate(mission, f"allowed permission for worker {brake.get('worker')}")
     else:
         # opus-spawn (or other signal-bearing) brake → re-run with autopilot on.

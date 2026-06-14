@@ -16,6 +16,7 @@ class OrchestrationSignal:
     id: str
     action: str
     role: str | None = None
+    cmd: str | None = None
     model: str | None = None
     task: str = ""
     cwd: str | None = None
@@ -31,7 +32,8 @@ def parse_orchestration_signal(data: dict) -> OrchestrationSignal:
         raise ValueError(f"unknown orchestration action {action!r}")
     return OrchestrationSignal(
         id=data.get("id", ""), action=action,
-        role=data.get("role"), model=data.get("model"), task=data.get("task", ""),
+        role=data.get("role"), cmd=data.get("cmd"), model=data.get("model"),
+        task=data.get("task", ""),
         cwd=data.get("cwd"), mode=data.get("mode"), mission=data.get("mission"),
         reason=data.get("reason", ""), worker=data.get("worker"), text=data.get("text", ""),
     )
@@ -79,7 +81,7 @@ class OrchestrationExecutor:
         if not within_ceiling(sig.model, self.policy.ceiling) and not self.policy.autopilot:
             return Result("brake", brake="opus_spawn",
                           detail=f"requested {sig.model} (ceiling {self.policy.ceiling}): {sig.reason}")
-        worker = self.cb.spawn(role=sig.role, model=sig.model, task=sig.task,
+        worker = self.cb.spawn(role=sig.role, cmd=sig.cmd, model=sig.model, task=sig.task,
                                cwd=sig.cwd, mode=sig.mode, mission=sig.mission, reason=sig.reason)
         return Result("spawned", worker=worker)
 

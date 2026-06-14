@@ -46,6 +46,7 @@ def test_orchestrator_spawn_signal_creates_worker(client, tmp_path):
         if spawned: break
         time.sleep(0.1)
     assert spawned and spawned[0]["mission"] == "m1"
+    assert spawned[0]["cmd"].startswith("cat")  # cmd threaded through → stays offline
     assert "--model claude-haiku-4-5" in spawned[0]["cmd"]
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
@@ -96,5 +97,43 @@ def test_opus_spawn_supervised_creates_a_brake(client, tmp_path):
         time.sleep(0.1)
     assert brake and brake["brake"] == "opus_spawn"
     assert not [s for s in client.get("/sessions").json()["sessions"] if s.get("model")=="opus"]
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")
+
+
+def test_concurrent_polls_and_deletes_do_not_deadlock(client, tmp_path):
+    import threading
+    o = client.post("/sessions", json={"name":"orch","cmd":"cat","cwd":str(tmp_path),
+                                       "is_orchestrator": True}).json()["id"]
+    workers = []
+    for i in range(3):
+        w = client.post("/sessions", json={"name":f"w{i}","cmd":"cat","cwd":str(tmp_path),
+                                           "parent": o, "mission":"m1"}).json()["id"]
+        workers.append(w)
+    # A couple of worker questions + one orchestrator spawn (cmd:cat → offline).
+    for i, w in enumerate(workers[:2]):
+        wb = server._hub_for(str(tmp_path)).agent_dir(w) / "outbox" / f"q{i}.json"
+        wb.write_text(json.dumps({"id":f"q{i}","action":"ask_question","text":f"Q{i}?"}))
+    ob = server._hub_for(str(tmp_path)).agent_dir(o) / "outbox" / "sp.json"
+    ob.write_text(json.dumps({"id":"sp","action":"spawn","role":"plain","cmd":"cat",
+                              "task":"go","mission":"m1","cwd":str(tmp_path)}))
+
+    errors = []
+    def hammer(path):
+        try:
+            for _ in range(30):
+                client.get(path)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=hammer, args=(p,))
+               for p in ("/sessions", "/brakes", "/missions") for _ in range(2)]
+    for t in threads: t.start()
+    deadline = time.time() + 15
+    for t in threads:
+        t.join(timeout=max(0.1, deadline - time.time()))
+    assert not any(t.is_alive() for t in threads), "threads hung — possible deadlock"
+    assert errors == []
+    assert client.get("/sessions").status_code == 200
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
