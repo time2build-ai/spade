@@ -37,7 +37,7 @@ from .controller import Controller
 from .harness import HarnessPoller
 from .identity import new_agent_id
 from .models import model_id
-from .screen import State
+from .screen import State, parse_menu
 from .session import (
     SessionError,
     TmuxSession,
@@ -202,6 +202,10 @@ class AnswerRequest(BaseModel):
     text: str = Field(..., description="the reply typed back into the agent")
 
 
+class MenuRequest(BaseModel):
+    index: int
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -220,7 +224,7 @@ def _lock_for(aid: str) -> threading.Lock:
 def _safe_state(ctrl: Controller) -> str:
     try:
         return ctrl.state().value
-    except SessionError:
+    except (SessionError, AttributeError):
         return State.EXITED.value
 
 
@@ -244,6 +248,13 @@ def _info(aid: str) -> dict:
     if poller is not None and not m.get("is_orchestrator"):
         with _lock_for(aid):
             harness_state = poller.poll().kind
+    # Surface whether the agent is showing an interactive menu so the UI can
+    # render a menu card. Lock-free read (capture only); guard against a dead
+    # session so listing never 500s.
+    try:
+        has_menu = parse_menu(ctrl.session.capture()) is not None
+    except SessionError:
+        has_menu = False
     return {
         "id": aid,
         "name": m.get("name", aid),
@@ -264,6 +275,7 @@ def _info(aid: str) -> dict:
         "reason": m.get("reason"),
         "state": _safe_state(ctrl),
         "harness_state": harness_state,
+        "has_menu": has_menu,
     }
 
 
@@ -668,6 +680,38 @@ def post_interrupt(id: str) -> dict:
         except SessionError as exc:
             raise HTTPException(status_code=410, detail=str(exc)) from exc
     return {"ok": True}
+
+
+@app.get("/sessions/{id}/menu")
+def get_menu(id: str) -> dict:
+    """The agent's current interactive menu (prompt + options + selection), or
+    null if no menu is on screen. Lock-free read (capture only)."""
+    ctrl = _get(id)
+    try:
+        screen = ctrl.session.capture()
+    except SessionError as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    return {"menu": parse_menu(screen)}
+
+
+@app.post("/sessions/{id}/menu")
+def post_menu(id: str, req: MenuRequest) -> dict:
+    """Select a menu option by index: navigate the cursor with arrow keystrokes
+    (Up/Down from the currently-selected row) then press Enter."""
+    ctrl = _get(id)
+    with _lock_for(id):
+        menu = parse_menu(ctrl.session.capture())
+        if not menu:
+            raise HTTPException(409, "no active menu")
+        if req.index not in {o["index"] for o in menu["options"]}:
+            raise HTTPException(400, f"option {req.index} not in menu")
+        delta = req.index - menu["selected"]
+        key = "Down" if delta > 0 else "Up"
+        for _ in range(abs(delta)):
+            ctrl.session.send_key(key)
+            time.sleep(0.05)
+        ctrl.session.send_key("Enter")
+    return {"ok": True, "selected": req.index}
 
 
 # ---- harness (mailbox) endpoints ------------------------------------------
