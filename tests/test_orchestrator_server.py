@@ -148,3 +148,27 @@ def test_orchestrator_gets_orchestrator_skill_installed(client, tmp_path):
         assert "spawn" in skill.read_text()
     finally:
         client.delete(f"/sessions/{o}")
+
+
+def test_one_spawn_signal_spawns_exactly_one_worker(client, tmp_path):
+    """Regression for the runaway-spawn bug: a spawn signal whose FILENAME
+    differs from its internal id must run ONCE, not every poll tick."""
+    import json, time
+    o = client.post("/sessions", json={"name": "o", "cmd": "cat",
+                                       "cwd": str(tmp_path), "is_orchestrator": True}).json()["id"]
+    # filename != internal id (orchestrator-style descriptive name)
+    ob = server._hub_for(str(tmp_path)).agent_dir(o) / "outbox" / "spawn-the-dev.json"
+    ob.write_text(json.dumps({"id": "s1", "action": "spawn", "role": "plain",
+                              "cmd": "cat", "model": "haiku", "task": "hi",
+                              "mission": "m1", "cwd": str(tmp_path)}))
+    # let several poll ticks elapse
+    for _ in range(15):
+        time.sleep(0.2)
+        workers = [s for s in client.get("/sessions").json()["sessions"]
+                   if s.get("parent") == o]
+        if len(workers) > 1:
+            break  # runaway — fail fast
+    workers = [s for s in client.get("/sessions").json()["sessions"] if s.get("parent") == o]
+    assert len(workers) == 1, f"expected exactly 1 worker, got {len(workers)} (runaway)"
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")

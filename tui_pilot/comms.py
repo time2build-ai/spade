@@ -30,7 +30,13 @@ class Hub:
         for f in sorted(outbox.glob("*.json")):
             try:
                 data = json.loads(f.read_text())
-                data.setdefault("id", f.stem)
+                # The FILE STEM is the canonical processing id — mark_processed()
+                # deletes outbox/<id>.json, so the id MUST match the filename or
+                # the file is never removed and gets re-executed every poll tick
+                # (a runaway-spawn bug). An agent's internal JSON "id" can differ
+                # from its filename (e.g. an orchestrator writing spawn-x.json
+                # with id "s1"); the filename is authoritative.
+                data["id"] = f.stem
                 signals.append(data)
             except (json.JSONDecodeError, OSError):
                 # quarantine bad file so we don't re-read it forever

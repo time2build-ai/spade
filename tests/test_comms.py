@@ -44,3 +44,19 @@ def test_archive_report_writes_handoff_copy(hub):
     path = hub.archive_report(aid, "# Done\nstuff", ts="20260614-0000")
     assert Path(path).read_text().startswith("# Done")
     assert "handoffs" in path
+
+
+def test_filename_is_canonical_id_so_mark_processed_removes_it(hub):
+    """Regression: a signal file whose internal JSON id differs from its
+    filename must still be removed by mark_processed — otherwise it is
+    re-scanned/re-executed forever (the runaway-spawn bug)."""
+    aid = "orch-1"
+    # filename 'spawn-planner' but internal id 's1' (orchestrator-style naming)
+    (hub.agent_dir(aid) / "outbox" / "spawn-planner.json").write_text(
+        json.dumps({"id": "s1", "action": "spawn", "task": "go"})
+    )
+    sigs = hub.scan(aid)
+    assert len(sigs) == 1
+    assert sigs[0]["id"] == "spawn-planner"          # filename stem wins
+    hub.mark_processed(aid, sigs[0]["id"])
+    assert hub.scan(aid) == []                         # actually removed → no re-run
