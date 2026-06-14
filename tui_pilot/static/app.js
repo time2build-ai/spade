@@ -14,7 +14,7 @@ const el = {
   approve: $("btnApprove"), deny: $("btnDeny"), interrupt: $("btnInterrupt"),
   keyBtn: $("btnKey"), customKey: $("customKey"), hist: $("histChk"), poll: $("pollChk"),
   json: $("json"), copyJson: $("btnCopyJson"), log: $("log"),
-  answer: $("answerCard"), report: $("reportCard"),
+  answer: $("answerCard"), report: $("reportCard"), menu: $("menuCard"),
   orchBtn: $("btnOrch"), brakes: $("brakesStrip"), missionActivity: $("missionActivity"),
 };
 
@@ -75,7 +75,7 @@ const isOrch = (s) => s && (s.role === "orchestrator" || s.id === orchId);
 // A session "needs attention" if a harness signal is blocking OR the TUI itself
 // is showing a permission/input dialog that only a human can resolve.
 function needsAttention(s) {
-  return s.harness_state === "blocked"
+  return s.harness_state === "blocked" || s.has_menu
     || s.state === "AWAITING_PERMISSION" || s.state === "AWAITING_INPUT";
 }
 
@@ -132,6 +132,7 @@ function cardHtml(s) {
   else if (s.state === "AWAITING_PERMISSION") hs = `<span class="badge hs-blocked">🔴 approve?</span>`;
   else if (s.state === "AWAITING_INPUT") hs = `<span class="badge hs-blocked">🔴 input</span>`;
   else if (s.harness_state === "done") hs = `<span class="badge hs-done">✅ done</span>`;
+  const menu = s.has_menu ? `<span class="badge hs-blocked">🔴 menu</span>` : "";
   const cwd = s.cwd ? `<div class="cwd" title="${esc(s.cwd)}">${esc(s.cwd)}</div>` : "";
   const model = s.model
     ? `<span class="badge model-${esc(s.model)}" title="${esc(s.reason || "why this model")}">${esc(s.model)}</span>`
@@ -146,7 +147,7 @@ function cardHtml(s) {
     <div class="meta">
       <span class="pill s-${s.state}"><span class="dot"></span>${s.state}</span>
       <span class="badge">${s.mode || "normal"}</span>
-      ${model}${prep}${busy}${hs}
+      ${model}${prep}${busy}${hs}${menu}
     </div>
     <div class="role">${esc(s.label || s.role || s.cmd)}</div>
     ${task}`;
@@ -262,6 +263,7 @@ function focus(id) {
   renderAgents();
   refreshScreen();
   refreshFocusHarness();
+  refreshMenu();
   refreshMissionActivity();
   updateFocusControls();
 }
@@ -491,6 +493,55 @@ async function loadReport(id) {
   el.screen.style.display = "none";
 }
 
+// ---- menu card (focused-agent interactive selection menu) ----------------
+
+async function refreshMenu() {
+  if (!current) { el.menu.style.display = "none"; el.menu.innerHTML = ""; return; }
+  const id = current;
+  let menu = null;
+  try {
+    const data = await api("GET", `/sessions/${id}/menu`);
+    menu = data && data.menu;
+  } catch (e) {
+    el.menu.style.display = "none"; el.menu.innerHTML = "";
+    return;
+  }
+  if (id !== current) return; // focus changed while awaiting
+  if (!menu) { el.menu.style.display = "none"; el.menu.innerHTML = ""; return; }
+  renderMenuCard(id, menu);
+}
+
+function renderMenuCard(id, menu) {
+  const card = document.createElement("div");
+  card.className = "menu-card";
+  card.innerHTML = `
+    <div class="mc-head">🔴 <b>${esc(menu.prompt) || "Select an option"}</b></div>
+    <div class="mc-opts"></div>`;
+  const opts = card.querySelector(".mc-opts");
+  for (const opt of (menu.options || [])) {
+    const b = document.createElement("button");
+    b.textContent = opt.label;
+    if (opt.index === menu.selected) b.classList.add("selected");
+    b.onclick = () => selectMenu(id, opt.index);
+    opts.appendChild(b);
+  }
+  el.menu.innerHTML = "";
+  el.menu.appendChild(card);
+  el.menu.style.display = "";
+}
+
+async function selectMenu(id, index) {
+  const s = findSession(id);
+  const nm = s ? s.name : id;
+  try {
+    const r = await api("POST", `/sessions/${id}/menu`, { index }, `menu:${nm}`);
+    if (r && r.ok) log(`menu ${nm}: selected ${index}`, "ok");
+  } catch (e) {
+    log(`menu ${nm}: ${e.message}`, "err");
+  }
+  setTimeout(() => { if (current === id) { refreshScreen(); refreshMenu(); } }, 300);
+}
+
 // ---- polling --------------------------------------------------------------
 
 async function pollSessions() {
@@ -501,6 +552,7 @@ async function pollSessions() {
       current = null;
       el.focusTitle.textContent = "No agent selected";
       el.answer.style.display = "none"; el.report.style.display = "none";
+      el.menu.style.display = "none"; el.menu.innerHTML = "";
       el.screen.style.display = "";
     }
     renderAgents();
@@ -583,7 +635,7 @@ async function brakeAction(id, verb) {
 }
 
 setInterval(pollSessions, 1100);
-setInterval(() => { if (el.poll.checked) refreshScreen(); }, 700);
+setInterval(() => { if (el.poll.checked) { refreshScreen(); refreshMenu(); } }, 700);
 setInterval(pollMissions, 1100);
 setInterval(pollBrakes, 1000);
 
@@ -636,6 +688,7 @@ async function killSession(id) {
   if (current === id) {
     current = null; el.screen.textContent = "Agent killed."; el.screen.style.display = "";
     el.answer.style.display = "none"; el.report.style.display = "none";
+    el.menu.style.display = "none"; el.menu.innerHTML = "";
     el.focusTitle.textContent = "No agent selected";
   }
   pending.delete(id);
