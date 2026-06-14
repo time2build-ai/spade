@@ -39,3 +39,21 @@ def test_orchestrator_spawn_signal_creates_worker(client, tmp_path):
     assert "--model claude-haiku-4-5" in spawned[0]["cmd"]
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
+
+
+def test_worker_question_is_forwarded_to_orchestrator(client, tmp_path):
+    o = client.post("/sessions", json={"name":"orch","cmd":"cat","cwd":str(tmp_path),
+                                       "is_orchestrator": True}).json()["id"]
+    w = client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
+                                       "parent": o, "mission":"m1"}).json()["id"]
+    wb = server._hub_for(str(tmp_path)).agent_dir(w) / "outbox" / "q.json"
+    wb.write_text(json.dumps({"id":"q","action":"ask_question","text":"PG or MySQL?"}))
+    got = False
+    for _ in range(40):
+        screen = client.get(f"/sessions/{o}/screen").text
+        if "PG or MySQL?" in screen and w in screen:
+            got = True; break
+        time.sleep(0.1)
+    assert got
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")
