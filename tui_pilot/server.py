@@ -36,8 +36,9 @@ from .comms import Hub
 from .controller import Controller
 from .harness import HarnessPoller
 from .identity import new_agent_id
+from .models import model_id
 from .screen import State
-from .session import SessionError, TmuxSession, install_comms_skill
+from .session import SessionError, TmuxSession, build_cmd, install_comms_skill
 
 app = FastAPI(
     title="tui-pilot",
@@ -120,6 +121,10 @@ class SpawnRequest(BaseModel):
         None, description="permission mode: normal | accept-edits | auto | plan | bypass"
     )
     cwd: str | None = Field(None, description="working directory for the agent")
+    model: str | None = Field(None, description="model tier, e.g. 'sonnet' | 'opus' | 'haiku'")
+    mission: str | None = Field(None, description="the mission assigned to this worker")
+    parent: str | None = Field(None, description="id of the agent that spawned this worker")
+    reason: str | None = Field(None, description="why this worker was spawned")
     cols: int = Field(200, ge=20, le=500)
     rows: int = Field(50, ge=10, le=200)
 
@@ -193,6 +198,10 @@ def _info(aid: str) -> dict:
         "prep_detail": m.get("prep_detail"),
         "task": m.get("task"),
         "order": m.get("order"),
+        "model": m.get("model"),
+        "mission": m.get("mission"),
+        "parent": m.get("parent"),
+        "reason": m.get("reason"),
         "state": _safe_state(ctrl),
         "harness_state": harness_state,
     }
@@ -344,6 +353,10 @@ def _spawn_agent(
     cols: int = 200,
     rows: int = 50,
     report_context: str | None = None,
+    model: str | None = None,
+    mission: str | None = None,
+    parent: str | None = None,
+    reason: str | None = None,
 ) -> dict:
     """Spawn a (optionally role-based) agent session and return its info.
 
@@ -363,6 +376,8 @@ def _spawn_agent(
     # session purely through tmux afterwards — this only configures startup.
     if eff_mode == "bypass" and "dangerously-skip-permissions" not in eff_cmd:
         eff_cmd = f"{eff_cmd} --dangerously-skip-permissions"
+    # Launch the worker on the requested model tier (idempotent; no-op if None).
+    eff_cmd = build_cmd(eff_cmd, model_id(model))
     eff_instructions = (
         instructions
         if instructions is not None
@@ -426,6 +441,10 @@ def _spawn_agent(
             "prep": "booting",
             "prep_detail": None,
             "order": _order,
+            "model": model,
+            "mission": mission,
+            "parent": parent,
+            "reason": reason,
         }
         _pollers[aid] = HarnessPoller(
             aid, sess, hub, cwd=eff_cwd,
@@ -462,6 +481,10 @@ def create_session(req: SpawnRequest) -> dict:
         cwd=req.cwd,
         cols=req.cols,
         rows=req.rows,
+        model=req.model,
+        mission=req.mission,
+        parent=req.parent,
+        reason=req.reason,
     )
 
 
