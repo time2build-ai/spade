@@ -68,10 +68,18 @@ _locks: dict[str, threading.Lock] = {}
 _registry_lock = threading.Lock()
 _order = 0
 
-# Mailbox hub (agent <-> control center) and per-session harness pollers. The
-# hub is a module global so tests can swap it for an isolated tmp root.
-HUB = Hub()
+# Per-session harness pollers. Each agent's mailbox lives INSIDE its own working
+# directory (`<cwd>/.agent-comms/<id>/...`) — not a central hub — so that an
+# agent in `accept-edits`/`auto` mode can write its signal files without tripping
+# a permission prompt (writes inside the cwd are auto-accepted). The control
+# center already knows each session's cwd, so "agents in many directories" still
+# works: each session's poller watches that session's own mailbox.
 _pollers: dict[str, HarnessPoller] = {}
+
+
+def _hub_for(cwd: str) -> Hub:
+    """Return the mailbox hub rooted in an agent's working directory."""
+    return Hub(Path(cwd) / ".agent-comms")
 
 
 def _poll_loop() -> None:
@@ -200,6 +208,17 @@ def _prime(aid: str) -> None:
     try:
         # 1. wait for the REPL to finish booting.
         ctrl.wait_for_settle(timeout=40)
+
+        # A fresh working directory triggers Claude's "Quick safety check / trust
+        # this folder?" prompt at boot, which blocks before the composer is ready.
+        # The default selection (❯) is "Yes, I trust this folder", so a bare
+        # Enter accepts it. We provision the cwd ourselves, so this is expected.
+        boot_screen = ctrl.session.capture().lower()
+        if "trust this folder" in boot_screen or "quick safety check" in boot_screen:
+            with lock:
+                ctrl.session.send_key("Enter")
+            ctrl.wait_for_settle(timeout=20)
+
         mode = m.get("mode") or "normal"
         instructions = (m.get("instructions") or "").strip()
 
@@ -214,33 +233,38 @@ def _prime(aid: str) -> None:
                 if not ok:
                     m["prep_detail"] = f"could not reach mode {mode}; left as-is"
 
-            # 3. inject the role instructions as the first message (priming),
-            # prefixed with the agent's id + outbox path so it knows where to
-            # signal the control center via the agent-comms skill. (The skill
-            # file itself is installed at spawn regardless of instructions.)
-            if instructions:
+            # 3. Send the FIRST message in one shot: a short control-center
+            # preamble + the role instructions + (if given) the mission. We send
+            # it as ONE message rather than priming-then-task because two
+            # separate sends race/merge (the task can land glued to the priming,
+            # so the agent "acknowledges and waits" and never starts). It is
+            # fire-and-forget (send_text, not prompt) so we never hold the lock
+            # for the whole turn (spec §3.5) — otherwise answer() could never
+            # acquire the lock to reply. The agent's exact outbox path lives in
+            # the installed agent-comms skill, so we don't repeat it here.
+            task = (m.get("task") or "").strip()
+            if instructions or task:
                 m["prep"] = "priming"
-                m["prep_detail"] = "sending instructions"
-                priming = (
-                    f"You are agent '{aid}' under a control center. To ask, get "
-                    "help, report progress, or finish, follow the agent-comms "
-                    "skill and write JSON to "
-                    f"{HUB.agent_dir(aid) / 'outbox'}. "
-                ) + instructions
-                ctrl.prompt(priming, timeout=120)
-
-        # 4. if a specific mission was given, fire it off (fire-and-forget) so
-        # the agent starts working on spawn (e.g. "Plan a Salesforce
-        # integration" / "Implement plan.md"). We must NOT hold the per-session
-        # lock for the whole turn (spec §3.5) — otherwise ``answer()`` could
-        # never acquire it to reply to the agent's questions. So we take the
-        # lock only long enough to SEND the task, then release without waiting.
-        task = (m.get("task") or "").strip()
-        if task:
-            m["prep"] = "working"
-            m["prep_detail"] = task[:80]
-            with lock:
-                ctrl.session.send_text(task)
+                m["prep_detail"] = "sending first message"
+                preamble = (
+                    f"You are agent '{aid}' running under an automated control "
+                    "center. To ask a question, request context/help, report "
+                    "progress, or finish, use the agent-comms skill (it has your "
+                    "exact outbox path). "
+                )
+                parts = [preamble]
+                if instructions:
+                    parts.append(instructions)
+                if task:
+                    parts.append("\n\n--- YOUR TASK (begin now) ---\n" + task)
+                else:
+                    parts.append(
+                        "\n\nAcknowledge in one sentence that you are ready, "
+                        "then wait for my next message."
+                    )
+                # NOTE: we are already inside the `with lock:` above (step 2);
+                # threading.Lock is non-reentrant, so do NOT re-acquire it here.
+                ctrl.session.send_text("".join(parts))
 
         m["prep"] = "ready"
         m["prep_detail"] = None
@@ -358,11 +382,13 @@ def _spawn_agent(
     except SessionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Provision the mailbox + agent-comms skill, then attach a harness poller so
-    # the background loop can surface signals and orchestrate finish/handoff.
-    HUB.agent_dir(aid)
+    # Provision the mailbox (inside the agent's cwd) + agent-comms skill, then
+    # attach a harness poller so the background loop can surface signals and
+    # orchestrate finish/handoff.
+    hub = _hub_for(eff_cwd)
+    hub.agent_dir(aid)
     install_comms_skill(
-        eff_cwd, outbox_path=str(HUB.agent_dir(aid) / "outbox"), agent_id=aid
+        eff_cwd, outbox_path=str(hub.agent_dir(aid) / "outbox"), agent_id=aid
     )
 
     # Registry mutation must be atomic (FIX 2). The auto-handoff path reaches
@@ -389,7 +415,7 @@ def _spawn_agent(
             "order": _order,
         }
         _pollers[aid] = HarnessPoller(
-            aid, sess, HUB, cwd=eff_cwd,
+            aid, sess, hub, cwd=eff_cwd,
             on_handoff=_make_handoff(predecessor_aid=aid, name_hint=name, cwd=eff_cwd),
         )
 

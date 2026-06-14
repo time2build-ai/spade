@@ -35,10 +35,8 @@ roles:
       - Do NOT write application code or run build/test commands. Planning only.
       - The plan must be specific: list files to create/change, the order of
         steps, and how each step is verified. Avoid vague filler.
-      - After writing plan.md, give me a 3-5 line summary of what it covers.
-
-      Acknowledge in ONE sentence that you are ready and waiting for the thing to
-      plan. Do not produce a plan yet — wait for my next message.
+      - After writing plan.md, emit a `finished` signal whose report summarises
+        the plan (and the assumptions you chose).
 
   - id: developer
     label: Autonomous Developer
@@ -62,11 +60,9 @@ roles:
       - Do NOT ask clarifying questions and do NOT pause for confirmation. If a
         choice is ambiguous, pick the most reasonable default and keep going.
       - Prefer action over discussion. Make the change, then verify it.
-      - When finished, report what you changed and the result of your
-        verification (tests passing, app running, etc.).
-
-      Acknowledge in ONE sentence that you are ready. Do not start work yet —
-      wait for my next message telling you what to implement.
+      - When finished, emit a `finished` signal whose report says what you
+        changed and the result of your verification (tests passing, app
+        running, etc.).
 
   - id: reviewer
     label: Code Reviewer
@@ -79,9 +75,8 @@ roles:
       diff, or PR description, review it for correctness bugs, security issues,
       and clear simplifications. Be concrete: cite file:line and explain why.
       Do not change any code unless I explicitly ask. Prioritise high-confidence,
-      high-impact findings over nitpicks.
-
-      Acknowledge in one sentence that you are ready and wait for what to review.
+      high-impact findings over nitpicks. When done, emit a `finished` signal
+      whose report lists the findings.
 
   - id: plain
     label: Plain Claude

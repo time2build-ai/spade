@@ -68,9 +68,16 @@ async function api(method, path, body, label) {
 const findSession = (id) => sessions.find((s) => s.id === id);
 const blockedSessions = () => sessions.filter((s) => s.harness_state === "blocked");
 
+// A session "needs attention" if a harness signal is blocking OR the TUI itself
+// is showing a permission/input dialog that only a human can resolve.
+function needsAttention(s) {
+  return s.harness_state === "blocked"
+    || s.state === "AWAITING_PERMISSION" || s.state === "AWAITING_INPUT";
+}
+
 // is this session "working" for grouping purposes?
 function isWorking(s) {
-  if (s.harness_state === "blocked" || s.harness_state === "done") return false;
+  if (needsAttention(s) || s.harness_state === "done") return false;
   if (s.state === "THINKING" || s.state === "STREAMING" || s.state === "BOOTING") return true;
   if (s.prep && s.prep !== "ready" && s.prep !== "error") return true;
   if (pending.has(s.id)) return true;
@@ -118,6 +125,8 @@ function cardHtml(s) {
   const task = s.task ? `<div class="task" title="${esc(s.task)}">▸ ${esc(s.task)}</div>` : "";
   let hs = "";
   if (s.harness_state === "blocked") hs = `<span class="badge hs-blocked">🔴 needs you</span>`;
+  else if (s.state === "AWAITING_PERMISSION") hs = `<span class="badge hs-blocked">🔴 approve?</span>`;
+  else if (s.state === "AWAITING_INPUT") hs = `<span class="badge hs-blocked">🔴 input</span>`;
   else if (s.harness_state === "done") hs = `<span class="badge hs-done">✅ done</span>`;
   const cwd = s.cwd ? `<div class="cwd" title="${esc(s.cwd)}">${esc(s.cwd)}</div>` : "";
   return `
@@ -139,7 +148,7 @@ function cardHtml(s) {
 function makeCard(s) {
   const card = document.createElement("div");
   card.className = `card st-${s.state}` + (s.id === current ? " active" : "")
-    + (s.harness_state === "blocked" ? " blocked" : "")
+    + (needsAttention(s) ? " blocked" : "")
     + (s.harness_state === "done" ? " done" : "");
   card.innerHTML = cardHtml(s);
   card.onclick = (ev) => {
@@ -150,7 +159,7 @@ function makeCard(s) {
 }
 
 const GROUPS = [
-  { key: "attention", label: "Needs attention", test: (s) => s.harness_state === "blocked" },
+  { key: "attention", label: "Needs attention", test: (s) => needsAttention(s) },
   { key: "working", label: "Working", test: (s) => isWorking(s) },
   { key: "done", label: "Done", test: (s) => s.harness_state === "done" },
   { key: "idle", label: "Idle", test: () => true },

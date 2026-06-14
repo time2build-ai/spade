@@ -76,10 +76,9 @@ def test_harness_round_trip(tmp_path) -> None:
     from fastapi.testclient import TestClient
 
     from tui_pilot import server
-    from tui_pilot.comms import Hub
 
-    # Isolate the hub so the test doesn't touch the real ~/.tui-pilot.
-    server.HUB = Hub(tmp_path / "comms")
+    # The agent's mailbox lives inside its cwd (here a tmp dir), so no global
+    # state to isolate — and the test reads signals via the HTTP API anyway.
     cwd = str(tmp_path / "proj")
     os.makedirs(cwd)
     client = TestClient(server.app)
