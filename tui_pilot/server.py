@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -73,6 +74,21 @@ HUB = Hub()
 _pollers: dict[str, HarnessPoller] = {}
 
 
+def _poll_loop() -> None:
+    """Daemon: tick every poller ~1s so progress/finish/handoff are processed
+    without the UI having to poll. One poller raising must not stop the loop."""
+    while True:
+        for aid, poller in list(_pollers.items()):
+            try:
+                poller.poll()
+            except Exception:  # noqa: BLE001 - never let one agent kill the loop
+                pass
+        time.sleep(1.0)
+
+
+threading.Thread(target=_poll_loop, daemon=True).start()
+
+
 # ---- request / response models -------------------------------------------
 
 
@@ -107,6 +123,11 @@ class KeyRequest(BaseModel):
 
 class ModeRequest(BaseModel):
     mode: str = Field(..., description="normal | accept-edits | auto | plan")
+
+
+class AnswerRequest(BaseModel):
+    signal_id: str = Field(..., description="id of the open blocking signal")
+    text: str = Field(..., description="the reply typed back into the agent")
 
 
 # ---- helpers --------------------------------------------------------------
@@ -149,6 +170,7 @@ def _info(aid: str) -> dict:
         "task": m.get("task"),
         "order": m.get("order"),
         "state": _safe_state(ctrl),
+        "harness_state": _pollers[aid].poll().kind if aid in _pollers else None,
     }
 
 
@@ -176,11 +198,20 @@ def _prime(aid: str) -> None:
                 if not ok:
                     m["prep_detail"] = f"could not reach mode {mode}; left as-is"
 
-            # 3. inject the role instructions as the first message (priming).
+            # 3. inject the role instructions as the first message (priming),
+            # prefixed with the agent's id + outbox path so it knows where to
+            # signal the control center via the agent-comms skill. (The skill
+            # file itself is installed at spawn regardless of instructions.)
             if instructions:
                 m["prep"] = "priming"
                 m["prep_detail"] = "sending instructions"
-                ctrl.prompt(instructions, timeout=120)
+                priming = (
+                    f"You are agent '{aid}' under a control center. To ask, get "
+                    "help, report progress, or finish, follow the agent-comms "
+                    "skill and write JSON to "
+                    f"{HUB.agent_dir(aid) / 'outbox'}. "
+                ) + instructions
+                ctrl.prompt(priming, timeout=120)
 
         # 4. if a specific mission was given, fire it off (fire-and-forget) so
         # the agent starts working on spawn (e.g. "Plan a Salesforce
@@ -461,6 +492,53 @@ def post_interrupt(id: str) -> dict:
         except SessionError as exc:
             raise HTTPException(status_code=410, detail=str(exc)) from exc
     return {"ok": True}
+
+
+# ---- harness (mailbox) endpoints ------------------------------------------
+
+
+def _poller(id: str) -> HarnessPoller:
+    p = _pollers.get(id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"no session with id {id!r}")
+    return p
+
+
+@app.get("/sessions/{id}/signals")
+def get_signals(id: str) -> dict:
+    """The agent's currently-open blocking signal (question / need-context /
+    need-help), if any — at most one at a time (spec §3.5)."""
+    st = _poller(id).poll()
+    if st.kind == "blocked" and st.open_signal:
+        return {"signals": [asdict(st.open_signal)]}
+    return {"signals": []}
+
+
+@app.post("/sessions/{id}/answer")
+def post_answer(id: str, req: AnswerRequest) -> dict:
+    """Reply to the agent's open signal (typed back in via tmux)."""
+    p = _poller(id)
+    with _lock_for(id):
+        p.answer(req.signal_id, req.text)
+    return {"ok": True}
+
+
+@app.get("/sessions/{id}/report", response_class=PlainTextResponse)
+def get_report(id: str) -> str:
+    """The finished agent's handoff report (its SUMMARY.md content)."""
+    report = _poller(id).done_report
+    if not report:
+        raise HTTPException(status_code=404, detail="no report yet")
+    return report
+
+
+@app.post("/sessions/{id}/handoff")
+def post_handoff(id: str) -> dict:
+    """Confirm a pending (start:"confirm") handoff: spawn the successor."""
+    p = _poller(id)
+    with _lock_for(id):
+        ok = p.confirm_handoff()
+    return {"ok": ok}
 
 
 @app.delete("/sessions/{id}")

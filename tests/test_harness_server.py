@@ -24,3 +24,42 @@ def test_mission_does_not_hold_lock(client):
     assert acquired is True
     lock.release()
     client.delete(f"/sessions/{aid}")
+
+def test_signal_surfaces_and_can_be_answered(client):
+    aid = client.post("/sessions", json={"name": "h", "cmd": "cat"}).json()["id"]
+    out = server.HUB.agent_dir(aid) / "outbox" / "s1.json"
+    out.write_text(json.dumps({"id": "s1", "action": "ask_question", "text": "PG?"}))
+    sigs = []
+    for _ in range(20):
+        sigs = client.get(f"/sessions/{aid}/signals").json()["signals"]
+        if sigs: break
+        time.sleep(0.1)
+    assert sigs and sigs[0]["action"] == "ask_question"
+    assert client.post(f"/sessions/{aid}/answer",
+                       json={"signal_id": "s1", "text": "Postgres"}).status_code == 200
+    assert client.get(f"/sessions/{aid}/signals").json()["signals"] == []
+    client.delete(f"/sessions/{aid}")
+
+def test_session_info_includes_harness_state(client):
+    aid = client.post("/sessions", json={"name": "h", "cmd": "cat"}).json()["id"]
+    assert "harness_state" in client.get(f"/sessions/{aid}").json()
+    client.delete(f"/sessions/{aid}")
+
+def test_finished_report_and_confirm_handoff_endpoint(client, tmp_path):
+    import os
+    cwd = str(tmp_path / "proj"); os.makedirs(cwd)
+    aid = client.post("/sessions", json={"name": "f", "cmd": "cat", "cwd": cwd}).json()["id"]
+    out = server.HUB.agent_dir(aid) / "outbox" / "f1.json"
+    out.write_text(json.dumps({"id": "f1", "action": "finished", "report": "# Done",
+                               "next": {"role": "plain", "cmd": "cat", "task": "go",
+                                        "start": "confirm"}}))
+    for _ in range(20):
+        if client.get(f"/sessions/{aid}").json()["harness_state"] == "done": break
+        time.sleep(0.1)
+    assert client.get(f"/sessions/{aid}/report").text.startswith("# Done")
+    n_before = len(client.get("/sessions").json()["sessions"])
+    assert client.post(f"/sessions/{aid}/handoff").status_code == 200
+    n_after = len(client.get("/sessions").json()["sessions"])
+    assert n_after == n_before + 1
+    for s in client.get("/sessions").json()["sessions"]:
+        client.delete(f"/sessions/{s['id']}")
