@@ -46,6 +46,21 @@ app = FastAPI(
     version="0.2.0",
 )
 
+# Orchestrator wiring (missions/brakes state, executor callbacks, drain helpers,
+# and its HTTP router) lives in a separate module to keep this file focused on
+# session plumbing. Imported here for module load; its functions reach back into
+# this module's internals lazily (no import cycle at load time).
+import sys  # noqa: E402
+
+from . import orchestrator_server  # noqa: E402
+
+app.include_router(orchestrator_server.router)
+
+# This module object, passed to orchestrator_server helpers so they can reach
+# back into the registry (_sessions/_meta/_pollers/_lock_for/_spawn_agent/…)
+# without a load-time import cycle.
+_module = sys.modules[__name__]
+
 _ROLES_PATH = Path(__file__).resolve().parent.parent / "roles.yaml"
 
 
@@ -85,17 +100,50 @@ def _hub_for(cwd: str) -> Hub:
 
 def _poll_loop() -> None:
     """Daemon: tick every poller ~1s so progress/finish/handoff are processed
-    without the UI having to poll. One poller raising must not stop the loop."""
+    without the UI having to poll. One poller raising must not stop the loop.
+
+    Two-phase per tick to honour the concurrency invariant (hold at most ONE
+    session lock at a time; never send into another session while holding one):
+
+      1. COLLECT — for each session, under ITS OWN lock: a worker runs the normal
+         ``poller.poll()`` (and, if it has a parent, we gather any cross-session
+         forward notes); an orchestrator instead scans+parses+marks its outbox
+         and we gather ``(orch, signal)`` descriptors. We only GATHER here — we
+         never send into another session or run the executor under a lock.
+      2. DRAIN — after ALL session locks are released: run gathered signals
+         through the executor and deliver results/forwards. Each drained item
+         takes at most ONE target session lock.
+    """
     while True:
+        signals: list = []   # (orch_aid, OrchestrationSignal)
+        forwards: list = []  # (orch_aid, note)
         for aid, poller in list(_pollers.items()):
             try:
                 # HarnessPoller is not internally synchronized; every poll()
                 # must run under the session lock (same lock answer()/
                 # confirm_handoff() take) so unlocked loop polls don't race.
                 with _lock_for(aid):
-                    poller.poll()
+                    if _meta.get(aid, {}).get("is_orchestrator"):
+                        # Orchestrator: scan its outbox for orchestration signals
+                        # instead of the normal worker poll. Executor runs later,
+                        # in the unlocked DRAIN phase.
+                        signals.extend(
+                            orchestrator_server.collect_orchestrator(_module, aid)
+                        )
+                    else:
+                        st = poller.poll()
+                        # Worker with a parent: gather forward notes (questions /
+                        # permission prompts) — no send under this lock.
+                        forwards.extend(
+                            orchestrator_server.collect_worker_forward(_module, aid, st)
+                        )
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
+        # DRAIN: no session lock held here; each item takes at most one lock.
+        try:
+            orchestrator_server.drain(_module, signals, forwards)
+        except Exception:  # noqa: BLE001 - never let drain kill the loop
+            pass
         time.sleep(1.0)
 
 
@@ -125,6 +173,7 @@ class SpawnRequest(BaseModel):
     mission: str | None = Field(None, description="the mission assigned to this worker")
     parent: str | None = Field(None, description="id of the agent that spawned this worker")
     reason: str | None = Field(None, description="why this worker was spawned")
+    is_orchestrator: bool = Field(False, description="this session is the orchestrator")
     cols: int = Field(200, ge=20, le=500)
     rows: int = Field(50, ge=10, le=200)
 
@@ -181,7 +230,12 @@ def _info(aid: str) -> dict:
     # is why _spawn_agent calls _info OUTSIDE its _registry_lock block.
     harness_state = None
     poller = _pollers.get(aid)
-    if poller is not None:
+    # An orchestrator's outbox carries ORCHESTRATION signals (spawn/answer/…),
+    # which the harness poller would quarantine as unknown actions — and racing
+    # this read-path poll against the loop's collect_orchestrator would steal the
+    # signal before it is dispatched. So skip the harness poll for orchestrators;
+    # the poll loop scans their outbox via collect_orchestrator instead.
+    if poller is not None and not m.get("is_orchestrator"):
         with _lock_for(aid):
             harness_state = poller.poll().kind
     return {
@@ -357,6 +411,7 @@ def _spawn_agent(
     mission: str | None = None,
     parent: str | None = None,
     reason: str | None = None,
+    is_orchestrator: bool = False,
 ) -> dict:
     """Spawn a (optionally role-based) agent session and return its info.
 
@@ -445,6 +500,7 @@ def _spawn_agent(
             "mission": mission,
             "parent": parent,
             "reason": reason,
+            "is_orchestrator": is_orchestrator,
         }
         _pollers[aid] = HarnessPoller(
             aid, sess, hub, cwd=eff_cwd,
@@ -485,6 +541,7 @@ def create_session(req: SpawnRequest) -> dict:
         mission=req.mission,
         parent=req.parent,
         reason=req.reason,
+        is_orchestrator=req.is_orchestrator,
     )
 
 
