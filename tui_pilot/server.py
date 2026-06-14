@@ -361,7 +361,9 @@ def _spawn_agent(
     # Provision the mailbox + agent-comms skill, then attach a harness poller so
     # the background loop can surface signals and orchestrate finish/handoff.
     HUB.agent_dir(aid)
-    install_comms_skill(eff_cwd)
+    install_comms_skill(
+        eff_cwd, outbox_path=str(HUB.agent_dir(aid) / "outbox"), agent_id=aid
+    )
 
     # Registry mutation must be atomic (FIX 2). The auto-handoff path reaches
     # here while holding the PREDECESSOR's session lock, then takes

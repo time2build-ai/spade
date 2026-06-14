@@ -181,9 +181,25 @@ class TmuxSession:
 _ASSETS = Path(__file__).resolve().parent / "assets"
 
 
-def install_comms_skill(cwd: str | Path) -> None:
-    """Copy the agent-comms skill into <cwd>/.claude/skills/ so the spawned
-    agent reads it on boot. Idempotent."""
+def install_comms_skill(
+    cwd: str | Path,
+    outbox_path: str | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Install the agent-comms skill into <cwd>/.claude/skills/ so the spawned
+    agent reads it on boot.
+
+    The skill template carries ``__OUTBOX__`` / ``__AGENT_ID__`` placeholders;
+    we render the agent's *actual* absolute outbox path and id into the copy
+    that lands in its cwd. This is what makes signalling reliable: the agent
+    loads this skill at the moment it wants to signal, so the exact path is
+    right in front of it (rather than something it has to remember from an
+    earlier priming turn). Idempotent.
+    """
     dst = Path(cwd) / ".claude" / "skills" / "agent-comms"
     dst.mkdir(parents=True, exist_ok=True)
-    shutil.copy(_ASSETS / "agent-comms-skill" / "SKILL.md", dst / "SKILL.md")
+    template = (_ASSETS / "agent-comms-skill" / "SKILL.md").read_text()
+    rendered = template.replace(
+        "__OUTBOX__", outbox_path or "(no control center attached)"
+    ).replace("__AGENT_ID__", agent_id or "(none)")
+    (dst / "SKILL.md").write_text(rendered)
