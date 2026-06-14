@@ -80,7 +80,11 @@ def _poll_loop() -> None:
     while True:
         for aid, poller in list(_pollers.items()):
             try:
-                poller.poll()
+                # HarnessPoller is not internally synchronized; every poll()
+                # must run under the session lock (same lock answer()/
+                # confirm_handoff() take) so unlocked loop polls don't race.
+                with _lock_for(aid):
+                    poller.poll()
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
         time.sleep(1.0)
@@ -153,8 +157,20 @@ def _safe_state(ctrl: Controller) -> str:
 
 
 def _info(aid: str) -> dict:
-    ctrl = _sessions[aid]
+    # Guard against a concurrent delete between lookups (FIX 5).
+    ctrl = _sessions.get(aid)
+    if ctrl is None:
+        raise HTTPException(status_code=404, detail=f"no session with id {aid!r}")
     m = _meta.get(aid, {})
+    # poll() must run under the session lock (FIX 1). Acquire the lock object
+    # first (_lock_for briefly takes _registry_lock then releases it) so we
+    # never nest session-lock acquisition inside a held _registry_lock — which
+    # is why _spawn_agent calls _info OUTSIDE its _registry_lock block.
+    harness_state = None
+    poller = _pollers.get(aid)
+    if poller is not None:
+        with _lock_for(aid):
+            harness_state = poller.poll().kind
     return {
         "id": aid,
         "name": m.get("name", aid),
@@ -170,7 +186,7 @@ def _info(aid: str) -> dict:
         "task": m.get("task"),
         "order": m.get("order"),
         "state": _safe_state(ctrl),
-        "harness_state": _pollers[aid].poll().kind if aid in _pollers else None,
+        "harness_state": harness_state,
     }
 
 
@@ -258,20 +274,31 @@ def list_roles() -> dict:
 # ---- session endpoints ----------------------------------------------------
 
 
-def _make_handoff(*, name_hint: str, cwd: str | None):
+def _make_handoff(*, predecessor_aid: str, name_hint: str, cwd: str | None):
     """Build the ``on_handoff`` callback for a poller: spawn the successor the
     finished signal describes. An unknown ``role`` here must NOT 400 — the
-    successor falls back to the provided cmd/mode."""
-    def _handoff(nxt: dict, report: str) -> dict:
-        return _spawn_agent(
-            name=nxt.get("role") or name_hint,
-            role=nxt.get("role"),
-            cmd=nxt.get("cmd"),
-            task=nxt.get("task"),
-            mode=nxt.get("mode"),
-            cwd=nxt.get("cwd") or cwd,
-            report_context=report,
-        )
+    successor falls back to the provided cmd/mode.
+
+    Runs on the poll path (loop or _info), which already holds the predecessor's
+    session lock. _spawn_agent acquires _registry_lock (a DIFFERENT session id,
+    so no re-acquire of this lock). A spawn failure must not kill the poll loop,
+    so it is caught and surfaced on the predecessor's meta (FIX 3)."""
+    def _handoff(nxt: dict, report: str) -> dict | None:
+        try:
+            return _spawn_agent(
+                name=nxt.get("role") or name_hint,
+                role=nxt.get("role"),
+                cmd=nxt.get("cmd"),
+                task=nxt.get("task"),
+                mode=nxt.get("mode"),
+                cwd=nxt.get("cwd") or cwd,
+                report_context=report,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the loop
+            m = _meta.get(predecessor_aid)
+            if m is not None:
+                m["prep_detail"] = f"handoff spawn failed: {exc}"
+            return None
 
     return _handoff
 
@@ -325,7 +352,7 @@ def _spawn_agent(
     aid = new_agent_id(name)
     eff_cwd = cwd or os.getcwd()
 
-    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=cwd)
+    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd)
     try:
         sess.spawn()
     except SessionError as exc:
@@ -336,30 +363,38 @@ def _spawn_agent(
     HUB.agent_dir(aid)
     install_comms_skill(eff_cwd)
 
-    _sessions[aid] = Controller(sess)
-    _locks[aid] = threading.Lock()
-    _order += 1
-    _meta[aid] = {
-        "id": aid,
-        "name": name,
-        "cwd": cwd,
-        "role": role,
-        "label": (role_def.get("label") if role_def else None) or name,
-        "emoji": (role_def.get("emoji") if role_def else None) or "💬",
-        "mode": eff_mode,
-        "instructions": eff_instructions,
-        "task": eff_task,
-        "prep": "booting",
-        "prep_detail": None,
-        "order": _order,
-    }
-    _pollers[aid] = HarnessPoller(
-        aid, sess, HUB, cwd=eff_cwd,
-        on_handoff=_make_handoff(name_hint=name, cwd=cwd),
-    )
+    # Registry mutation must be atomic (FIX 2). The auto-handoff path reaches
+    # here while holding the PREDECESSOR's session lock, then takes
+    # _registry_lock — lock ordering is session-lock (outer) → _registry_lock
+    # (inner), and never the reverse, so the ordering stays acyclic. The
+    # successor is a DIFFERENT aid, so no session lock is re-acquired.
+    with _registry_lock:
+        _sessions[aid] = Controller(sess)
+        _locks[aid] = threading.Lock()
+        _order += 1
+        _meta[aid] = {
+            "id": aid,
+            "name": name,
+            "cwd": eff_cwd,
+            "role": role,
+            "label": (role_def.get("label") if role_def else None) or name,
+            "emoji": (role_def.get("emoji") if role_def else None) or "💬",
+            "mode": eff_mode,
+            "instructions": eff_instructions,
+            "task": eff_task,
+            "prep": "booting",
+            "prep_detail": None,
+            "order": _order,
+        }
+        _pollers[aid] = HarnessPoller(
+            aid, sess, HUB, cwd=eff_cwd,
+            on_handoff=_make_handoff(predecessor_aid=aid, name_hint=name, cwd=eff_cwd),
+        )
 
     # Kick off priming in the background (mode + instructions need a live REPL).
     threading.Thread(target=_prime, args=(aid,), daemon=True).start()
+    # _info() acquires the session lock (for harness_state) — call it OUTSIDE
+    # the _registry_lock block above to keep the lock ordering acyclic.
     return _info(aid)
 
 
@@ -371,20 +406,22 @@ def create_session(req: SpawnRequest) -> dict:
     Poll ``GET /sessions`` or ``GET /sessions/{id}`` and watch ``prep`` go
     ``booting`` → ``priming`` → ``ready``.
     """
+    # Unknown-role 400 stays here (route-only) and OUTSIDE any lock; _spawn_agent
+    # itself tolerates unknown roles (for the handoff path). It takes
+    # _registry_lock internally, so do NOT wrap the call (non-reentrant lock).
     if req.role and ROLES.get(req.role) is None:
         raise HTTPException(status_code=400, detail=f"unknown role {req.role!r}")
-    with _registry_lock:
-        return _spawn_agent(
-            name=req.name,
-            role=req.role,
-            cmd=req.cmd,
-            instructions=req.instructions,
-            task=req.task,
-            mode=req.mode,
-            cwd=req.cwd,
-            cols=req.cols,
-            rows=req.rows,
-        )
+    return _spawn_agent(
+        name=req.name,
+        role=req.role,
+        cmd=req.cmd,
+        instructions=req.instructions,
+        task=req.task,
+        mode=req.mode,
+        cwd=req.cwd,
+        cols=req.cols,
+        rows=req.rows,
+    )
 
 
 @app.get("/sessions")
@@ -392,7 +429,12 @@ def list_sessions() -> dict:
     """List all sessions with role, prep status and live state."""
     with _registry_lock:
         ids = list(_sessions.keys())
-    sessions = [_info(i) for i in ids]
+    sessions = []
+    for i in ids:
+        try:
+            sessions.append(_info(i))
+        except HTTPException:
+            continue  # deleted between snapshot and lookup — skip it
     sessions.sort(key=lambda s: s.get("order") or 0)
     return {"sessions": sessions}
 
@@ -508,7 +550,9 @@ def _poller(id: str) -> HarnessPoller:
 def get_signals(id: str) -> dict:
     """The agent's currently-open blocking signal (question / need-context /
     need-help), if any — at most one at a time (spec §3.5)."""
-    st = _poller(id).poll()
+    p = _poller(id)
+    with _lock_for(id):  # poll() under the session lock (FIX 1)
+        st = p.poll()
     if st.kind == "blocked" and st.open_signal:
         return {"signals": [asdict(st.open_signal)]}
     return {"signals": []}

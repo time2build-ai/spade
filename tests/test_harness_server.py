@@ -63,3 +63,19 @@ def test_finished_report_and_confirm_handoff_endpoint(client, tmp_path):
     assert n_after == n_before + 1
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
+
+def test_auto_handoff_spawns_exactly_one_successor(client, tmp_path):
+    import os
+    cwd = str(tmp_path / "p"); os.makedirs(cwd)
+    aid = client.post("/sessions", json={"name": "a", "cmd": "cat", "cwd": cwd}).json()["id"]
+    out = server.HUB.agent_dir(aid) / "outbox" / "f1.json"
+    out.write_text(json.dumps({"id": "f1", "action": "finished", "report": "# Done",
+                               "next": {"role": "plain", "cmd": "cat", "task": "go", "start": "auto"}}))
+    # hammer /sessions (each triggers _info->poll) while the background loop also polls
+    for _ in range(40):
+        client.get("/sessions"); time.sleep(0.05)
+        if client.get(f"/sessions/{aid}").json()["harness_state"] == "done": break
+    time.sleep(0.5)
+    sessions = client.get("/sessions").json()["sessions"]
+    assert len([s for s in sessions if s["id"] != aid]) == 1   # exactly one successor, not two
+    for s in sessions: client.delete(f"/sessions/{s['id']}")
