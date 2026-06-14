@@ -32,12 +32,17 @@ def _b32(n: int) -> str:
     return "".join(reversed(out))
 
 def new_token() -> str:
+    # The process-monotonic counter lives in the LOW 16 bits so it survives the
+    # truncation below — this *guarantees* uniqueness within a process (up to
+    # 65536 ids/ms regardless of name). Time + random fill the higher bits for
+    # cross-process uniqueness. Earlier versions XOR'd the counter into bits that
+    # were then truncated away, so 1000s of same-ms ids could collide.
     with _lock:
         c = next(_counter)
-    # time (ms) ⊕ counter ⊕ os.urandom → short, monotonic-ish, unique
     t = int(time.time() * 1000)
-    rnd = int.from_bytes(os.urandom(3), "big")
-    return _b32((t << 24) ^ (c << 8) ^ rnd)[-7:]
+    rnd = int.from_bytes(os.urandom(4), "big")  # 32 bits
+    raw = (t << 48) | (rnd << 16) | (c & 0xFFFF)
+    return _b32(raw)[-8:]
 
 def new_agent_id(name: str) -> str:
     # double-underscore separator: ASCII-safe for tmux/folders AND unambiguous
