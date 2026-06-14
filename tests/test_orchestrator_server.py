@@ -137,3 +137,14 @@ def test_concurrent_polls_and_deletes_do_not_deadlock(client, tmp_path):
     assert client.get("/sessions").status_code == 200
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
+
+
+def test_orchestrator_gets_orchestrator_skill_installed(client, tmp_path):
+    o = client.post("/sessions", json={"name": "orch", "cmd": "cat",
+                                       "cwd": str(tmp_path), "is_orchestrator": True}).json()["id"]
+    skill = tmp_path / ".claude" / "skills" / "orchestrator-comms" / "SKILL.md"
+    try:
+        assert skill.is_file()
+        assert "spawn" in skill.read_text()
+    finally:
+        client.delete(f"/sessions/{o}")

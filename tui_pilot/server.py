@@ -38,7 +38,13 @@ from .harness import HarnessPoller
 from .identity import new_agent_id
 from .models import model_id
 from .screen import State
-from .session import SessionError, TmuxSession, build_cmd, install_comms_skill
+from .session import (
+    SessionError,
+    TmuxSession,
+    build_cmd,
+    install_comms_skill,
+    install_orchestrator_skill,
+)
 
 app = FastAPI(
     title="tui-pilot",
@@ -470,9 +476,11 @@ def _spawn_agent(
     # orchestrate finish/handoff.
     hub = _hub_for(eff_cwd)
     hub.agent_dir(aid)
-    install_comms_skill(
-        eff_cwd, outbox_path=str(hub.agent_dir(aid) / "outbox"), agent_id=aid
-    )
+    _outbox = str(hub.agent_dir(aid) / "outbox")
+    install_comms_skill(eff_cwd, outbox_path=_outbox, agent_id=aid)
+    if is_orchestrator:
+        # the orchestrator also gets the spawn/answer/kill/status action shapes
+        install_orchestrator_skill(eff_cwd, outbox_path=_outbox, agent_id=aid)
 
     # Registry mutation must be atomic (FIX 2). The auto-handoff path reaches
     # here while holding the PREDECESSOR's session lock, then takes

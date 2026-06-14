@@ -196,9 +196,28 @@ def install_comms_skill(
     right in front of it (rather than something it has to remember from an
     earlier priming turn). Idempotent.
     """
-    dst = Path(cwd) / ".claude" / "skills" / "agent-comms"
+    _render_skill("agent-comms-skill", "agent-comms", cwd, outbox_path, agent_id)
+
+
+def install_orchestrator_skill(
+    cwd: str | Path,
+    outbox_path: str | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Install the orchestrator-comms skill (spawn/answer/kill/status actions)
+    into an orchestrator's <cwd>/.claude/skills/. Same render-the-outbox-path
+    trick as install_comms_skill, so the orchestrator has the exact JSON shapes
+    + its outbox path in front of it when it issues commands. Idempotent."""
+    _render_skill("orchestrator-comms", "orchestrator-comms", cwd, outbox_path, agent_id)
+
+
+def _render_skill(
+    asset_dir: str, skill_name: str, cwd: str | Path,
+    outbox_path: str | None, agent_id: str | None,
+) -> None:
+    dst = Path(cwd) / ".claude" / "skills" / skill_name
     dst.mkdir(parents=True, exist_ok=True)
-    template = (_ASSETS / "agent-comms-skill" / "SKILL.md").read_text()
+    template = (_ASSETS / asset_dir / "SKILL.md").read_text()
     rendered = template.replace(
         "__OUTBOX__", outbox_path or "(no control center attached)"
     ).replace("__AGENT_ID__", agent_id or "(none)")
