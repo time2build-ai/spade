@@ -87,8 +87,13 @@ executor** that the orchestrator's poller invokes.
 - `kill {worker}` → `delete_session(worker)`.
 - `status` → appended to the mission's activity log / chat narration; no-op on
   the fleet.
-- The orchestrator also uses the normal `finished` to close a mission with a
-  report.
+- The orchestrator is **persistent** — it does NOT emit `finished` (that would
+  end the one orchestrator that serves all missions). It reports mission
+  completion with a `status` note and by talking in plain text in its chat (you
+  read its replies directly). Only the four orchestration actions reach the
+  control center; if the orchestrator emits a base worker action it is ignored.
+- `cmd` is also accepted on `spawn` (mainly so tests launch a deterministic
+  `cat` worker); production spawns omit it and resolve the command from `role`.
 
 These extend (do not replace) the worker action set (`ask_question`,
 `need_context`, `need_help`, `progress`, `finished`).
@@ -238,6 +243,17 @@ an inline **Allow / Skip**.
   mission (planner on haiku → developer on sonnet) on autopilot and reports the
   mission finished; assert workers were spawned with the requested models and a
   report was captured.
+
+## 11a. Endpoints (reconciled with implementation)
+
+`POST /orchestrator`, `GET /missions`, `POST /missions/{id}/autopilot`,
+`GET /missions/{id}`, `GET /brakes`, `POST /brakes/{id}/allow`,
+`POST /brakes/{id}/skip`. The `/brakes*` routes back the inline Allow/Skip UI.
+
+**Deferred (not in v1):** a real cost/token tally page. The "Activity & cost"
+view ships as the per-mission **activity** log only; token/$ accounting isn't
+reliably obtainable while driving the interactive REPL, so it is out of scope
+until a source exists.
 
 ## 12. Open items deferred to planning
 
