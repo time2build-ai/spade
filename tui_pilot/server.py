@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .controller import Controller
+from .identity import new_agent_id
 from .screen import State
 from .session import SessionError, TmuxSession
 
@@ -102,16 +103,16 @@ class ModeRequest(BaseModel):
 # ---- helpers --------------------------------------------------------------
 
 
-def _get(name: str) -> Controller:
-    ctrl = _sessions.get(name)
+def _get(aid: str) -> Controller:
+    ctrl = _sessions.get(aid)
     if ctrl is None:
-        raise HTTPException(status_code=404, detail=f"no session named {name!r}")
+        raise HTTPException(status_code=404, detail=f"no session with id {aid!r}")
     return ctrl
 
 
-def _lock_for(name: str) -> threading.Lock:
+def _lock_for(aid: str) -> threading.Lock:
     with _registry_lock:
-        return _locks.setdefault(name, threading.Lock())
+        return _locks.setdefault(aid, threading.Lock())
 
 
 def _safe_state(ctrl: Controller) -> str:
@@ -121,11 +122,12 @@ def _safe_state(ctrl: Controller) -> str:
         return State.EXITED.value
 
 
-def _info(name: str) -> dict:
-    ctrl = _sessions[name]
-    m = _meta.get(name, {})
+def _info(aid: str) -> dict:
+    ctrl = _sessions[aid]
+    m = _meta.get(aid, {})
     return {
-        "name": name,
+        "id": aid,
+        "name": m.get("name", aid),
         "alive": ctrl.session.is_alive(),
         "cmd": ctrl.session.cmd,
         "cwd": ctrl.session.cwd,
@@ -141,13 +143,13 @@ def _info(name: str) -> dict:
     }
 
 
-def _prime(name: str) -> None:
+def _prime(aid: str) -> None:
     """Background worker: boot → set mode → inject instructions → ready."""
-    ctrl = _sessions.get(name)
+    ctrl = _sessions.get(aid)
     if ctrl is None:
         return
-    m = _meta[name]
-    lock = _lock_for(name)
+    m = _meta[aid]
+    lock = _lock_for(aid)
     try:
         # 1. wait for the REPL to finish booting.
         ctrl.wait_for_settle(timeout=40)
@@ -218,7 +220,7 @@ def create_session(req: SpawnRequest) -> dict:
     """Spawn a new (optionally role-based) agent session.
 
     Returns immediately; priming (mode + instructions) runs in the background.
-    Poll ``GET /sessions`` or ``GET /sessions/{name}`` and watch ``prep`` go
+    Poll ``GET /sessions`` or ``GET /sessions/{id}`` and watch ``prep`` go
     ``booting`` → ``priming`` → ``ready``.
     """
     global _order
@@ -240,18 +242,21 @@ def create_session(req: SpawnRequest) -> dict:
         else (role.get("instructions", "") if role else "")
     )
 
+    aid = new_agent_id(req.name)
+
     with _registry_lock:
-        if req.name in _sessions:
-            raise HTTPException(status_code=409, detail="session already exists")
-        sess = TmuxSession(req.name, cmd, cols=req.cols, rows=req.rows, cwd=req.cwd)
+        sess = TmuxSession(aid, cmd, cols=req.cols, rows=req.rows, cwd=req.cwd)
         try:
             sess.spawn()
         except SessionError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        _sessions[req.name] = Controller(sess)
-        _locks[req.name] = threading.Lock()
+        _sessions[aid] = Controller(sess)
+        _locks[aid] = threading.Lock()
         _order += 1
-        _meta[req.name] = {
+        _meta[aid] = {
+            "id": aid,
+            "name": req.name,
+            "cwd": req.cwd,
             "role": req.role,
             "label": (role.get("label") if role else None) or req.name,
             "emoji": (role.get("emoji") if role else None) or "💬",
@@ -264,45 +269,45 @@ def create_session(req: SpawnRequest) -> dict:
         }
 
     # Kick off priming in the background (mode + instructions need a live REPL).
-    threading.Thread(target=_prime, args=(req.name,), daemon=True).start()
-    return _info(req.name)
+    threading.Thread(target=_prime, args=(aid,), daemon=True).start()
+    return _info(aid)
 
 
 @app.get("/sessions")
 def list_sessions() -> dict:
     """List all sessions with role, prep status and live state."""
     with _registry_lock:
-        names = list(_sessions.keys())
-    sessions = [_info(n) for n in names]
+        ids = list(_sessions.keys())
+    sessions = [_info(i) for i in ids]
     sessions.sort(key=lambda s: s.get("order") or 0)
     return {"sessions": sessions}
 
 
-@app.get("/sessions/{name}")
-def get_session(name: str) -> dict:
-    _get(name)
-    return _info(name)
+@app.get("/sessions/{id}")
+def get_session(id: str) -> dict:
+    _get(id)
+    return _info(id)
 
 
-@app.get("/sessions/{name}/state")
-def get_state(name: str) -> dict:
-    ctrl = _get(name)
-    return {"name": name, "state": _safe_state(ctrl), "prep": _meta.get(name, {}).get("prep")}
+@app.get("/sessions/{id}/state")
+def get_state(id: str) -> dict:
+    ctrl = _get(id)
+    return {"id": id, "state": _safe_state(ctrl), "prep": _meta.get(id, {}).get("prep")}
 
 
-@app.get("/sessions/{name}/screen", response_class=PlainTextResponse)
-def get_screen(name: str, history: bool = False) -> str:
-    ctrl = _get(name)
+@app.get("/sessions/{id}/screen", response_class=PlainTextResponse)
+def get_screen(id: str, history: bool = False) -> str:
+    ctrl = _get(id)
     try:
         return ctrl.session.capture(history=history)
     except SessionError as exc:
         raise HTTPException(status_code=410, detail=str(exc)) from exc
 
 
-@app.post("/sessions/{name}/prompt")
-def post_prompt(name: str, req: PromptRequest) -> dict:
-    ctrl = _get(name)
-    with _lock_for(name):
+@app.post("/sessions/{id}/prompt")
+def post_prompt(id: str, req: PromptRequest) -> dict:
+    ctrl = _get(id)
+    with _lock_for(id):
         try:
             result = ctrl.prompt(req.text, timeout=req.timeout)
         except SessionError as exc:
@@ -310,10 +315,10 @@ def post_prompt(name: str, req: PromptRequest) -> dict:
     return {"response": result["response"], "state": result["state"].value}
 
 
-@app.post("/sessions/{name}/key")
-def post_key(name: str, req: KeyRequest) -> dict:
-    ctrl = _get(name)
-    with _lock_for(name):
+@app.post("/sessions/{id}/key")
+def post_key(id: str, req: KeyRequest) -> dict:
+    ctrl = _get(id)
+    with _lock_for(id):
         try:
             ctrl.session.send_key(req.key)
         except SessionError as exc:
@@ -321,9 +326,9 @@ def post_key(name: str, req: KeyRequest) -> dict:
     return {"ok": True}
 
 
-@app.post("/sessions/{name}/mode")
-def post_mode(name: str, req: ModeRequest) -> dict:
-    ctrl = _get(name)
+@app.post("/sessions/{id}/mode")
+def post_mode(id: str, req: ModeRequest) -> dict:
+    ctrl = _get(id)
     if req.mode == "bypass":
         # bypass can't be toggled on a running session; it needs a relaunch with
         # the danger flag. Tell the caller to respawn with mode=bypass instead.
@@ -332,20 +337,20 @@ def post_mode(name: str, req: ModeRequest) -> dict:
             detail="'bypass' must be set at spawn (relaunch with mode=bypass); "
             "it is not reachable on a running session.",
         )
-    with _lock_for(name):
+    with _lock_for(id):
         try:
             ok = ctrl.set_mode(req.mode)
         except (SessionError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if name in _meta:
-        _meta[name]["mode"] = req.mode
+    if id in _meta:
+        _meta[id]["mode"] = req.mode
     return {"ok": ok, "mode": ctrl.current_mode()}
 
 
-@app.post("/sessions/{name}/approve")
-def post_approve(name: str) -> dict:
-    ctrl = _get(name)
-    with _lock_for(name):
+@app.post("/sessions/{id}/approve")
+def post_approve(id: str) -> dict:
+    ctrl = _get(id)
+    with _lock_for(id):
         try:
             ctrl.approve()
         except SessionError as exc:
@@ -353,10 +358,10 @@ def post_approve(name: str) -> dict:
     return {"ok": True}
 
 
-@app.post("/sessions/{name}/deny")
-def post_deny(name: str) -> dict:
-    ctrl = _get(name)
-    with _lock_for(name):
+@app.post("/sessions/{id}/deny")
+def post_deny(id: str) -> dict:
+    ctrl = _get(id)
+    with _lock_for(id):
         try:
             ctrl.deny()
         except SessionError as exc:
@@ -364,10 +369,10 @@ def post_deny(name: str) -> dict:
     return {"ok": True}
 
 
-@app.post("/sessions/{name}/interrupt")
-def post_interrupt(name: str) -> dict:
-    ctrl = _get(name)
-    with _lock_for(name):
+@app.post("/sessions/{id}/interrupt")
+def post_interrupt(id: str) -> dict:
+    ctrl = _get(id)
+    with _lock_for(id):
         try:
             ctrl.interrupt()
         except SessionError as exc:
@@ -375,16 +380,16 @@ def post_interrupt(name: str) -> dict:
     return {"ok": True}
 
 
-@app.delete("/sessions/{name}")
-def delete_session(name: str) -> dict:
+@app.delete("/sessions/{id}")
+def delete_session(id: str) -> dict:
     with _registry_lock:
-        ctrl = _sessions.pop(name, None)
-        _locks.pop(name, None)
-        _meta.pop(name, None)
+        ctrl = _sessions.pop(id, None)
+        _locks.pop(id, None)
+        _meta.pop(id, None)
     if ctrl is None:
-        raise HTTPException(status_code=404, detail=f"no session named {name!r}")
+        raise HTTPException(status_code=404, detail=f"no session with id {id!r}")
     ctrl.session.kill()
-    return {"name": name, "status": "killed"}
+    return {"id": id, "status": "killed"}
 
 
 # ---- static test UI -------------------------------------------------------

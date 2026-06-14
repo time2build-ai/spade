@@ -9,7 +9,6 @@ live ``prompt`` round-trip is covered by tests/test_integration.py.
 from __future__ import annotations
 
 import time
-import uuid
 
 import pytest
 
@@ -39,42 +38,44 @@ def client():
     return TestClient(server.app)
 
 
-@pytest.fixture()
-def name():
-    return f"srv-{uuid.uuid4().hex[:8]}"
-
-
-def test_full_lifecycle(client, name):
+def test_full_lifecycle(client):
     # spawn
-    r = client.post("/sessions", json={"name": name, "cmd": "cat", "cols": 80, "rows": 24})
+    r = client.post("/sessions", json={"name": "srv", "cmd": "cat", "cols": 80, "rows": 24})
     assert r.status_code == 200, r.text
+    aid = r.json()["id"]
+    assert aid.startswith("srv__")
 
     # appears in the list, alive
     listed = client.get("/sessions").json()["sessions"]
-    assert any(s["name"] == name and s["alive"] for s in listed)
-
-    # duplicate spawn -> 409
-    assert client.post("/sessions", json={"name": name, "cmd": "cat"}).status_code == 409
+    assert any(s["id"] == aid and s["alive"] for s in listed)
 
     # state endpoint responds
-    assert client.get(f"/sessions/{name}/state").status_code == 200
+    assert client.get(f"/sessions/{aid}/state").status_code == 200
 
     # send keys (cat echoes them back) and read the screen
-    client.post(f"/sessions/{name}/key", json={"key": "h"})
-    client.post(f"/sessions/{name}/key", json={"key": "i"})
+    client.post(f"/sessions/{aid}/key", json={"key": "h"})
+    client.post(f"/sessions/{aid}/key", json={"key": "i"})
     time.sleep(0.3)
-    screen = client.get(f"/sessions/{name}/screen").text
+    screen = client.get(f"/sessions/{aid}/screen").text
     assert "hi" in screen
 
     # history flag is accepted
-    assert client.get(f"/sessions/{name}/screen?history=true").status_code == 200
+    assert client.get(f"/sessions/{aid}/screen?history=true").status_code == 200
 
     # delete
-    assert client.delete(f"/sessions/{name}").status_code == 200
+    assert client.delete(f"/sessions/{aid}").status_code == 200
 
     # gone now
-    assert client.get(f"/sessions/{name}/state").status_code == 404
-    assert client.delete(f"/sessions/{name}").status_code == 404
+    assert client.get(f"/sessions/{aid}/state").status_code == 404
+    assert client.delete(f"/sessions/{aid}").status_code == 404
+
+
+def test_same_name_spawns_two_distinct_agents(client):
+    a = client.post("/sessions", json={"name": "dup", "cmd": "cat"}).json()["id"]
+    b = client.post("/sessions", json={"name": "dup", "cmd": "cat"}).json()["id"]
+    assert a != b
+    client.delete(f"/sessions/{a}")
+    client.delete(f"/sessions/{b}")
 
 
 def test_unknown_session_is_404(client):
