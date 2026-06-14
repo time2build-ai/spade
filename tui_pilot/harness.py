@@ -82,10 +82,13 @@ class HarnessPoller:
             self._handle(sig)
         if self.done_report:
             return HarnessState("done", report=self.done_report)
-        if self.open_signal:
-            return HarnessState("blocked", open_signal=self.open_signal)
+        # A dead agent beats a stale open_signal: if the session died while a
+        # blocking signal was open, report it as exited (spec §8 "agent dies
+        # mid-block") rather than leaving a permanent 🔴 for a gone agent.
         if not alive:
             return HarnessState("exited")
+        if self.open_signal:
+            return HarnessState("blocked", open_signal=self.open_signal)
         return HarnessState("idle")
 
     def _handle(self, sig: Signal) -> None:
@@ -121,11 +124,18 @@ class HarnessPoller:
             return True
         return False
 
-    def answer(self, signal_id: str, text: str) -> None:
+    def answer(self, signal_id: str, text: str) -> bool:
         """The pluggable 'answerer' seam: a human (v1) or a PM agent (future)
-        calls this to reply. The reply is typed into the agent via tmux."""
+        calls this to reply. The reply is typed into the agent via tmux.
+
+        Returns True if the answer landed (it matched the open blocking signal),
+        False if there was no matching open signal (stale/duplicate answer) — so
+        the caller can tell a real reply from a dropped one (spec §8).
+        """
         if self.open_signal and self.open_signal.id == signal_id:
             self.session.send_text(text)
             self.hub.write_inbox(self.agent_id, signal_id, {"answer": text})
             self.hub.mark_processed(self.agent_id, signal_id)
             self.open_signal = None
+            return True
+        return False

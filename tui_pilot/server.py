@@ -562,11 +562,15 @@ def get_signals(id: str) -> dict:
 
 @app.post("/sessions/{id}/answer")
 def post_answer(id: str, req: AnswerRequest) -> dict:
-    """Reply to the agent's open signal (typed back in via tmux)."""
+    """Reply to the agent's open signal (typed back in via tmux).
+
+    ``landed`` is False if there was no matching open signal (stale/duplicate
+    answer) — the answer was a no-op.
+    """
     p = _poller(id)
     with _lock_for(id):
-        p.answer(req.signal_id, req.text)
-    return {"ok": True}
+        landed = p.answer(req.signal_id, req.text)
+    return {"ok": True, "landed": landed}
 
 
 @app.get("/sessions/{id}/report", response_class=PlainTextResponse)

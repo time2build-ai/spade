@@ -107,3 +107,20 @@ def test_finish_in_same_interval_as_death_is_captured(tmp_path):
     state = poller.poll()
     assert state.kind == "done"                       # finish wins over exited
     assert (cwd / "SUMMARY.md").read_text() == "# Done\nok"
+
+def test_dead_agent_with_open_signal_reports_exited_not_blocked(tmp_path):
+    # spec §8: an agent that dies mid-block must not stay "blocked" forever
+    hub = Hub(tmp_path); aid = "dev-1-a"; sess = _FakeSession()
+    poller = HarnessPoller(aid, sess, hub)
+    _emit(hub, aid, {"id": "s1", "action": "ask_question", "text": "PG?"})
+    assert poller.poll().kind == "blocked"
+    sess._alive = False                               # agent dies while blocked
+    assert poller.poll().kind == "exited"
+
+def test_answer_returns_true_when_it_lands_false_when_stale(tmp_path):
+    hub = Hub(tmp_path); aid = "dev-1-a"; sess = _FakeSession()
+    poller = HarnessPoller(aid, sess, hub)
+    _emit(hub, aid, {"id": "s1", "action": "ask_question", "text": "PG?"})
+    poller.poll()
+    assert poller.answer("s1", "Postgres") is True    # matched the open signal
+    assert poller.answer("s1", "again") is False      # already answered → no-op
