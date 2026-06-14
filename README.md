@@ -240,6 +240,47 @@ Roles, autonomy mode, and missions compose with all of this — e.g. spawn a
 `planner` whose mission produces `plan.md` and whose `finished.next` hands off to
 an autonomous `developer`.
 
+## Orchestrator (conversational fleet control)
+
+On top of the harness you can chat with one **orchestrator** agent that runs the
+whole fleet for you. It decomposes your goal, spawns workers with the **right
+model per task**, routes their questions, and reports back — supervised by
+default, hands-off (autopilot) when you flip a per-mission toggle. It stays
+within the rules: the orchestrator is itself a tmux `claude` (no API); it manages
+others by emitting **orchestration signals** the control center executes.
+
+**Orchestration actions** (the orchestrator writes these to its outbox, on top of
+the normal agent-comms actions):
+
+| action | does |
+|--------|------|
+| `spawn {role, model, task, mission, reason, cwd?, mode?}` | launch a worker as `claude --model <tier>` |
+| `answer {worker, text}` | reply to a worker's question or permission prompt (`approve`/`deny`) |
+| `kill {worker}` | stop a worker |
+| `status {text}` | narrate progress to you |
+
+**Model selection.** Tiers `haiku` / `sonnet` / `opus` map to concrete
+`--model` ids; the orchestrator sizes the model to the task and must give a
+`reason` (shown as "why this model"). A configurable **ceiling** (default
+`sonnet`) caps it — a `spawn` above the ceiling (Opus) is a **brake**.
+
+**Supervised vs autopilot.** Each mission has a toggle (default supervised). In
+supervised mode the orchestrator handles routine coordination itself but pauses
+for you on **brakes** — an Opus spawn, or any worker hitting a permission dialog
+— surfaced as an inline **Allow / Skip**. On autopilot it decides those too, so
+you can walk away. When a worker raises a question or permission prompt, the
+control center forwards it to the orchestrator, which answers (relayed to the
+worker via tmux) or escalates to you.
+
+**Endpoints:** `POST /orchestrator` (ensure/return the orchestrator),
+`GET /missions`, `POST /missions/{id}/autopilot`, `GET /missions/{id}`,
+`GET /brakes`, `POST /brakes/{id}/allow`, `POST /brakes/{id}/skip`.
+
+**In the UI** (`/ui/`): the **🧠 Orchestrator** chat is the primary surface;
+behind it the fleet shows each worker's **model badge + "why"**, grouped by
+mission with a per-mission autopilot toggle; brakes appear as **Allow / Skip**
+cards; the manual spawn form moves to **Advanced**.
+
 ## ⚠ Pattern tuning — the brittle part
 
 **`patterns.yaml` is version-specific and WILL drift when the TUI changes.** It

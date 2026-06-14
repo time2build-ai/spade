@@ -132,3 +132,53 @@ def test_harness_round_trip(tmp_path) -> None:
         assert (tmp_path / "proj" / "SUMMARY.md").exists()
     finally:
         client.delete(f"/sessions/{aid}")
+
+
+def test_orchestrator_spawns_a_worker(tmp_path) -> None:
+    """A real orchestrator: chat it a goal; it emits a `spawn` orchestration
+    signal and the control center launches a worker tagged with its parent +
+    a `--model`. End-to-end proof of the conversational orchestrator.
+    """
+    from fastapi.testclient import TestClient
+
+    from tui_pilot import server
+
+    cwd = str(tmp_path / "orch")
+    os.makedirs(cwd)
+    client = TestClient(server.app)
+
+    o = client.post(
+        "/sessions",
+        json={"name": "orch", "role": "orchestrator", "cwd": cwd, "is_orchestrator": True},
+    ).json()["id"]
+    try:
+        # wait for it to prime
+        for _ in range(30):
+            if client.get(f"/sessions/{o}").json()["prep"] == "ready":
+                break
+            time.sleep(1)
+        # chat it a goal that forces one spawn
+        client.post(
+            f"/sessions/{o}/prompt",
+            json={
+                "text": ("Mission m1. Using a spawn orchestration signal NOW, start ONE "
+                         "planner worker (model haiku) with task: write a one-line plan."),
+                "timeout": 8,
+            },
+        )
+        # a worker tagged with this orchestrator as parent should appear
+        workers = []
+        for _ in range(90):
+            workers = [
+                s for s in client.get("/sessions").json()["sessions"]
+                if s.get("parent") == o
+            ]
+            if workers:
+                break
+            time.sleep(1)
+        assert workers, "orchestrator never spawned a worker"
+        # it was launched with a concrete --model (tolerate which tier it chose)
+        assert "--model" in workers[0]["cmd"]
+    finally:
+        for s in client.get("/sessions").json()["sessions"]:
+            client.delete(f"/sessions/{s['id']}")
