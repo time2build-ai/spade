@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 
 class SessionError(RuntimeError):
@@ -175,3 +176,14 @@ class TmuxSession:
             args += ["-S", "-"]
         proc = self._run(*args)
         return proc.stdout
+
+
+_ASSETS = Path(__file__).resolve().parent / "assets"
+
+
+def install_comms_skill(cwd: str | Path) -> None:
+    """Copy the agent-comms skill into <cwd>/.claude/skills/ so the spawned
+    agent reads it on boot. Idempotent."""
+    dst = Path(cwd) / ".claude" / "skills" / "agent-comms"
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_ASSETS / "agent-comms-skill" / "SKILL.md", dst / "SKILL.md")
