@@ -60,10 +60,14 @@ e.g. Implement plan.md"></textarea>
     </fieldset>
 
     <div class="agents-head">
-      <span>Agents</span>
+      <div class="tabs">
+        <button id="tabAgents" class="tab active">Agents</button>
+        <button id="tabInbox" class="tab">Inbox<span id="inboxBadge" class="ibadge" style="display:none"></span></button>
+      </div>
       <button id="btnKillAll" class="tiny red" title="kill all sessions">kill all</button>
     </div>
     <div id="agents" class="agents"></div>
+    <div id="inbox" class="inbox" style="display:none"></div>
   </aside>
 
   <!-- CENTER: focused session screen + composer -->
@@ -73,6 +77,8 @@ e.g. Implement plan.md"></textarea>
       <span class="grow"></span>
       <span id="focusPill" class="pill s-EXITED"><span class="dot"></span><span id="focusState">—</span></span>
     </div>
+    <div id="answerCard" class="answer-mount" style="display:none"></div>
+    <div id="reportCard" class="report-mount" style="display:none"></div>
     <pre id="screen">Pick a role on the left and spawn an agent.
 
 Every agent is a real interactive `claude` running in its own tmux session.
