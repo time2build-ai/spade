@@ -256,15 +256,20 @@ def _prime(aid: str) -> None:
                 if instructions:
                     parts.append(instructions)
                 if task:
-                    parts.append("\n\n--- YOUR TASK (begin now) ---\n" + task)
+                    parts.append(" --- YOUR TASK (begin now) --- " + task)
                 else:
                     parts.append(
-                        "\n\nAcknowledge in one sentence that you are ready, "
+                        " Acknowledge in one sentence that you are ready, "
                         "then wait for my next message."
                     )
+                # Collapse ALL whitespace (incl. newlines) to single spaces:
+                # a MULTI-LINE send is captured by Claude as a bracketed "paste"
+                # and the trailing Enter gets absorbed, leaving the message
+                # unsubmitted in the composer. A single line submits reliably.
+                first_msg = " ".join("".join(parts).split())
                 # NOTE: we are already inside the `with lock:` above (step 2);
                 # threading.Lock is non-reentrant, so do NOT re-acquire it here.
-                ctrl.session.send_text("".join(parts))
+                ctrl.session.send_text(first_msg)
 
         m["prep"] = "ready"
         m["prep_detail"] = None
@@ -374,7 +379,15 @@ def _spawn_agent(
         )
 
     aid = new_agent_id(name)
-    eff_cwd = cwd or os.getcwd()
+    # An empty working dir defaults to a per-agent scratch workspace — NOT the
+    # server's own cwd — so an agent can't clobber the tui-pilot project's own
+    # files (e.g. a Planner overwriting our real plan.md). Callers who want an
+    # agent to work in a specific project pass `cwd` explicitly.
+    if cwd:
+        eff_cwd = cwd
+    else:
+        eff_cwd = str(Path.home() / ".tui-pilot" / "workspaces" / aid)
+        os.makedirs(eff_cwd, exist_ok=True)
 
     sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd)
     try:
