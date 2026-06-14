@@ -89,7 +89,12 @@ roles:
   - id: orchestrator
     label: Orchestrator
     emoji: "🧠"
-    mode: auto            # so it can write its own orchestration signals freely
+    # bypass = launched with --dangerously-skip-permissions: deterministic
+    # autonomy for the coordinator (no flaky set_mode, no trust-folder prompt, no
+    # getting stuck on its own ls/read). It only inspects, writes its outbox, and
+    # dispatches; the risky building is delegated to WORKERS, whose permission
+    # dialogs are still surfaced/braked.
+    mode: bypass
     cmd: claude
     description: Chat with it; it plans, spawns workers (right model per task), and steers the fleet.
     instructions: |

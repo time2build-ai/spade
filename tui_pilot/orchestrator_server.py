@@ -342,8 +342,12 @@ def ensure_orchestrator() -> dict:
     for aid, m in list(server._meta.items()):
         if m.get("is_orchestrator"):
             return {"id": aid}
-    info = server._spawn_agent(name="orchestrator", role="orchestrator")
-    server._meta[info["id"]]["is_orchestrator"] = True
+    # Pass is_orchestrator=True so the orchestration skill is installed and the
+    # flag is set atomically at spawn (avoids a race with the poll loop and the
+    # background _prime thread reading is_orchestrator).
+    info = server._spawn_agent(
+        name="orchestrator", role="orchestrator", is_orchestrator=True
+    )
     return {"id": info["id"]}
 
 
