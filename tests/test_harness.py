@@ -98,3 +98,12 @@ def test_finished_confirm_handoff_is_pending_not_fired(tmp_path):
 def test_dead_agent_reports_exited(tmp_path):
     hub = Hub(tmp_path); poller = HarnessPoller("d", _FakeSession(alive=False), hub, cwd="/tmp")
     assert poller.poll().kind == "exited"
+
+def test_finish_in_same_interval_as_death_is_captured(tmp_path):
+    hub = Hub(tmp_path); aid = "dev-1-a"; sess = _FakeSession(alive=False)
+    cwd = tmp_path / "proj"; cwd.mkdir()
+    poller = HarnessPoller(aid, sess, hub, cwd=str(cwd))
+    _emit(hub, aid, {"id": "f1", "action": "finished", "report": "# Done\nok"})
+    state = poller.poll()
+    assert state.kind == "done"                       # finish wins over exited
+    assert (cwd / "SUMMARY.md").read_text() == "# Done\nok"

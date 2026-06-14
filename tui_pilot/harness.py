@@ -1,7 +1,9 @@
 """Harness: signal model + poller + finish/handoff orchestration."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 ACTIONS = {"ask_question", "need_context", "need_help", "progress", "finished"}
@@ -52,6 +54,10 @@ class HarnessPoller:
 
     on_handoff(next_dict, report) is called by the server to spawn a successor
     when a finished signal carries next.start == "auto" (or after a UI confirm).
+
+    Not internally synchronized: the server serializes ``poll()``, ``answer()``,
+    and ``confirm_handoff()`` for a given session under that session's lock.
+    ``confirm_handoff()`` is additionally double-fire safe.
     """
     def __init__(self, agent_id, session, hub, cwd: str | None = None,
                  on_handoff: Callable | None = None):
@@ -66,8 +72,7 @@ class HarnessPoller:
         self.pending_handoff: dict | None = None
 
     def poll(self) -> HarnessState:
-        if not self.session.is_alive():
-            return HarnessState("exited")
+        alive = self.session.is_alive()
         for data in self.hub.scan(self.agent_id):
             try:
                 sig = parse_signal(data)
@@ -79,6 +84,8 @@ class HarnessPoller:
             return HarnessState("done", report=self.done_report)
         if self.open_signal:
             return HarnessState("blocked", open_signal=self.open_signal)
+        if not alive:
+            return HarnessState("exited")
         return HarnessState("idle")
 
     def _handle(self, sig: Signal) -> None:
@@ -91,8 +98,6 @@ class HarnessPoller:
             self._finish(sig)
 
     def _finish(self, sig: Signal) -> None:
-        import time
-        from pathlib import Path
         ts = time.strftime("%Y%m%d-%H%M%S")
         self.done_report = sig.report or "(no report)"
         # 1. write SUMMARY.md into the project cwd (overwrite, like plan.md)
@@ -102,7 +107,7 @@ class HarnessPoller:
         self.hub.archive_report(self.agent_id, self.done_report, ts)
         self.hub.mark_processed(self.agent_id, sig.id)
         # 3. handoff: auto fires now; confirm waits for confirm_handoff()
-        nxt = sig.next or None
+        nxt = sig.next
         if nxt and nxt.get("start") == "auto" and self.on_handoff:
             self.on_handoff(nxt, self.done_report)
         elif nxt:
@@ -110,9 +115,9 @@ class HarnessPoller:
 
     def confirm_handoff(self) -> bool:
         """Spawn the pending (start:"confirm") successor. Returns True if fired."""
-        if self.pending_handoff and self.on_handoff:
-            self.on_handoff(self.pending_handoff, self.done_report)
-            self.pending_handoff = None
+        nxt, self.pending_handoff = self.pending_handoff, None
+        if nxt and self.on_handoff:
+            self.on_handoff(nxt, self.done_report)
             return True
         return False
 
