@@ -303,3 +303,39 @@ def test_login_endpoint_registers_bare_session(monkeypatch):
             server._locks.pop(aid, None)
             server._meta.pop(aid, None)
             server._pollers.pop(aid, None)
+
+
+def test_advance_login_sessions_presses_enter_once():
+    """A login session at the 'Press Enter to continue' screen gets Enter sent
+    exactly once; non-login sessions and pre-login screens are ignored."""
+    from tui_pilot import server
+
+    keys = []
+
+    class FakeSess:
+        def __init__(self, txt):
+            self.txt = txt
+        def capture(self, history=False):
+            return self.txt
+        def send_key(self, k):
+            keys.append(k)
+
+    class FakeCtrl:
+        def __init__(self, txt):
+            self.session = FakeSess(txt)
+
+    server._sessions["login-x"] = FakeCtrl("Login successful. Press Enter to continue…")
+    server._meta["login-x"] = {"id": "login-x", "role": "login"}
+    # a non-login session showing the same text must be ignored
+    server._sessions["dev-x"] = FakeCtrl("Login successful. Press Enter to continue")
+    server._meta["dev-x"] = {"id": "dev-x", "role": "developer"}
+    try:
+        server._advance_login_sessions()
+        server._advance_login_sessions()  # once-only guard
+        assert keys == ["Enter"]
+        assert server._meta["login-x"].get("login_continued") is True
+    finally:
+        for k in ("login-x", "dev-x"):
+            server._sessions.pop(k, None)
+            server._locks.pop(k, None)
+            server._meta.pop(k, None)

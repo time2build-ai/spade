@@ -151,6 +151,26 @@ def _hub_for(cwd: str) -> Hub:
     return Hub(Path(cwd) / ".agent-comms")
 
 
+def _advance_login_sessions() -> None:
+    """Login sessions have no poller. After the human completes the OAuth login,
+    Claude shows "Login successful. Press Enter to continue…" and waits — auto-press
+    Enter once (per session) so a finished login isn't left hanging on that screen."""
+    for aid, m in list(_meta.items()):
+        if m.get("role") != "login" or m.get("login_continued"):
+            continue
+        ctrl = _sessions.get(aid)
+        if ctrl is None:
+            continue
+        try:
+            screen = ctrl.session.capture().lower()
+            if "press enter to continue" in screen or "login successful" in screen:
+                with _lock_for(aid):
+                    ctrl.session.send_key("Enter")
+                m["login_continued"] = True
+        except Exception:  # noqa: BLE001 - never let one session kill the loop
+            pass
+
+
 def _poll_loop() -> None:
     """Daemon: tick every poller ~1s so progress/finish/handoff are processed
     without the UI having to poll. One poller raising must not stop the loop.
@@ -200,6 +220,7 @@ def _poll_loop() -> None:
                             advances.append(item)
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
+        _advance_login_sessions()
         # DRAIN: no session lock held here; each item takes at most one lock.
         try:
             orchestrator_server.drain(_module, signals, forwards)
