@@ -216,16 +216,25 @@ def install_orchestrator_skill(
     _render_skill("orchestrator-comms", "orchestrator-comms", cwd, outbox_path, agent_id)
 
 
+def install_spade_data_skill(cwd: str | Path, api_base: str) -> None:
+    """Install the spade-data skill into <cwd>/.claude/skills/ so the agent can
+    read and drive the Spade app (projects, backlog, brain, pipelines) over its
+    local HTTP API. The concrete API base URL is rendered in. Idempotent."""
+    _render_skill("spade-data", "spade-data", cwd, None, None, api_base=api_base)
+
+
 def _render_skill(
     asset_dir: str, skill_name: str, cwd: str | Path,
-    outbox_path: str | None, agent_id: str | None,
+    outbox_path: str | None, agent_id: str | None, api_base: str | None = None,
 ) -> None:
     dst = Path(cwd) / ".claude" / "skills" / skill_name
     dst.mkdir(parents=True, exist_ok=True)
     template = (_ASSETS / asset_dir / "SKILL.md").read_text()
-    rendered = template.replace(
-        "__OUTBOX__", outbox_path or "(no control center attached)"
-    ).replace("__AGENT_ID__", agent_id or "(none)")
+    rendered = (
+        template.replace("__OUTBOX__", outbox_path or "(no control center attached)")
+        .replace("__AGENT_ID__", agent_id or "(none)")
+        .replace("__API_BASE__", api_base or "http://127.0.0.1:8765")
+    )
     (dst / "SKILL.md").write_text(rendered)
 
 

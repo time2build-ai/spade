@@ -56,6 +56,7 @@ from .session import (
     build_cmd,
     install_comms_skill,
     install_orchestrator_skill,
+    install_spade_data_skill,
 )
 
 logger = logging.getLogger("tui_pilot")
@@ -520,6 +521,13 @@ def _resolve_account(account_id: str | None, project_id: str | None) -> dict | N
 _PERM_MODE = {"accept-edits": "acceptEdits", "auto": "auto", "plan": "plan"}
 
 
+def _api_base() -> str:
+    """Base URL agents use to reach this server's HTTP API (for the spade-data
+    skill). Defaults to the README port; override with TUI_PILOT_API_BASE when
+    running on a different host/port."""
+    return os.environ.get("TUI_PILOT_API_BASE", "http://127.0.0.1:8765")
+
+
 def _build_first_message(aid: str, instructions: str | None, task: str | None) -> str:
     """The agent's first message: a control-center preamble + role instructions +
     (optional) task, collapsed to a single line. Passed as Claude's launch prompt
@@ -656,6 +664,10 @@ def _spawn_agent(
     if is_orchestrator:
         # the orchestrator also gets the spawn/answer/kill/status action shapes
         install_orchestrator_skill(eff_cwd, outbox_path=_outbox, agent_id=aid)
+        # …and the spade-data skill so it can READ + DRIVE the app (projects,
+        # backlog, brain, pipelines) over the local HTTP API instead of guessing
+        # from the filesystem.
+        install_spade_data_skill(eff_cwd, api_base=_api_base())
 
     # Registry mutation must be atomic (FIX 2). The auto-handoff path reaches
     # here while holding the PREDECESSOR's session lock, then takes

@@ -339,3 +339,18 @@ def test_advance_login_sessions_presses_enter_once():
             server._sessions.pop(k, None)
             server._locks.pop(k, None)
             server._meta.pop(k, None)
+
+
+def test_orchestrator_gets_spade_data_skill(tmp_path):
+    """Spawning an orchestrator installs the spade-data skill (with the API base
+    rendered in) so it can read/drive the app, not just guess from the filesystem."""
+    from tui_pilot import session
+    cwd = tmp_path / "orch"
+    cwd.mkdir()
+    session.install_spade_data_skill(str(cwd), api_base="http://127.0.0.1:8765")
+    skill = cwd / ".claude" / "skills" / "spade-data" / "SKILL.md"
+    assert skill.exists()
+    text = skill.read_text()
+    assert "http://127.0.0.1:8765" in text
+    assert "/tasks?project_id=" in text and "/pipelines" in text
+    assert "__API_BASE__" not in text  # placeholder fully rendered
