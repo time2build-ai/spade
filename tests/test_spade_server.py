@@ -155,6 +155,32 @@ def test_pipeline_endpoints_manual_advance_to_shipped(monkeypatch):
     assert c.get(f"/tasks/{tid}").json()["status"] == "shipped"
 
 
+def test_advance_already_shipped_run_is_idempotent(monkeypatch):
+    from tui_pilot.server import app
+    from tui_pilot import server, projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+
+    monkeypatch.setattr(
+        server, "_spawn_agent",
+        lambda **kw: {"id": "fakesess", "account_id": "a"},
+    )
+
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Build X"}).json()["id"]
+    rid = c.post("/pipelines", json={"project_id": "acme", "task_id": tid}).json()["id"]
+    c.post(f"/pipelines/{rid}/start")
+    for i in range(4):
+        c.post(f"/pipelines/{rid}/advance", json={"report": f"r{i}"})
+    assert c.get(f"/pipelines/{rid}").json()["status"] == "shipped"
+
+    # Advancing an already-shipped run returns it unchanged, no error.
+    r = c.post(f"/pipelines/{rid}/advance", json={"report": "again"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "shipped"
+    assert [s["state"] for s in r.json()["stages"]] == ["done"] * 4
+    assert c.get(f"/tasks/{tid}").json()["status"] == "shipped"
+
+
 def test_pipeline_create_404_for_missing_task():
     from tui_pilot.server import app
     from tui_pilot import projects

@@ -293,10 +293,14 @@ def _pipeline_spawn(run: dict):
         sid = info["id"]
         # Stamp the run/stage onto the session's _meta so the poll loop's
         # auto-advance branch can find and advance this pipeline on finish.
+        # Write pipeline_run_id LAST: the collector gates on pipeline_run_id then
+        # reads pipeline_stage_idx (defaulting to 0). Single-key dict writes are
+        # GIL-atomic, so writing the gate key last guarantees a tick that sees
+        # the run id also sees the correct stage_idx — closing the advance race.
         meta = server._meta.get(sid)
         if meta is not None:
-            meta["pipeline_run_id"] = run["id"]
             meta["pipeline_stage_idx"] = idx
+            meta["pipeline_run_id"] = run["id"]  # gate key written last
         return (sid, info.get("account_id"))
 
     return spawn
@@ -343,6 +347,10 @@ def start_pipeline(run_id: str) -> dict:
 def advance_pipeline(run_id: str, req: AdvanceRequest) -> dict:
     """Manually complete the current running stage and start the next one."""
     run = _run_or_404(run_id)
+    # Idempotent on a finished run: a shipped/paused run is not advanced again
+    # (so we never re-run complete_stage or re-call tasks.move).
+    if run["status"] in ("shipped", "paused"):
+        return run
     idx = run["current_stage"]
     pipelines.complete_stage(run_id, idx, report=req.report, spawn=_pipeline_spawn(run))
     return _run_or_404(run_id)
