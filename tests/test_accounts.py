@@ -1,4 +1,5 @@
-from tui_pilot import accounts
+from pathlib import Path
+from tui_pilot import accounts, db
 
 
 def test_create_and_get():
@@ -20,3 +21,35 @@ def test_single_default_invariant():
 
 def test_default_account_none_when_empty():
     assert accounts.default_account() is None
+
+
+def test_scan_managed_lists_provider_dirs():
+    base = accounts.provider_dir()  # = db.home()/agents/claude-code
+    (base / "inforge").mkdir(parents=True)
+    (base / "founder").mkdir(parents=True)
+    assert set(accounts.scan_managed()) == {"inforge", "founder"}
+
+
+def test_scan_importable_finds_dot_claude_dirs(monkeypatch, tmp_path):
+    monkeypatch.setattr(accounts, "_user_home", lambda: tmp_path)
+    (tmp_path / ".claude-t2b").mkdir()
+    (tmp_path / ".claude-inforge").mkdir()
+    (tmp_path / ".claude").mkdir()  # base config — also importable
+    found = set(accounts.scan_importable())
+    assert str(tmp_path / ".claude-t2b") in found
+    assert str(tmp_path / ".claude-inforge") in found
+
+
+def test_auth_status(tmp_path):
+    d = tmp_path / "acct"; d.mkdir()
+    assert accounts.auth_status(str(d)) == "not_logged_in"
+    (d / ".credentials.json").write_text("{}")
+    assert accounts.auth_status(str(d)) == "authed"
+
+
+def test_auth_status_claude_json(tmp_path):
+    # Real Claude Code credential file is .claude.json, not .credentials.json
+    d = tmp_path / "acct2"; d.mkdir()
+    assert accounts.auth_status(str(d)) == "not_logged_in"
+    (d / ".claude.json").write_text("{}")
+    assert accounts.auth_status(str(d)) == "authed"

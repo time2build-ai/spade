@@ -90,7 +90,7 @@ def scan_importable() -> list[str]:
     return [str(p) for p in _user_home().glob(".claude*") if p.is_dir()]
 
 
-_CRED_FILES = {".credentials.json"}
+_CRED_FILES = {".credentials.json", ".claude.json"}
 
 
 def auth_status(config_dir: str) -> str:
