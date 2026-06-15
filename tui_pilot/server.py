@@ -460,6 +460,10 @@ def _resolve_account(account_id: str | None, project_id: str | None) -> dict | N
     if account_id:
         return accounts.get(account_id)
     if project_id:
+        # next_account advances the round-robin cursor as a side effect; the
+        # caller may still reject this spawn (not-logged-in / tmux failure),
+        # intentionally consuming a rotation slot — see the call site in
+        # _spawn_agent.
         aid = projects.next_account(project_id)
         return accounts.get(aid) if aid else accounts.default_account()
     return accounts.default_account()
@@ -536,6 +540,10 @@ def _spawn_agent(
     # spawning, so we can inject the config dir and guard against an account that
     # isn't logged in. The round-robin advance happens here too (atomic in the DB).
     acct = _resolve_account(account_id, project_id)
+    # Note: for a round_robin project the cursor has already advanced by this
+    # point; a rejected spawn (auth guard / tmux failure below) consumes a
+    # rotation slot intentionally — the retry then lands on the next account
+    # rather than re-hitting the same one.
     if acct and accounts.auth_status(acct["config_dir"]) == "not_logged_in":
         raise HTTPException(
             status_code=400, detail=f"account {acct['id']} is not logged in"
