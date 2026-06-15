@@ -8,6 +8,23 @@ def test_pipeline_roles_seeded():
     assert "documentor" in ids
 
 
+def test_pipeline_roles_upsert_on_already_seeded_db():
+    # Simulate an OLD foundation DB that predates integrator+documentor: seed the
+    # full set, then drop the two pipeline-only roles so the table is non-empty
+    # (seed_if_empty would no-op) but missing them.
+    roles_seed.seed_if_empty()
+    db.execute("DELETE FROM roles WHERE id IN ('integrator', 'documentor')")
+    ids = {r["id"] for r in db.query("SELECT id FROM roles")}
+    assert "integrator" not in ids and "documentor" not in ids
+
+    roles_seed.upsert_pipeline_roles()
+
+    ids = {r["id"] for r in db.query("SELECT id FROM roles")}
+    for rid in ("developer", "reviewer", "integrator", "documentor"):
+        assert rid in ids
+    assert db.query("SELECT count(*) AS c FROM roles")[0]["c"] == 7
+
+
 def _setup():
     projects.create(id="acme", name="Acme", path="/w")
     return tasks.create(project_id="acme", title="Build X")["id"]
@@ -41,6 +58,28 @@ def test_advance_runs_stages_then_ships():
     assert [s["state"] for s in run2["stages"]] == ["done", "done", "done", "done"]
     # stage 1..3 were spawned with the PRIOR stage's report threaded in
     assert (1, "r0") in spawned
+
+
+def test_complete_stage_is_re_entry_safe():
+    # A manual /advance racing the poll loop must not double-spawn the next stage.
+    tid = _setup()
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    spawned = []
+
+    def fake_spawn(stage_idx, report):
+        spawned.append(stage_idx)
+        return (f"sess{stage_idx}", "acct")
+
+    pipelines.start_stage(run["id"], 0, fake_spawn)  # spawns stage 0
+    spawned.clear()
+
+    pipelines.complete_stage(run["id"], 0, report="r0", spawn=fake_spawn)
+    pipelines.complete_stage(run["id"], 0, report="r0", spawn=fake_spawn)  # no-op
+
+    assert spawned == [1]  # stage 1 spawned exactly once
+    stages = pipelines.get(run["id"])["stages"]
+    assert stages[0]["state"] == "done"
+    assert stages[1]["state"] == "running"
 
 
 def test_spawn_failure_pauses_run():
