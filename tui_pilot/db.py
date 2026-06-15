@@ -18,10 +18,17 @@ def db_path() -> Path:
 _conn: sqlite3.Connection | None = None
 _init_lock = threading.Lock()       # guards lazy connect only
 _exec_lock = threading.RLock()      # serializes ALL query execution
+_tx_depth = threading.local()       # tracks nested tx() re-entrancy per thread
 _SCHEMA = Path(__file__).resolve().parent / "schema.sql"
 
 
 def get_conn() -> sqlite3.Connection:
+    """Return the shared connection singleton, lazily opening it.
+
+    Writes from concurrent threads MUST go through tx()/execute(); calling
+    .execute() directly on the returned connection is only safe in
+    single-threaded / test code.
+    """
     global _conn
     with _init_lock:
         if _conn is None:
@@ -39,23 +46,32 @@ def get_conn() -> sqlite3.Connection:
 def tx():
     """Serialized transaction: yields the connection under _exec_lock, commits
     on success, rolls back on error. Re-entrant (RLock) so nested helper calls
-    are safe within one logical transaction."""
+    are safe within one logical transaction; only the OUTERMOST tx commits or
+    rolls back, so a nested tx() never commits early when the outer one fails."""
     cx = get_conn()
     with _exec_lock:
+        depth = getattr(_tx_depth, "n", 0)
+        _tx_depth.n = depth + 1
         try:
             yield cx
-            cx.commit()
+            if _tx_depth.n == 1:
+                cx.commit()
         except Exception:
-            cx.rollback()
+            if _tx_depth.n == 1:
+                cx.rollback()
             raise
+        finally:
+            _tx_depth.n -= 1
 
 
 def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+    cx = get_conn()
     with _exec_lock:
-        return get_conn().execute(sql, params).fetchall()
+        return cx.execute(sql, params).fetchall()
 
 
 def execute(sql: str, params: tuple = ()) -> None:
+    """Run a single statement in its own committed transaction."""
     with tx() as cx:
         cx.execute(sql, params)
 

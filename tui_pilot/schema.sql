@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS accounts (
-  id TEXT PRIMARY KEY, label TEXT, color TEXT,
-  provider TEXT DEFAULT 'claude-code', config_dir TEXT,
+  id TEXT PRIMARY KEY, label TEXT NOT NULL, color TEXT,
+  provider TEXT DEFAULT 'claude-code', config_dir TEXT NOT NULL,
   is_default INTEGER DEFAULT 0, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY, name TEXT, path TEXT,
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL,
   account_strategy TEXT DEFAULT 'single', rr_cursor INTEGER DEFAULT 0,
   model_ceiling TEXT, autopilot INTEGER DEFAULT 0, created_at TEXT
 );
@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS roles (
   default_model TEXT, description TEXT, instructions TEXT,
   is_system INTEGER DEFAULT 0
 );
+-- NOTE: sessions intentionally has NO foreign keys on project_id/account_id.
+-- These are historical records that must SURVIVE deletion of an account or
+-- project; we deliberately do NOT cascade-delete session history. Intentional.
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, project_id TEXT, account_id TEXT,
   name TEXT, role TEXT, model TEXT, mode TEXT, cwd TEXT,
@@ -27,6 +30,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   is_orchestrator INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0,
   created_at TEXT
 );
+-- NOTE: missions intentionally has NO foreign key on project_id, for the same
+-- reason as sessions above: mission history must SURVIVE project deletion. We
+-- deliberately do NOT cascade-delete mission history. Intentional, not an oversight.
 CREATE TABLE IF NOT EXISTS missions (
   id TEXT PRIMARY KEY, project_id TEXT, goal TEXT,
   autopilot INTEGER DEFAULT 0, status TEXT, created_at TEXT
