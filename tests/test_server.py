@@ -121,3 +121,25 @@ def test_resolve_account_none_when_no_accounts():
     from tui_pilot import server
 
     assert server._resolve_account(account_id=None, project_id=None) is None
+
+
+# ---- startup reconcile ----------------------------------------------------
+
+
+def test_reconcile_marks_dead_and_keeps_live():
+    from tui_pilot import sessions_store, server
+
+    sessions_store.insert(id="a", status="live", cwd="/w", name="a")
+    sessions_store.insert(id="b", status="live", cwd="/w", name="b")
+    try:
+        kept = server._reconcile_sessions(is_alive=lambda sid: sid == "a")
+        assert kept == ["a"]
+        statuses = {r["id"]: r["status"] for r in sessions_store.all()}
+        assert statuses == {"a": "live", "b": "exited"}
+    finally:
+        # Drop the reattached "a" so it doesn't leak into other tests' registry.
+        with server._registry_lock:
+            server._sessions.pop("a", None)
+            server._locks.pop("a", None)
+            server._meta.pop("a", None)
+            server._pollers.pop("a", None)

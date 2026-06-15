@@ -615,6 +615,71 @@ def _spawn_agent(
     return _info(aid)
 
 
+def _reconcile_sessions(is_alive=None) -> list[str]:
+    """Reattach still-live tmux sessions on startup; mark the rest exited.
+
+    For each persisted ``live`` session: if its tmux session is still alive,
+    rebuild the in-memory registry entry (Controller/lock/poller/meta) with the
+    SAME wiring as _spawn_agent and keep it ``live``; otherwise mark it
+    ``exited`` in the DB. Per-row work is wrapped so one bad row can't abort the
+    whole reconcile. Returns the ids that were kept (reattached)."""
+    global _order
+    if is_alive is None:
+        is_alive = lambda sid: TmuxSession(sid, "").is_alive()  # noqa: E731
+    _ensure_roles()
+    kept: list[str] = []
+    max_order = 0
+    rows = sessions_store.all_live()
+    with _registry_lock:
+        for row in rows:
+            sid = row["id"]
+            try:
+                max_order = max(max_order, row.get("sort_order") or 0)
+                if not is_alive(sid):
+                    sessions_store.set_status(sid, "exited")
+                    continue
+                cwd = row.get("cwd")
+                sess = TmuxSession(sid, "claude", cwd=cwd)
+                _sessions[sid] = Controller(sess)
+                _locks[sid] = threading.Lock()
+                hub = _hub_for(cwd)
+                _pollers[sid] = HarnessPoller(
+                    sid, sess, hub, cwd=cwd,
+                    on_handoff=_make_handoff(
+                        predecessor_aid=sid, name_hint=row.get("name") or sid, cwd=cwd
+                    ),
+                )
+                role_def = ROLES.get(row.get("role")) if row.get("role") else None
+                _meta[sid] = {
+                    "id": sid,
+                    "name": row.get("name") or sid,
+                    "cwd": cwd,
+                    "role": row.get("role"),
+                    "label": (role_def.get("label") if role_def else None)
+                    or (row.get("name") or sid),
+                    "emoji": (role_def.get("emoji") if role_def else None) or "💬",
+                    "mode": row.get("mode"),
+                    "instructions": (role_def.get("instructions", "") if role_def else ""),
+                    "task": None,
+                    "prep": "ready",
+                    "prep_detail": None,
+                    "order": row.get("sort_order") or 0,
+                    "model": row.get("model"),
+                    "mission": row.get("mission_id"),
+                    "parent": row.get("parent"),
+                    "reason": row.get("reason"),
+                    "is_orchestrator": bool(row.get("is_orchestrator")),
+                    "account_id": row.get("account_id"),
+                    "project_id": row.get("project_id"),
+                }
+                kept.append(sid)
+            except Exception:  # noqa: BLE001 - one bad row can't abort reconcile
+                pass
+        # Resume the module order counter past the highest reattached row.
+        _order = max(_order, max_order)
+    return kept
+
+
 @app.post("/sessions")
 def create_session(req: SpawnRequest) -> dict:
     """Spawn a new (optionally role-based) agent session.
@@ -877,6 +942,16 @@ def index() -> str:
         "<li><a href='/docs'>OpenAPI docs</a></li>"
         "</ul></body></html>"
     )
+
+
+# Reattach any still-live tmux sessions persisted by a prior run, AFTER all
+# helpers above are defined (the poll loop thread, started near the top, only
+# begins ticking these once they are in the registry). Best-effort: a reconcile
+# failure must never stop import/startup.
+try:
+    _reconcile_sessions()
+except Exception:  # noqa: BLE001
+    pass
 
 
 def main() -> None:
