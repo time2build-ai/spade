@@ -73,9 +73,11 @@ import sys  # noqa: E402
 
 from . import orchestrator_server  # noqa: E402
 from . import registry_server  # noqa: E402
+from . import spade_server  # noqa: E402
 
 app.include_router(orchestrator_server.router)
 app.include_router(registry_server.router)
+app.include_router(spade_server.router)
 
 # This module object, passed to orchestrator_server helpers so they can reach
 # back into the registry (_sessions/_meta/_pollers/_lock_for/_spawn_agent/…)
