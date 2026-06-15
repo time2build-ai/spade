@@ -87,6 +87,8 @@ def get_task(task_id: str) -> dict:
 @router.patch("/tasks/{task_id}")
 def patch_task(task_id: str, req: TaskPatch) -> dict:
     _task_or_404(task_id)
+    # MVP: drops None-valued fields via model_dump() so omitted fields = no change;
+    # explicit-null clearing of a column is NOT supported.
     fields = {k: v for k, v in req.model_dump().items() if v is not None}
     if fields:
         tasks.update(task_id, **fields)

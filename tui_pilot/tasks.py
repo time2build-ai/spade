@@ -26,14 +26,17 @@ def _row_to_dict(row) -> dict | None:
 
 # -- ID generation ------------------------------------------------------------
 
-def next_task_id(project_id: str) -> str:
-    """Return the next SPD-NNN id for the project (inside an outer tx)."""
-    with db.tx() as cx:
-        row = cx.execute(
-            "SELECT COUNT(*) AS cnt FROM tasks WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        n = (row["cnt"] if row else 0) + 1
-        return f"SPD-{n:03d}"
+def _next_task_id(cx) -> str:
+    """Return the next globally-sequential SPD-NNN id, using the OPEN connection/cursor.
+
+    Ids are globally sequential across the whole workspace (not per-project), so
+    `tasks.id` stays a global PRIMARY KEY. Must be called from inside an existing
+    db.tx() block so id allocation and the subsequent INSERT stay atomic in one
+    transaction (avoids a count/insert race).
+    """
+    row = cx.execute("SELECT COUNT(*) AS cnt FROM tasks").fetchone()
+    n = (row["cnt"] if row else 0) + 1
+    return f"SPD-{n:03d}"
 
 
 # -- CRUD ---------------------------------------------------------------------
@@ -49,11 +52,7 @@ def create(
 ) -> dict:
     """Insert a new task and return the created row as a dict."""
     with db.tx() as cx:
-        row = cx.execute(
-            "SELECT COUNT(*) AS cnt FROM tasks WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        n = (row["cnt"] if row else 0) + 1
-        tid = f"SPD-{n:03d}"
+        tid = _next_task_id(cx)
         cx.execute(
             "INSERT INTO tasks "
             "(id, project_id, title, feature, priority, status, "

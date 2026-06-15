@@ -1440,6 +1440,8 @@ $("btnNewRole").onclick = () => {
 
 // ---- backlog kanban -------------------------------------------------------
 
+// NOTE: a task with status 'blocked' won't render in any of these 4 columns —
+// Chunk 3 (pipelines) must handle/display blocked tasks (no blocked column here yet).
 const BACKLOG_COLS = [
   { id: "ready",       label: "Ready",       color: "#8b949e" },
   { id: "in_progress", label: "In Progress", color: "#58a6ff" },

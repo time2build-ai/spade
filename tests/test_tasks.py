@@ -14,11 +14,17 @@ def test_tasks_tables_exist():
     assert "task_nodes" in names
 
 
-def test_create_generates_spd_id_per_project():
+def test_spd_ids_are_globally_sequential_and_unique():
     _proj()
     t = tasks.create(project_id="acme", title="Checkout bug", feature="Checkout", priority=1)
-    assert t["id"].startswith("SPD-") and t["status"] == "ready"
+    assert t["id"] == "SPD-001" and t["status"] == "ready"
     assert tasks.create(project_id="acme", title="Second")["id"] != t["id"]
+    # Ids are globally sequential across projects (not reset per project), so a
+    # second project's first task continues the one flat SPD-NNN sequence.
+    projects.create(id="beta", name="Beta", path="/b")
+    beta = tasks.create(project_id="beta", title="First on beta")
+    assert beta["id"] == "SPD-003"
+    assert beta["id"] != t["id"]
 
 
 def test_move_validates_status():
