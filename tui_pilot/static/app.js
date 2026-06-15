@@ -111,6 +111,7 @@ function switchView(name) {
   if (name === "projects") renderProjectsPage();
   if (name === "agents") renderRolesPage();
   if (name === "backlog") renderBacklog();
+  if (name === "brain") renderBrain();
 }
 
 document.querySelectorAll(".rail-btn").forEach((b) => {
@@ -1524,18 +1525,44 @@ async function openTaskDetail(taskId) {
       ? `"${t.origin_quote}"${t.origin_source ? ` — ${t.origin_source}` : ""}`
       : "—";
     $("tdpDescription").textContent = t.description || "—";
-    // Node chips
+    // Node chips (grounding) — fetch brain nodes to resolve labels
     const nodesEl = $("tdpNodes");
     nodesEl.innerHTML = "";
-    if (t.nodes && t.nodes.length) {
-      for (const nid of t.nodes) {
+    let projectBrainNodes = [];
+    try {
+      const nr = await api("GET", `/brain/nodes?project_id=${encodeURIComponent(currentProjectId || t.project_id)}`);
+      projectBrainNodes = nr.nodes || [];
+    } catch (_) {}
+    const nodeMap = Object.fromEntries(projectBrainNodes.map(n => [n.id, n]));
+    const linkedNodeIds = new Set(t.nodes || []);
+    if (linkedNodeIds.size > 0) {
+      for (const nid of linkedNodeIds) {
         const chip = document.createElement("span");
         chip.className = "bk-node-chip";
-        chip.textContent = nid;
+        const node = nodeMap[nid];
+        chip.textContent = node ? `${node.label} (${node.type})` : nid;
+        chip.style.borderColor = node ? (NODE_TYPE_COLORS[node.type] || "#8b949e") : "#8b949e";
         nodesEl.appendChild(chip);
       }
     } else {
       nodesEl.textContent = "None";
+    }
+    // Grounding checklist
+    const groundSection = $("tdpGroundSection");
+    if (groundSection && projectBrainNodes.length > 0) {
+      groundSection.style.display = "";
+      const list = $("tdpGroundList");
+      list.innerHTML = "";
+      for (const node of projectBrainNodes) {
+        const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+        const item = document.createElement("label");
+        item.className = "ground-item";
+        item.innerHTML = `<input type="checkbox" value="${esc(node.id)}" ${linkedNodeIds.has(node.id) ? "checked" : ""} />
+          <span class="bk-node-chip" style="border-color:${color}">${esc(node.label)} <span class="dim">${esc(node.type)}</span></span>`;
+        list.appendChild(item);
+      }
+    } else if (groundSection) {
+      groundSection.style.display = "none";
     }
     // Move buttons
     const moveBtns = $("tdpMoveButtons");
@@ -1563,6 +1590,19 @@ async function openTaskDetail(taskId) {
 
 $("btnCloseDetail").onclick = () => { $("taskDetailPanel").style.display = "none"; };
 
+// Grounding save
+$("btnSaveGrounding").onclick = async () => {
+  if (!selectedTaskId) return;
+  const list = $("tdpGroundList");
+  if (!list) return;
+  const checked = [...list.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.value);
+  try {
+    await api("PUT", `/tasks/${encodeURIComponent(selectedTaskId)}/nodes`, { node_ids: checked });
+    log("grounding saved", "ok");
+    await openTaskDetail(selectedTaskId);
+  } catch (ex) { log(`ground: ${ex.message}`, "err"); }
+};
+
 $("btnAddTask").onclick = () => {
   const form = $("addTaskForm");
   form.style.display = form.style.display === "none" ? "" : "none";
@@ -1584,6 +1624,270 @@ $("btnTaskSubmit").onclick = async () => {
     $("addTaskForm").style.display = "none";
     await renderBacklog();
   } catch (ex) { log(`add task: ${ex.message}`, "err"); }
+};
+
+// ==========================================================================
+// BRAIN VIEW
+// ==========================================================================
+
+const NODE_TYPE_COLORS = {
+  feature:    "#c9b8ff",
+  decision:   "#e6b86a",
+  convention: "#e69bb6",
+  feedback:   "#7adcc7",
+  bug:        "#e87d7d",
+  metric:     "#7ab6e6",
+};
+
+let brainNodes = [];
+let brainEdges = [];
+let selectedNodeId = null;
+
+async function renderBrain() {
+  if (!currentProjectId) {
+    const svg = $("brainSvg");
+    if (svg) svg.innerHTML = `<text x="16" y="32" fill="#8b949e">Select a project first.</text>`;
+    return;
+  }
+  try {
+    const [nr, er] = await Promise.all([
+      api("GET", `/brain/nodes?project_id=${encodeURIComponent(currentProjectId)}`),
+      api("GET", `/brain/edges?project_id=${encodeURIComponent(currentProjectId)}`),
+    ]);
+    brainNodes = nr.nodes || [];
+    brainEdges = er.edges || [];
+  } catch (e) {
+    log(`brain load: ${e.message}`, "err");
+    return;
+  }
+  renderBrainSvg();
+  // populate edge form selects
+  populateEdgeSelects();
+}
+
+function brainLayout(nodes) {
+  // assign x/y: use stored if available, else auto-layout on a circle
+  const n = nodes.length;
+  if (!n) return {};
+  const cx = 350, cy = 220, R = Math.min(180, 40 * n);
+  const positions = {};
+  nodes.forEach((node, i) => {
+    if (node.x != null && node.y != null) {
+      positions[node.id] = { x: node.x, y: node.y };
+    } else {
+      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+      positions[node.id] = {
+        x: cx + R * Math.cos(angle),
+        y: cy + R * Math.sin(angle),
+      };
+    }
+  });
+  return positions;
+}
+
+function renderBrainSvg() {
+  const svg = $("brainSvg");
+  if (!svg) return;
+  const positions = brainLayout(brainNodes);
+  const W = 700, H = 440;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = "";
+
+  // Draw edges
+  for (const edge of brainEdges) {
+    const from = positions[edge.from_id];
+    const to = positions[edge.to_id];
+    if (!from || !to) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", from.x);
+    line.setAttribute("y1", from.y);
+    line.setAttribute("x2", to.x);
+    line.setAttribute("y2", to.y);
+    line.setAttribute("stroke", "#444");
+    line.setAttribute("stroke-width", "1.5");
+    line.setAttribute("opacity", "0.6");
+    svg.appendChild(line);
+    // Draw rel label if present
+    if (edge.rel) {
+      const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      txt.setAttribute("x", (from.x + to.x) / 2);
+      txt.setAttribute("y", (from.y + to.y) / 2 - 4);
+      txt.setAttribute("fill", "#8b949e");
+      txt.setAttribute("font-size", "9");
+      txt.setAttribute("text-anchor", "middle");
+      txt.textContent = edge.rel;
+      svg.appendChild(txt);
+    }
+  }
+
+  // Draw nodes
+  const R_NODE = 28;
+  for (const node of brainNodes) {
+    const pos = positions[node.id];
+    if (!pos) continue;
+    const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+    const isSelected = node.id === selectedNodeId;
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("cursor", "pointer");
+    g.addEventListener("click", () => openBrainNodeDetail(node.id));
+
+    // Circle
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", pos.x);
+    circle.setAttribute("cy", pos.y);
+    circle.setAttribute("r", R_NODE);
+    circle.setAttribute("fill", color + "33");
+    circle.setAttribute("stroke", color);
+    circle.setAttribute("stroke-width", isSelected ? "3" : "1.5");
+    g.appendChild(circle);
+
+    // Label (truncated)
+    const label = node.label.length > 12 ? node.label.slice(0, 11) + "…" : node.label;
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", pos.x);
+    txt.setAttribute("y", pos.y + 4);
+    txt.setAttribute("fill", color);
+    txt.setAttribute("font-size", "10");
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("font-weight", "600");
+    txt.textContent = label;
+    g.appendChild(txt);
+
+    // Type glyph
+    const typeGlyph = (node.type || "?")[0].toUpperCase();
+    const glyph = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    glyph.setAttribute("x", pos.x + R_NODE - 8);
+    glyph.setAttribute("y", pos.y - R_NODE + 12);
+    glyph.setAttribute("fill", color);
+    glyph.setAttribute("font-size", "8");
+    glyph.setAttribute("text-anchor", "middle");
+    glyph.textContent = typeGlyph;
+    g.appendChild(glyph);
+
+    svg.appendChild(g);
+  }
+
+  // empty state
+  if (!brainNodes.length) {
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", "350");
+    txt.setAttribute("y", "200");
+    txt.setAttribute("fill", "#8b949e");
+    txt.setAttribute("text-anchor", "middle");
+    txt.textContent = "No nodes yet. Click '+ Node' to add one.";
+    svg.appendChild(txt);
+  }
+}
+
+function populateEdgeSelects() {
+  const fromSel = $("edgeFrom");
+  const toSel = $("edgeTo");
+  if (!fromSel || !toSel) return;
+  const opts = brainNodes.map(n => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("");
+  fromSel.innerHTML = `<option value="">— From node —</option>${opts}`;
+  toSel.innerHTML = `<option value="">— To node —</option>${opts}`;
+}
+
+function openBrainNodeDetail(nodeId) {
+  selectedNodeId = nodeId;
+  renderBrainSvg(); // re-draw with selection highlight
+  const node = brainNodes.find(n => n.id === nodeId);
+  if (!node) return;
+  const panel = $("brainDetailPanel");
+  const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+  $("bdpType").textContent = node.type;
+  $("bdpType").style.color = color;
+  $("bdpLabel").textContent = node.label;
+  $("bdpDetail").textContent = node.detail || "—";
+  $("bdpEditForm").style.display = "none";
+  panel.style.display = "";
+}
+
+$("btnCloseBrainDetail").onclick = () => {
+  $("brainDetailPanel").style.display = "none";
+  selectedNodeId = null;
+  renderBrainSvg();
+};
+
+$("btnEditNode").onclick = () => {
+  const node = brainNodes.find(n => n.id === selectedNodeId);
+  if (!node) return;
+  $("bdpEditType").value = node.type;
+  $("bdpEditLabel").value = node.label;
+  $("bdpEditDetail").value = node.detail || "";
+  $("bdpEditForm").style.display = "";
+};
+
+$("btnCancelEditNode").onclick = () => { $("bdpEditForm").style.display = "none"; };
+
+$("btnSaveNode").onclick = async () => {
+  if (!selectedNodeId) return;
+  const type = $("bdpEditType").value;
+  const label = $("bdpEditLabel").value.trim();
+  const detail = $("bdpEditDetail").value.trim() || null;
+  if (!label) { log("Label required", "err"); return; }
+  try {
+    await api("PATCH", `/brain/nodes/${encodeURIComponent(selectedNodeId)}`, { type, label, detail });
+    await renderBrain();
+    openBrainNodeDetail(selectedNodeId);
+  } catch (ex) { log(`save node: ${ex.message}`, "err"); }
+};
+
+$("btnDeleteNode").onclick = async () => {
+  if (!selectedNodeId || !confirm("Delete this node?")) return;
+  try {
+    await api("DELETE", `/brain/nodes/${encodeURIComponent(selectedNodeId)}`);
+    $("brainDetailPanel").style.display = "none";
+    selectedNodeId = null;
+    await renderBrain();
+  } catch (ex) { log(`delete node: ${ex.message}`, "err"); }
+};
+
+$("btnAddNode").onclick = () => {
+  const form = $("addNodeForm");
+  form.style.display = form.style.display === "none" ? "" : "none";
+  $("addEdgeForm").style.display = "none";
+};
+
+$("btnNodeCancel").onclick = () => { $("addNodeForm").style.display = "none"; };
+
+$("btnNodeSubmit").onclick = async () => {
+  if (!currentProjectId) { log("No project selected", "err"); return; }
+  const type = $("nodeType").value;
+  const label = $("nodeLabel").value.trim();
+  const detail = $("nodeDetail").value.trim() || null;
+  if (!label) { log("Label required", "err"); return; }
+  try {
+    await api("POST", "/brain/nodes", { project_id: currentProjectId, type, label, detail });
+    $("nodeLabel").value = "";
+    $("nodeDetail").value = "";
+    $("addNodeForm").style.display = "none";
+    await renderBrain();
+  } catch (ex) { log(`add node: ${ex.message}`, "err"); }
+};
+
+$("btnAddEdge").onclick = () => {
+  const form = $("addEdgeForm");
+  form.style.display = form.style.display === "none" ? "" : "none";
+  $("addNodeForm").style.display = "none";
+  populateEdgeSelects();
+};
+
+$("btnEdgeCancel").onclick = () => { $("addEdgeForm").style.display = "none"; };
+
+$("btnEdgeSubmit").onclick = async () => {
+  if (!currentProjectId) { log("No project selected", "err"); return; }
+  const from_id = $("edgeFrom").value;
+  const to_id = $("edgeTo").value;
+  const rel = $("edgeRel").value.trim() || null;
+  if (!from_id || !to_id) { log("Select both nodes", "err"); return; }
+  try {
+    await api("POST", "/brain/edges", { project_id: currentProjectId, from_id, to_id, rel });
+    $("edgeRel").value = "";
+    $("addEdgeForm").style.display = "none";
+    await renderBrain();
+  } catch (ex) { log(`add edge: ${ex.message}`, "err"); }
 };
 
 // ---- init -----------------------------------------------------------------

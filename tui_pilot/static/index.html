@@ -40,6 +40,7 @@
     <button class="rail-btn" data-view="accounts" title="Accounts">🔑</button>
     <button class="rail-btn" data-view="agents" title="Agents">🤖</button>
     <button class="rail-btn" data-view="backlog" title="Backlog">📋</button>
+    <button class="rail-btn" data-view="brain" title="Brain">🧠</button>
     <button class="rail-btn rail-bottom" data-view="settings" title="Settings">⚙️</button>
   </nav>
 
@@ -275,9 +276,84 @@ message.</pre>
             <div class="tdp-label">Grounded nodes</div>
             <div id="tdpNodes" class="tdp-chips"></div>
           </div>
+          <div class="tdp-section" id="tdpGroundSection" style="display:none">
+            <div class="tdp-label">Ground to brain nodes</div>
+            <div id="tdpGroundList" class="tdp-ground-list"></div>
+            <button id="btnSaveGrounding" class="tiny primary" style="margin-top:6px">Save grounding</button>
+          </div>
           <div class="tdp-section">
             <div class="tdp-label">Move to</div>
             <div id="tdpMoveButtons" class="tdp-move-btns"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BRAIN VIEW -->
+    <div id="view-brain" class="view" style="display:none">
+      <div class="brain-page">
+        <div class="brain-header">
+          <span class="brain-title">Product Brain</span>
+          <div class="brain-header-actions">
+            <button id="btnAddNode" class="tiny primary-outline">+ Node</button>
+            <button id="btnAddEdge" class="tiny">+ Edge</button>
+          </div>
+        </div>
+        <!-- Add node form -->
+        <div id="addNodeForm" class="add-node-form" style="display:none">
+          <select id="nodeType">
+            <option value="feature">Feature</option>
+            <option value="decision">Decision</option>
+            <option value="convention">Convention</option>
+            <option value="feedback">Feedback</option>
+            <option value="bug">Bug</option>
+            <option value="metric">Metric</option>
+          </select>
+          <input type="text" id="nodeLabel" placeholder="Label" />
+          <input type="text" id="nodeDetail" placeholder="Detail (optional)" />
+          <button id="btnNodeSubmit" class="tiny primary">Add</button>
+          <button id="btnNodeCancel" class="tiny">Cancel</button>
+        </div>
+        <!-- Add edge form -->
+        <div id="addEdgeForm" class="add-edge-form" style="display:none">
+          <select id="edgeFrom"><option value="">— From node —</option></select>
+          <select id="edgeTo"><option value="">— To node —</option></select>
+          <input type="text" id="edgeRel" placeholder="Relation (optional)" />
+          <button id="btnEdgeSubmit" class="tiny primary">Add Edge</button>
+          <button id="btnEdgeCancel" class="tiny">Cancel</button>
+        </div>
+        <div class="brain-main">
+          <!-- SVG canvas for graph -->
+          <div class="brain-canvas-wrap">
+            <svg id="brainSvg" class="brain-svg"></svg>
+          </div>
+          <!-- Node detail panel -->
+          <div id="brainDetailPanel" class="brain-detail-panel" style="display:none">
+            <div class="bdp-head">
+              <span id="bdpType" class="bdp-type-chip"></span>
+              <button id="btnCloseBrainDetail" class="tiny">✕</button>
+            </div>
+            <h3 id="bdpLabel"></h3>
+            <div id="bdpDetail" class="bdp-detail"></div>
+            <div class="bdp-actions">
+              <button id="btnEditNode" class="tiny">Edit</button>
+              <button id="btnDeleteNode" class="tiny red">Delete</button>
+            </div>
+            <!-- Edit form inline -->
+            <div id="bdpEditForm" style="display:none">
+              <select id="bdpEditType">
+                <option value="feature">Feature</option>
+                <option value="decision">Decision</option>
+                <option value="convention">Convention</option>
+                <option value="feedback">Feedback</option>
+                <option value="bug">Bug</option>
+                <option value="metric">Metric</option>
+              </select>
+              <input type="text" id="bdpEditLabel" placeholder="Label" />
+              <input type="text" id="bdpEditDetail" placeholder="Detail (optional)" />
+              <button id="btnSaveNode" class="tiny primary">Save</button>
+              <button id="btnCancelEditNode" class="tiny">Cancel</button>
+            </div>
           </div>
         </div>
       </div>
