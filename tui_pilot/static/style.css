@@ -140,7 +140,12 @@ body {
 .acct-info .acct-name { font-size: 13px; font-weight: 600; }
 .acct-info .acct-dir { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acct-info .acct-tags { display: flex; gap: 5px; margin-top: 3px; flex-wrap: wrap; }
-.acct-card .acct-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.acct-card .acct-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.acct-info.acct-edit { display: flex; flex-direction: column; gap: 6px; }
+.acct-edit-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.acct-edit-row input[type=text] { flex: 1; max-width: 280px; background: var(--bg-2, #0d1117); border: 1px solid var(--border, #30363d); border-radius: 6px; padding: 5px 8px; color: var(--fg, #e6edf3); font-size: 13px; text-transform: none; }
+.acct-edit-row input[type=color] { width: 30px; height: 24px; padding: 0; border: 1px solid var(--border, #30363d); border-radius: 6px; background: none; cursor: pointer; }
+button.tiny.primary { background: var(--accent, #2f81f7); border-color: var(--accent, #2f81f7); color: #fff; }
 .badge.provider { color: var(--purple); border-color: var(--purple); }
 .badge.authed { color: var(--green); border-color: var(--green); }
 .badge.not-authed { color: var(--yellow); border-color: var(--yellow); }

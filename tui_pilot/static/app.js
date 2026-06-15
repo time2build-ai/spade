@@ -28,6 +28,7 @@ let pending = new Set();    // session ids with an in-flight prompt
 let lastJson = "{ }";
 let spawnCount = 0;
 let inboxOpen = false;
+let editingAccount = null;  // account id whose card is in inline-edit mode
 let focusSignal = null;     // cached open signal for the focused agent
 let focusReport = null;     // cached report text for the focused agent
 let orchId = null;          // the orchestrator session id (once known)
@@ -903,23 +904,51 @@ function renderAccountsPage() {
     const isDefault = a.is_default;
     const card = document.createElement("div");
     card.className = "acct-card";
-    card.innerHTML = `
-      <div class="acct-swatch" style="background:${color}22;color:${color}">${esc(initials)}</div>
-      <div class="acct-info">
-        <div class="acct-name">${esc(a.label)}</div>
-        <div class="acct-tags">
-          <span class="badge provider">${esc(a.provider || "claude-code")}</span>
-          ${isDefault ? `<span class="badge is-default">⭐ default</span>` : ""}
+    if (a.id === editingAccount) {
+      card.innerHTML = `
+        <div class="acct-swatch" style="background:${color}22;color:${color}">${esc(initials)}</div>
+        <div class="acct-info acct-edit">
+          <label class="acct-edit-row">Label
+            <input type="text" id="acctEditLabel" value="${esc(a.label || "")}" />
+          </label>
+          <label class="acct-edit-row">Color
+            <input type="color" id="acctEditColor" value="${esc(color)}" />
+            <span class="acct-dir">${esc(a.config_dir)}</span>
+          </label>
         </div>
-        <div class="acct-dir">${esc(a.config_dir)}</div>
-      </div>
-      <div class="acct-actions">
-        ${!isDefault ? `<button class="tiny set-default" data-id="${esc(a.id)}">Set default</button>` : ""}
-        <button class="tiny login-btn" data-id="${esc(a.id)}">Log in ↗</button>
-        <button class="tiny red del-acct" data-id="${esc(a.id)}">✕</button>
-      </div>`;
+        <div class="acct-actions">
+          <button class="tiny primary save-acct" data-id="${esc(a.id)}">Save</button>
+          <button class="tiny cancel-acct">Cancel</button>
+        </div>`;
+    } else {
+      card.innerHTML = `
+        <div class="acct-swatch" style="background:${color}22;color:${color}">${esc(initials)}</div>
+        <div class="acct-info">
+          <div class="acct-name">${esc(a.label)}</div>
+          <div class="acct-tags">
+            <span class="badge provider">${esc(a.provider || "claude-code")}</span>
+            ${isDefault ? `<span class="badge is-default">⭐ default</span>` : ""}
+          </div>
+          <div class="acct-dir">${esc(a.config_dir)}</div>
+        </div>
+        <div class="acct-actions">
+          <button class="tiny edit-acct" data-id="${esc(a.id)}">Edit</button>
+          ${!isDefault ? `<button class="tiny set-default" data-id="${esc(a.id)}">Set default</button>` : ""}
+          <button class="tiny login-btn" data-id="${esc(a.id)}">Log in ↗</button>
+          <button class="tiny red del-acct" data-id="${esc(a.id)}">✕</button>
+        </div>`;
+    }
     list.appendChild(card);
   }
+  list.querySelectorAll(".edit-acct").forEach((b) => {
+    b.onclick = () => { editingAccount = b.dataset.id; renderAccountsPage(); };
+  });
+  list.querySelectorAll(".save-acct").forEach((b) => {
+    b.onclick = () => saveAccountEdit(b.dataset.id);
+  });
+  list.querySelectorAll(".cancel-acct").forEach((b) => {
+    b.onclick = () => { editingAccount = null; renderAccountsPage(); };
+  });
   list.querySelectorAll(".set-default").forEach((b) => {
     b.onclick = () => setAccountDefault(b.dataset.id);
   });
@@ -929,6 +958,19 @@ function renderAccountsPage() {
   list.querySelectorAll(".del-acct").forEach((b) => {
     b.onclick = () => deleteAccount(b.dataset.id);
   });
+}
+
+async function saveAccountEdit(id) {
+  const label = $("acctEditLabel")?.value.trim();
+  const color = $("acctEditColor")?.value;
+  try {
+    await api("PATCH", `/accounts/${id}`, { label: label || undefined, color }, "edit-account");
+    log("account updated", "ok");
+    editingAccount = null;
+    await loadAccounts();
+    renderAccountsPage();
+    renderProjectBar();
+  } catch (e) { log(`edit-account: ${e.message}`, "err"); }
 }
 
 async function setAccountDefault(id) {
