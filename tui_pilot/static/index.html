@@ -41,6 +41,7 @@
     <button class="rail-btn" data-view="agents" title="Agents">🤖</button>
     <button class="rail-btn" data-view="backlog" title="Backlog">📋</button>
     <button class="rail-btn" data-view="brain" title="Brain">🧠</button>
+    <button class="rail-btn" data-view="pipelines" title="Pipelines">🛠️</button>
     <button class="rail-btn rail-bottom" data-view="settings" title="Settings">⚙️</button>
   </nav>
 
@@ -285,7 +286,21 @@ message.</pre>
             <div class="tdp-label">Move to</div>
             <div id="tdpMoveButtons" class="tdp-move-btns"></div>
           </div>
+          <div class="tdp-section">
+            <button id="btnRunPipeline" class="tiny primary">▶ Run pipeline</button>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- PIPELINES (ORCHESTRATOR) VIEW -->
+    <div id="view-pipelines" class="view" style="display:none">
+      <div class="pl-page">
+        <div class="pl-header">
+          <span class="pl-title">Pipelines</span>
+          <button id="btnRefreshPipelines" class="tiny">Refresh</button>
+        </div>
+        <div id="pipelinesList" class="pl-list"></div>
       </div>
     </div>
 

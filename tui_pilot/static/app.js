@@ -112,6 +112,7 @@ function switchView(name) {
   if (name === "agents") renderRolesPage();
   if (name === "backlog") renderBacklog();
   if (name === "brain") renderBrain();
+  if (name === "pipelines") renderPipelines();
 }
 
 document.querySelectorAll(".rail-btn").forEach((b) => {
@@ -1888,6 +1889,90 @@ $("btnEdgeSubmit").onclick = async () => {
     $("addEdgeForm").style.display = "none";
     await renderBrain();
   } catch (ex) { log(`add edge: ${ex.message}`, "err"); }
+};
+
+// ---- pipelines (orchestrator) ---------------------------------------------
+
+const PIPELINE_STAGE_STATE_COLORS = {
+  queued: "#8b949e",   // grey
+  running: "#58a6ff",  // blue
+  done: "#3fb950",     // green
+  failed: "#f85149",   // red
+};
+
+async function renderPipelines() {
+  const list = $("pipelinesList");
+  if (!list) return;
+  if (!currentProjectId) {
+    list.innerHTML = `<p class="dim" style="padding:16px">Select a project first.</p>`;
+    return;
+  }
+  let runs = [];
+  try {
+    const r = await api("GET", `/pipelines?project_id=${encodeURIComponent(currentProjectId)}`);
+    runs = r.pipelines || [];
+  } catch (ex) {
+    log(`pipelines load: ${ex.message}`, "err");
+    return;
+  }
+  // Resolve task titles in one pass.
+  let taskMap = {};
+  try {
+    const tr = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+    taskMap = Object.fromEntries((tr.tasks || []).map((t) => [t.id, t]));
+  } catch (_) {}
+  list.innerHTML = "";
+  if (runs.length === 0) {
+    list.innerHTML = `<p class="dim" style="padding:16px">No pipelines yet. Run one from a Backlog task.</p>`;
+    return;
+  }
+  for (const run of runs) {
+    const task = taskMap[run.task_id];
+    const card = document.createElement("div");
+    card.className = "pl-card";
+    const title = task ? esc(task.title) : esc(run.task_id);
+    const chips = (run.stages || []).map((st) => {
+      const color = PIPELINE_STAGE_STATE_COLORS[st.state] || "#8b949e";
+      const pulse = st.state === "running" ? " pl-chip-pulse" : "";
+      const clickable = st.session_id ? " pl-chip-clickable" : "";
+      return `<span class="pl-chip${pulse}${clickable}" data-sid="${st.session_id ? esc(st.session_id) : ""}"
+        style="border-color:${color};color:${color}">${esc(st.role)}</span>`;
+    }).join("");
+    card.innerHTML = `
+      <div class="pl-card-head">
+        <span class="pl-card-task">${esc(run.task_id)}</span>
+        <span class="pl-card-status" data-status="${esc(run.status)}">${esc(run.status)}</span>
+      </div>
+      <div class="pl-card-title">${title}</div>
+      <div class="pl-chips">${chips}</div>`;
+    // Wire stage-chip clicks → focus the agent session in the Fleet view.
+    card.querySelectorAll(".pl-chip-clickable").forEach((chip) => {
+      chip.onclick = () => {
+        const sid = chip.dataset.sid;
+        if (!sid) return;
+        switchView("fleet");
+        focus(sid);
+      };
+    });
+    list.appendChild(card);
+  }
+}
+
+const _btnRefreshPipelines = $("btnRefreshPipelines");
+if (_btnRefreshPipelines) _btnRefreshPipelines.onclick = renderPipelines;
+
+const _btnRunPipeline = $("btnRunPipeline");
+if (_btnRunPipeline) _btnRunPipeline.onclick = async () => {
+  if (!selectedTaskId || !currentProjectId) { log("No task selected", "err"); return; }
+  try {
+    const run = await api("POST", "/pipelines", { project_id: currentProjectId, task_id: selectedTaskId });
+    try {
+      await api("POST", `/pipelines/${encodeURIComponent(run.id)}/start`);
+    } catch (ex) {
+      log(`pipeline start: ${ex.message}`, "err");
+    }
+    switchView("pipelines");
+  } catch (ex) { log(`run pipeline: ${ex.message}`, "err"); }
 };
 
 // ---- init -----------------------------------------------------------------
