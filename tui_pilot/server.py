@@ -20,6 +20,7 @@ Run with::
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -47,6 +48,8 @@ from .session import (
     install_comms_skill,
     install_orchestrator_skill,
 )
+
+logger = logging.getLogger("tui_pilot")
 
 app = FastAPI(
     title="tui-pilot",
@@ -93,9 +96,16 @@ def _ensure_roles() -> None:
 
     Role-dependent paths call this so they work even under the per-test fixture
     that hands each test a fresh, empty DB (ROLES is set once at import time and
-    would otherwise be stale/empty)."""
+    would otherwise be stale/empty).
+
+    Hot-path trim: ``seed_if_empty()`` is one cheap idempotent SELECT count, but
+    the SELECT * in ``refresh_roles()`` only runs when ``ROLES`` is currently
+    empty. On a fresh-DB test, ``seed_if_empty()`` repopulates the table and
+    ``refresh_roles()`` reloads it; in production after the first load, ``ROLES``
+    stays non-empty so we skip the per-spawn SELECT *."""
     roles_seed.seed_if_empty()
-    refresh_roles()
+    if not ROLES:
+        refresh_roles()
 
 
 # Seed + load at import; role-dependent code paths re-ensure lazily.
@@ -598,8 +608,8 @@ def _spawn_agent(
                 status="live",
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
-        except Exception:  # noqa: BLE001 - persistence is best-effort
-            pass
+        except Exception:  # noqa: BLE001 - persistence is best-effort (still swallowed)
+            logger.warning("failed to persist session %s", aid, exc_info=True)
         _pollers[aid] = HarnessPoller(
             aid, sess, hub, cwd=eff_cwd,
             on_handoff=_make_handoff(predecessor_aid=aid, name_hint=name, cwd=eff_cwd),
@@ -675,8 +685,8 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                     "project_id": row.get("project_id"),
                 }
                 kept.append(sid)
-            except Exception:  # noqa: BLE001 - one bad row can't abort reconcile
-                pass
+            except Exception:  # noqa: BLE001 - one bad row can't abort reconcile (swallowed)
+                logger.warning("failed to reconcile session %s", sid, exc_info=True)
         # Resume the module order counter past the highest reattached row.
         _order = max(_order, max_order)
     return kept
@@ -952,8 +962,8 @@ def index() -> str:
 # failure must never stop import/startup.
 try:
     _reconcile_sessions()
-except Exception:  # noqa: BLE001
-    pass
+except Exception:  # noqa: BLE001 - startup reconcile is best-effort (swallowed)
+    logger.warning("startup session reconcile failed", exc_info=True)
 
 
 def main() -> None:

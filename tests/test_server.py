@@ -205,8 +205,14 @@ def test_login_endpoint_registers_bare_session(monkeypatch):
     aid = r.json()["id"]
     try:
         assert server._meta[aid]["role"] == "login"
+        # A login session must serialize cleanly when listed (no KeyError).
+        info = server._info(aid)
+        assert info["role"] == "login"
+        assert info["emoji"] == "🔑"
+        assert any(s["id"] == aid for s in c.get("/sessions").json()["sessions"])
     finally:
         with server._registry_lock:
             server._sessions.pop(aid, None)
             server._locks.pop(aid, None)
             server._meta.pop(aid, None)
+            server._pollers.pop(aid, None)

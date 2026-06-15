@@ -173,13 +173,28 @@ def login_account(id: str) -> dict:
     with server._registry_lock:
         server._sessions[aid] = server.Controller(sess)
         server._locks[aid] = threading.Lock()
+        # Populate every key _info() / GET /sessions reads with safe defaults so
+        # a bare login session serializes cleanly when listed.
         server._meta[aid] = {
             "id": aid,
             "name": aid,
             "cwd": acct["config_dir"],
             "role": "login",
-            "prep": "ready",
             "label": f"login · {acct['label']}",
+            "emoji": "🔑",
+            "mode": "normal",
+            "prep": "ready",
+            "prep_detail": None,
+            "task": None,
+            "order": 0,
+            "model": None,
+            "mission": None,
+            "parent": None,
+            "reason": None,
+            "instructions": "",
+            "is_orchestrator": False,
+            "account_id": acct["id"],
+            "project_id": None,
         }
     return {"id": aid}
 
