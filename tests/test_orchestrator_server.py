@@ -107,6 +107,9 @@ def test_missions_list_and_autopilot_toggle(client, tmp_path):
     r = client.post("/missions/m1/autopilot", json={"autopilot": True})
     assert r.status_code == 200 and r.json()["autopilot"] is True
     assert any(m["mission"]=="m1" and m["autopilot"] for m in client.get("/missions").json()["missions"])
+    from tui_pilot import db
+    row = db.query("SELECT autopilot FROM missions WHERE id='m1'")
+    assert row and row[0]["autopilot"] == 1
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
 

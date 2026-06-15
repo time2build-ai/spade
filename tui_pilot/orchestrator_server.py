@@ -64,12 +64,18 @@ def _mission(mission: str | None) -> dict | None:
         return None
     with _state_lock:
         is_new = mission not in _missions
+        # Snapshot the current project INSIDE the lock, atomically with the
+        # is_new determination, so a concurrent project switch can't cause the
+        # WRONG project_id to be persisted on first INSERT. current_project_id()
+        # only takes db's independent leaf-level _exec_lock (never _state_lock),
+        # so holding _state_lock across it cannot deadlock.
+        pid_snapshot = projects.current_project_id() if is_new else None
         rec = _missions.setdefault(mission, {"autopilot": False, "activity": []})
     if is_new:
         db.execute(
             "INSERT OR IGNORE INTO missions (id, project_id, autopilot, status, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
-            (mission, projects.current_project_id(), 0, "active", _now()),
+            (mission, pid_snapshot, 0, "active", _now()),
         )
     return rec
 
