@@ -53,3 +53,15 @@ def test_auth_status_claude_json(tmp_path):
     assert accounts.auth_status(str(d)) == "not_logged_in"
     (d / ".claude.json").write_text("{}")
     assert accounts.auth_status(str(d)) == "authed"
+
+
+def test_create_managed_makes_dir():
+    a = accounts.create_managed(id="inforge", label="Inforge", color="#60a5fa")
+    assert Path(a["config_dir"]) == accounts.provider_dir() / "inforge"
+    assert Path(a["config_dir"]).is_dir()
+
+
+def test_import_existing_registers_without_moving(tmp_path):
+    src = tmp_path / ".claude-t2b"; src.mkdir()
+    a = accounts.import_existing(id="t2b", label="Time2Build", config_dir=str(src))
+    assert a["config_dir"] == str(src)
