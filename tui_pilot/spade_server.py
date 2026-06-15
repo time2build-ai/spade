@@ -154,6 +154,13 @@ def _node_or_404(node_id: str) -> dict:
     return n
 
 
+def _edge_or_404(edge_id: str) -> dict:
+    e = brain.get_edge(edge_id)
+    if e is None:
+        raise HTTPException(404, f"no brain edge {edge_id!r}")
+    return e
+
+
 # ---- brain endpoints --------------------------------------------------------
 
 @router.get("/brain/nodes")
@@ -202,20 +209,19 @@ def list_brain_edges(project_id: str) -> dict:
 
 @router.post("/brain/edges")
 def create_brain_edge(req: EdgeCreate) -> dict:
-    return brain.add_edge(
-        project_id=req.project_id,
-        from_id=req.from_id,
-        to_id=req.to_id,
-        rel=req.rel,
-    )
+    try:
+        return brain.add_edge(
+            project_id=req.project_id,
+            from_id=req.from_id,
+            to_id=req.to_id,
+            rel=req.rel,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.delete("/brain/edges/{edge_id}")
 def delete_brain_edge(edge_id: str) -> dict:
-    db_edge = None
-    from tui_pilot import db as _db
-    rows = _db.query("SELECT * FROM brain_edges WHERE id = ?", (edge_id,))
-    if not rows:
-        raise HTTPException(404, f"no brain edge {edge_id!r}")
+    _edge_or_404(edge_id)
     brain.delete_edge(edge_id)
     return {"id": edge_id, "status": "deleted"}

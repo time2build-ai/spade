@@ -72,6 +72,16 @@ def test_brain_invalid_type_returns_400():
     assert r.status_code == 400
 
 
+def test_brain_edge_bad_node_id_returns_400():
+    from tui_pilot.server import app
+    from tui_pilot import projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+    n1_id = c.post("/brain/nodes", json={"project_id": "acme", "type": "feature", "label": "Checkout"}).json()["id"]
+    r = c.post("/brain/edges", json={"project_id": "acme", "from_id": "bogus", "to_id": n1_id})
+    assert r.status_code == 400
+
+
 def test_brain_node_404():
     from tui_pilot.server import app
     c = TestClient(app)

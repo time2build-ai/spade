@@ -36,3 +36,19 @@ def test_update_node():
     n = brain.create_node(project_id="acme", type="feature", label="A")
     brain.update_node(n["id"], label="B", detail="notes")
     assert brain.get_node(n["id"])["label"] == "B"
+
+
+def test_update_node_invalid_type_rejected():
+    _proj()
+    n = brain.create_node(project_id="acme", type="feature", label="A")
+    with pytest.raises(ValueError):
+        brain.update_node(n["id"], type="bogus")
+
+
+def test_add_edge_bad_node_id_rejected():
+    _proj()
+    n = brain.create_node(project_id="acme", type="feature", label="A")
+    with pytest.raises(ValueError):
+        brain.add_edge(project_id="acme", from_id="nope", to_id=n["id"])
+    with pytest.raises(ValueError):
+        brain.add_edge(project_id="acme", from_id=n["id"], to_id="nope")

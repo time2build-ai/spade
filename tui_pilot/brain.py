@@ -91,13 +91,26 @@ def delete_node(id: str) -> None:
 
 # -- edges --------------------------------------------------------------------
 
+def get_edge(id: str) -> dict | None:
+    """Return one brain edge by id, or None if not found."""
+    rows = db.query("SELECT * FROM brain_edges WHERE id = ?", (id,))
+    return _row_to_dict(rows[0]) if rows else None
+
+
 def add_edge(
     project_id: str,
     from_id: str,
     to_id: str,
     rel: str | None = None,
 ) -> dict:
-    """Insert a new brain edge and return the created row as a dict."""
+    """Insert a new brain edge and return the created row as a dict.
+
+    Raises ValueError if either endpoint node does not exist, so the server
+    layer surfaces a clean 400 instead of a FK IntegrityError → 500.
+    """
+    for nid, name in ((from_id, "from_id"), (to_id, "to_id")):
+        if get_node(nid) is None:
+            raise ValueError(f"brain node {nid!r} not found ({name})")
     eid = _new_id()
     with db.tx() as cx:
         cx.execute(
@@ -105,8 +118,7 @@ def add_edge(
             "VALUES (?, ?, ?, ?, ?)",
             (eid, project_id, from_id, to_id, rel),
         )
-    rows = db.query("SELECT * FROM brain_edges WHERE id = ?", (eid,))
-    return _row_to_dict(rows[0]) if rows else None
+    return get_edge(eid)
 
 
 def list_edges(project_id: str) -> list[dict]:
