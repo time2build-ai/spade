@@ -25,6 +25,17 @@ def test_policy_reads_current_project_ceiling_and_autopilot():
     assert pol.ceiling == "opus" and pol.autopilot is True
 
 
+def test_orchestrator_spawn_passes_current_project(monkeypatch):
+    from tui_pilot import projects, orchestrator_server as osrv
+    projects.create(id="p", name="P", path="/w"); projects.set_current_project("p")
+    captured = {}
+    class FakeServer:
+        def _spawn_agent(self, **kw): captured.update(kw); return {"id": "w1"}
+    cb = osrv._callbacks_for(FakeServer(), "orch-1", mission="m")
+    cb.spawn(role="developer", model="sonnet", task="do")
+    assert captured["project_id"] == "p"
+
+
 def test_spawn_records_model_mission_parent_reason(client, tmp_path):
     r = client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
         "model":"sonnet","mission":"m1","parent":"orch-1","reason":"standard markup"})

@@ -109,7 +109,7 @@ class _Callbacks:
         self._orch = orch_aid
         self._mission = mission
 
-    def spawn(self, **kw) -> str:
+    def spawn(self, account=None, **kw) -> str:
         # Takes _registry_lock internally; caller holds no session lock.
         info = self._server._spawn_agent(
             name=kw.get("role") or "worker",
@@ -122,6 +122,8 @@ class _Callbacks:
             mission=kw.get("mission"),
             parent=self._orch,
             reason=kw.get("reason"),
+            project_id=projects.current_project_id(),
+            account_id=account,
         )
         return info["id"]
 
