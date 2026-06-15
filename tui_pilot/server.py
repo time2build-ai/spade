@@ -310,6 +310,8 @@ def _info(aid: str) -> dict:
         "state": _safe_state(ctrl),
         "harness_state": harness_state,
         "has_menu": has_menu,
+        "account_id": m.get("account_id"),
+        "project_id": m.get("project_id"),
     }
 
 
