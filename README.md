@@ -188,6 +188,99 @@ clarifying questions / brainstorming) so they don't block waiting for input.
 .venv/bin/python -m tui_pilot.cli dump --cmd claude
 ```
 
+## Agent harness (fleet control)
+
+The harness turns scattered agents into a managed fleet: any agent — in any
+directory — can **signal** a central control center (ask a question, request
+context/help, report progress, or finish with a report/handoff), and you answer
+from the UI. Everything still flows through tmux + the filesystem; no headless
+mode.
+
+**How an agent signals.** At spawn, tui-pilot installs a small **agent-comms
+skill** into the agent's `.claude/skills/`, rendered with that agent's exact
+**outbox path**. To communicate, the agent writes one JSON file per signal into
+its outbox. The control center watches a single central hub keyed by agent id:
+
+```
+~/.tui-pilot/comms/<agent-id>/{outbox,inbox,handoffs,processed}/
+```
+
+Because comms are keyed by *who* the agent is (a collision-proof
+`slug__token` id), not *where* it runs, agents in many different directories are
+not a special case — the control plane watches one root.
+
+**Actions** (`outbox/<id>.json`):
+
+| action | blocks? | meaning |
+|--------|---------|---------|
+| `ask_question` | yes | needs a decision (optional `options`) |
+| `need_context` | yes | missing info/files/credentials |
+| `need_help`    | yes | stuck; attach paths in `refs` |
+| `progress`     | no  | status heartbeat |
+| `finished`     | terminal | writes a `report`; optional `next` spawns a successor |
+
+Blocking signals: the agent writes the file and ends its turn. The control
+center surfaces it; your answer is **typed back into the agent via tmux**
+(`POST /sessions/{id}/answer`), and it continues. `finished` always writes a
+**report** (the baton) to `SUMMARY.md` + `handoffs/`; an optional
+`next:{role,task,mode,start}` spawns a successor that receives the report —
+that's the agent-to-agent handoff (document-first; new instance only when asked).
+
+**In the UI** (`/ui/`): agents needing input float into a **Needs attention**
+group (🔴); the focused agent's open signal renders as an **answer card**
+(option buttons + free text); a global **Inbox** tab lets you triage all blocked
+agents at once; a finished agent shows its **report** with *Archive & kill* and
+*Spawn successor*.
+
+**Harness endpoints:** `GET /sessions/{id}/signals`, `POST /sessions/{id}/answer`
+`{signal_id,text}`, `GET /sessions/{id}/report`, `POST /sessions/{id}/handoff`.
+Session info/list include a `harness_state` (`idle|blocked|done|exited`).
+
+Roles, autonomy mode, and missions compose with all of this — e.g. spawn a
+`planner` whose mission produces `plan.md` and whose `finished.next` hands off to
+an autonomous `developer`.
+
+## Orchestrator (conversational fleet control)
+
+On top of the harness you can chat with one **orchestrator** agent that runs the
+whole fleet for you. It decomposes your goal, spawns workers with the **right
+model per task**, routes their questions, and reports back — supervised by
+default, hands-off (autopilot) when you flip a per-mission toggle. It stays
+within the rules: the orchestrator is itself a tmux `claude` (no API); it manages
+others by emitting **orchestration signals** the control center executes.
+
+**Orchestration actions** (the orchestrator writes these to its outbox, on top of
+the normal agent-comms actions):
+
+| action | does |
+|--------|------|
+| `spawn {role, model, task, mission, reason, cwd?, mode?}` | launch a worker as `claude --model <tier>` |
+| `answer {worker, text}` | reply to a worker's question or permission prompt (`approve`/`deny`) |
+| `kill {worker}` | stop a worker |
+| `status {text}` | narrate progress to you |
+
+**Model selection.** Tiers `haiku` / `sonnet` / `opus` map to concrete
+`--model` ids; the orchestrator sizes the model to the task and must give a
+`reason` (shown as "why this model"). A configurable **ceiling** (default
+`sonnet`) caps it — a `spawn` above the ceiling (Opus) is a **brake**.
+
+**Supervised vs autopilot.** Each mission has a toggle (default supervised). In
+supervised mode the orchestrator handles routine coordination itself but pauses
+for you on **brakes** — an Opus spawn, or any worker hitting a permission dialog
+— surfaced as an inline **Allow / Skip**. On autopilot it decides those too, so
+you can walk away. When a worker raises a question or permission prompt, the
+control center forwards it to the orchestrator, which answers (relayed to the
+worker via tmux) or escalates to you.
+
+**Endpoints:** `POST /orchestrator` (ensure/return the orchestrator),
+`GET /missions`, `POST /missions/{id}/autopilot`, `GET /missions/{id}`,
+`GET /brakes`, `POST /brakes/{id}/allow`, `POST /brakes/{id}/skip`.
+
+**In the UI** (`/ui/`): the **🧠 Orchestrator** chat is the primary surface;
+behind it the fleet shows each worker's **model badge + "why"**, grouped by
+mission with a per-mission autopilot toggle; brakes appear as **Allow / Skip**
+cards; the manual spawn form moves to **Advanced**.
+
 ## ⚠ Pattern tuning — the brittle part
 
 **`patterns.yaml` is version-specific and WILL drift when the TUI changes.** It
@@ -222,15 +315,19 @@ Notes specific to the captured version, to illustrate what "tuning" means:
 
 ```bash
 # Offline, deterministic, CI-safe (no live claude needed):
-.venv/bin/pytest tests/test_screen.py tests/test_server.py
+.venv/bin/pytest tests/ --ignore=tests/test_integration.py
 
-# Opt-in live smoke test (needs an authenticated `claude` on PATH):
+# Opt-in live tests (need an authenticated `claude` on PATH), incl. the
+# end-to-end harness round-trip (agent emits a signal → answer → finish):
 TUI_PILOT_LIVE=1 .venv/bin/pytest tests/test_integration.py -v
 ```
 
-`test_screen.py` runs `normalize`/`classify` over the committed fixtures.
-`test_server.py` exercises the HTTP layer against a deterministic `cat` session.
-`test_integration.py` is skipped unless `TUI_PILOT_LIVE=1`.
+Offline suite (no live claude): `test_screen.py` (normalize/classify over
+fixtures), `test_server.py` (HTTP layer vs a `cat` session), `test_roles.py`
+(role presets + metadata), `test_identity.py` / `test_comms.py` /
+`test_harness.py` (pure harness units), `test_harness_server.py` (signal/answer/
+report/handoff endpoints + concurrency). `test_integration.py` (incl.
+`test_harness_round_trip`) is skipped unless `TUI_PILOT_LIVE=1`.
 
 ## Out of scope
 

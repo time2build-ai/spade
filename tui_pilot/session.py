@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 
 class SessionError(RuntimeError):
@@ -175,3 +176,60 @@ class TmuxSession:
             args += ["-S", "-"]
         proc = self._run(*args)
         return proc.stdout
+
+
+_ASSETS = Path(__file__).resolve().parent / "assets"
+
+
+def install_comms_skill(
+    cwd: str | Path,
+    outbox_path: str | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Install the agent-comms skill into <cwd>/.claude/skills/ so the spawned
+    agent reads it on boot.
+
+    The skill template carries ``__OUTBOX__`` / ``__AGENT_ID__`` placeholders;
+    we render the agent's *actual* absolute outbox path and id into the copy
+    that lands in its cwd. This is what makes signalling reliable: the agent
+    loads this skill at the moment it wants to signal, so the exact path is
+    right in front of it (rather than something it has to remember from an
+    earlier priming turn). Idempotent.
+    """
+    _render_skill("agent-comms-skill", "agent-comms", cwd, outbox_path, agent_id)
+
+
+def install_orchestrator_skill(
+    cwd: str | Path,
+    outbox_path: str | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Install the orchestrator-comms skill (spawn/answer/kill/status actions)
+    into an orchestrator's <cwd>/.claude/skills/. Same render-the-outbox-path
+    trick as install_comms_skill, so the orchestrator has the exact JSON shapes
+    + its outbox path in front of it when it issues commands. Idempotent."""
+    _render_skill("orchestrator-comms", "orchestrator-comms", cwd, outbox_path, agent_id)
+
+
+def _render_skill(
+    asset_dir: str, skill_name: str, cwd: str | Path,
+    outbox_path: str | None, agent_id: str | None,
+) -> None:
+    dst = Path(cwd) / ".claude" / "skills" / skill_name
+    dst.mkdir(parents=True, exist_ok=True)
+    template = (_ASSETS / asset_dir / "SKILL.md").read_text()
+    rendered = template.replace(
+        "__OUTBOX__", outbox_path or "(no control center attached)"
+    ).replace("__AGENT_ID__", agent_id or "(none)")
+    (dst / "SKILL.md").write_text(rendered)
+
+
+def build_cmd(cmd: str, model_id: str | None) -> str:
+    """Append `--model <id>` to a launch command when a model is requested.
+
+    `--model` is an interactive-compatible flag (the REPL still runs normally),
+    so it does not violate the no-headless constraint. Idempotent: skips if the
+    command already names a model."""
+    if not model_id or "--model" in cmd:
+        return cmd
+    return f"{cmd} --model {model_id}"

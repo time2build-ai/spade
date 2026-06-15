@@ -15,9 +15,13 @@
 </header>
 
 <main>
-  <!-- LEFT: new agent + session list -->
+  <!-- LEFT: orchestrator + new agent + session list -->
   <aside class="sidebar">
-    <fieldset class="new-agent">
+    <button id="btnOrch" class="orch-btn">🧠 Orchestrator <span class="dim">· chat</span></button>
+
+    <details class="new-agent advanced">
+      <summary>⚙ Advanced — manual spawn</summary>
+      <fieldset>
       <legend>New agent</legend>
       <div class="field">
         <label for="role">Role</label>
@@ -57,13 +61,18 @@ e.g. Implement plan.md"></textarea>
         <textarea id="instructions" rows="6" placeholder="Typed in as the first message to prime the agent…"></textarea>
       </details>
       <button id="btnSpawn" class="primary wide">＋ Spawn agent</button>
-    </fieldset>
+      </fieldset>
+    </details>
 
     <div class="agents-head">
-      <span>Agents</span>
+      <div class="tabs">
+        <button id="tabAgents" class="tab active">Agents</button>
+        <button id="tabInbox" class="tab">Inbox<span id="inboxBadge" class="ibadge" style="display:none"></span></button>
+      </div>
       <button id="btnKillAll" class="tiny red" title="kill all sessions">kill all</button>
     </div>
     <div id="agents" class="agents"></div>
+    <div id="inbox" class="inbox" style="display:none"></div>
   </aside>
 
   <!-- CENTER: focused session screen + composer -->
@@ -73,6 +82,11 @@ e.g. Implement plan.md"></textarea>
       <span class="grow"></span>
       <span id="focusPill" class="pill s-EXITED"><span class="dot"></span><span id="focusState">—</span></span>
     </div>
+    <div id="brakesStrip" class="brakes-strip" style="display:none"></div>
+    <div id="answerCard" class="answer-mount" style="display:none"></div>
+    <div id="menuCard" class="menu-mount" style="display:none"></div>
+    <div id="missionActivity" class="mission-activity" style="display:none"></div>
+    <div id="reportCard" class="report-mount" style="display:none"></div>
     <pre id="screen">Pick a role on the left and spawn an agent.
 
 Every agent is a real interactive `claude` running in its own tmux session.

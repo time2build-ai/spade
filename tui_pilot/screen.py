@@ -166,3 +166,48 @@ def classify(screen: str, patterns: dict) -> State:
     if _search(patterns, "booting_regex", norm):
         return State.BOOTING
     return State.BOOTING
+
+
+# An interactive selection menu: numbered options, one marked by the ❯ cursor,
+# e.g. Claude's clarifying-question menu or a permission dialog.
+_MENU_OPT_RE = re.compile(r"^\s*(❯)?\s*(\d+)\.\s+(.*\S)\s*$")
+
+
+def parse_menu(screen: str) -> dict | None:
+    """Detect an active selection menu in the rendered screen.
+
+    Returns ``{"prompt": str, "options": [{"index": int, "label": str}, ...],
+    "selected": int}`` (selected is the 1-based number the ❯ cursor is on), or
+    ``None`` when there is no active menu.
+
+    The discriminator is a ``❯`` cursor sitting on a numbered option line — that
+    only happens for an interactive menu. A plain numbered list (no cursor) or
+    the idle composer (a lone ``❯`` prompt with no number) is NOT a menu.
+    """
+    lines = screen.splitlines()
+    options: list[dict] = []
+    selected: int | None = None
+    first_opt: int | None = None
+    for i, line in enumerate(lines):
+        m = _MENU_OPT_RE.match(line)
+        if not m:
+            continue
+        idx = int(m.group(2))
+        options.append({"index": idx, "label": m.group(3).strip()})
+        if m.group(1):  # the ❯ cursor
+            selected = idx
+        if first_opt is None:
+            first_opt = i
+    if len(options) < 2 or selected is None:
+        return None
+    # prompt = nearest non-empty, non-option, non-chrome line above the options
+    prompt = ""
+    for j in range(first_opt - 1, -1, -1):
+        s = lines[j].strip()
+        if not s or _MENU_OPT_RE.match(lines[j]):
+            continue
+        if set(s) <= set("─-│╭╮╰╯ "):  # divider / box chrome
+            continue
+        prompt = s
+        break
+    return {"prompt": prompt, "options": options, "selected": selected}
