@@ -143,3 +143,70 @@ def test_reconcile_marks_dead_and_keeps_live():
             server._locks.pop("a", None)
             server._meta.pop("a", None)
             server._pollers.pop("a", None)
+
+
+# ---- registry HTTP endpoints ----------------------------------------------
+
+
+def test_accounts_and_projects_endpoints():
+    from tui_pilot.server import app
+
+    c = TestClient(app)
+    assert c.post(
+        "/accounts", json={"id": "t2b", "label": "T2B", "config_dir": "/t2b"}
+    ).status_code == 200
+    assert any(a["id"] == "t2b" for a in c.get("/accounts").json()["accounts"])
+    c.post(
+        "/projects",
+        json={"id": "acme", "name": "Acme", "path": "/w", "account_strategy": "single"},
+    )
+    c.put("/projects/acme/accounts", json={"account_ids": ["t2b"]})
+    assert c.get("/projects/acme").json()["pool"] == ["t2b"]
+    c.put("/current-project", json={"project_id": "acme"})
+    assert c.get("/current-project").json()["project_id"] == "acme"
+
+
+def test_account_default_and_delete_and_scan():
+    from tui_pilot.server import app
+
+    c = TestClient(app)
+    c.post("/accounts", json={"id": "a1", "label": "A1", "config_dir": "/a1"})
+    assert c.post("/accounts/a1/default").json()["is_default"] is True
+    assert "managed" in c.post("/accounts/scan").json()
+    assert c.delete("/accounts/a1").json()["status"] == "deleted"
+    assert not any(a["id"] == "a1" for a in c.get("/accounts").json()["accounts"])
+
+
+def test_roles_endpoints_write_and_refresh():
+    from tui_pilot import server
+    from tui_pilot.server import app
+
+    c = TestClient(app)
+    r = c.post("/roles", json={"id": "custom", "label": "Custom", "mode": "normal"})
+    assert r.status_code == 200
+    server.refresh_roles()
+    assert "custom" in server.ROLES
+    c.patch("/roles/custom", json={"label": "Renamed"})
+    assert server.ROLES["custom"]["label"] == "Renamed"
+    assert c.delete("/roles/custom").json()["status"] == "deleted"
+    assert "custom" not in server.ROLES
+
+
+def test_login_endpoint_registers_bare_session(monkeypatch):
+    from tui_pilot import server
+    from tui_pilot.server import app
+    from tui_pilot.session import TmuxSession
+
+    monkeypatch.setattr(TmuxSession, "spawn", lambda self: None)
+    c = TestClient(app)
+    c.post("/accounts", json={"id": "lg", "label": "LG", "config_dir": "/lg"})
+    r = c.post("/accounts/lg/login")
+    assert r.status_code == 200
+    aid = r.json()["id"]
+    try:
+        assert server._meta[aid]["role"] == "login"
+    finally:
+        with server._registry_lock:
+            server._sessions.pop(aid, None)
+            server._locks.pop(aid, None)
+            server._meta.pop(aid, None)
