@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .superpowers/
-.claude/skills/agent-comms/
+.claude/
+.agent-comms/
