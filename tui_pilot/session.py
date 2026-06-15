@@ -53,12 +53,14 @@ class TmuxSession:
         cols: int = 200,
         rows: int = 50,
         cwd: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> None:
         self.name = name
         self.cmd = cmd
         self.cols = cols
         self.rows = rows
         self.cwd = cwd
+        self.env = env or {}
         self._tmux = _ensure_tmux_on_path()
 
     # -- internal helpers --------------------------------------------------
@@ -108,6 +110,9 @@ class TmuxSession:
             "-y",
             str(self.rows),
         ]
+        # Inject environment variables (-e KEY=val) after -y <rows>.
+        for key, val in self.env.items():
+            args += ["-e", f"{key}={val}"]
         # Pin the working directory so a "developer" agent runs in the project
         # it is meant to work on (tmux new-session -c <dir>).
         if self.cwd:
