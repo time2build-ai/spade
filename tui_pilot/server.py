@@ -114,12 +114,16 @@ def _ensure_roles() -> None:
     ``refresh_roles()`` reloads it; in production after the first load, ``ROLES``
     stays non-empty so we skip the per-spawn SELECT *."""
     roles_seed.seed_if_empty()
-    if not ROLES:
+    roles_seed.upsert_pipeline_roles()
+    if not ROLES or "integrator" not in ROLES:
         refresh_roles()
 
 
 # Seed + load at import; role-dependent code paths re-ensure lazily.
 roles_seed.seed_if_empty()
+# Ensure the pipeline roles (integrator/documentor added after the foundation
+# seed) exist even on an already-seeded DB, then reload ROLES.
+roles_seed.upsert_pipeline_roles()
 ROLES = roles_seed.load_roles_from_db()
 
 # In-memory registry. Guarded by a registry lock for structural changes; each

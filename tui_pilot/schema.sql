@@ -63,3 +63,15 @@ CREATE TABLE IF NOT EXISTS brain_edges (
   FOREIGN KEY(from_id) REFERENCES brain_nodes(id) ON DELETE CASCADE,
   FOREIGN KEY(to_id) REFERENCES brain_nodes(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL,
+  status TEXT DEFAULT 'queued', current_stage INTEGER DEFAULT 0, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+  id TEXT PRIMARY KEY, pipeline_run_id TEXT NOT NULL, role TEXT NOT NULL,
+  stage_order INTEGER NOT NULL, state TEXT DEFAULT 'queued',
+  session_id TEXT, account_id TEXT, created_at TEXT,
+  FOREIGN KEY(pipeline_run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
+);
