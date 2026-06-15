@@ -28,7 +28,8 @@ tasks(
   title TEXT NOT NULL,
   feature TEXT,                        -- free-text feature name
   priority INTEGER DEFAULT 2,          -- 0=P0 .. 3=P3
-  column TEXT DEFAULT 'ready',         -- ready|in_progress|review|shipped|blocked
+  status TEXT DEFAULT 'ready',         -- kanban column: ready|in_progress|review|shipped|blocked
+                                       -- (named `status`, NOT `column`, to avoid the SQL keyword)
   origin_quote TEXT, origin_source TEXT,
   description TEXT,
   created_at TEXT,
@@ -67,6 +68,9 @@ pipeline_runs(
   project_id TEXT NOT NULL,
   task_id TEXT NOT NULL,
   status TEXT DEFAULT 'queued',        -- queued|running|gated|shipped|paused|failed
+                                       -- (`gated`/`paused` reserved; human-gate logic is post-MVP)
+  -- no account_id column: a run can span accounts (round-robin); the run's
+  -- "account" for display is derived from its stages.
   current_stage INTEGER DEFAULT 0,     -- index into the 4 stages
   created_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -91,18 +95,28 @@ History note (consistent with the foundation): `pipeline_stages.session_id` is N
 ## 4. Components
 
 ### Backend (new domain modules, db-helpers only, plain-dict returns — mirror accounts.py/projects.py)
-- **`tasks.py`** — CRUD; `next_task_id(project_id)` (SPD-NNN per project); `move(task_id, column)`; `list_for_project(project_id)`; grounding via `set_nodes(task_id, node_ids)` / `nodes(task_id)`.
+- **`tasks.py`** — CRUD; `next_task_id(project_id)` (SPD-NNN per project); `move(task_id, status)` (validate against the 5 kanban statuses); `list_for_project(project_id)`; grounding via `set_nodes(task_id, node_ids)` / `nodes(task_id)`. Always quote `"status"` is unnecessary now (renamed off the keyword), but the column holds the kanban state.
 - **`brain.py`** — node CRUD (`create_node`/`list_nodes`/`update_node`/`delete_node`), edge CRUD (`add_edge`/`list_edges`/`delete_edge`), all project-scoped.
 - **`pipelines.py`** — `STAGES = ["developer","reviewer","integrator","documentor"]`; `create_run(project_id, task_id)` (creates the run + 4 queued stages); `run(run_id)`, `get(run_id)` (with stages), `list_for_project`; `start_stage(run_id, idx)` / `complete_stage(run_id, idx, ...)` / `advance(run_id)`; state-machine helpers. The actual agent spawn is injected (a callback) so `pipelines.py` stays testable without the server/tmux.
 
 ### Backend (server wiring)
 - **`spade_server.py`** — a new FastAPI router (included like `registry_server`) exposing tasks/brain/pipelines endpoints. Handlers reach `server` lazily for the spawn callback.
-- **Pipeline execution**: starting a run calls `server._spawn_agent(role=<stage role>, project_id=<task project>, task=<task title+description+grounded context>, mission=<run id>)` — reusing the foundation's account resolution + auth guard + persistence. The spawned session's id is written to the stage. **Auto-advance**: when a pipeline worker emits the harness `finished` signal, the poll loop advances the run to the next stage and spawns it; the last stage's finish marks the run `shipped` and moves the task to `shipped`. A manual `POST /pipelines/{id}/advance` is also provided as a fallback / override. Auto-advance reuses the existing finish-detection the orchestrator already consumes (a `pipeline_run` mission is recognized and routed to the pipeline advancer instead of/in addition to the orchestrator narration).
+- **Pipeline stage spawn**: starting a stage calls
+  `server._spawn_agent(role=<stage role>, project_id=<task project>, cwd=projects.get(project_id)["path"], task=<stage prompt>, mission=<run id>, parent=None, report_context=<prev stage report>)`.
+  - **`parent=None` is mandatory** — pipeline stages are plain workers, NOT children of the orchestrator. This is the key to avoiding any conflict with the existing finish-forwarding: `orchestrator_server.collect_worker_forward` returns early when a worker has no parent, so a parentless stage agent's `finished` is never narrated to / consumed by the orchestrator.
+  - **`cwd` = the project's working dir** (`projects.path`) so Developer/Integrator agents touch the real repo, not an empty scratch dir.
+  - **`report_context`** = the finishing predecessor stage's report (the foundation's handoff report; available as the poller's `done` report). The advance threads each stage's output into the next stage's prompt so stages don't run blind to each other. Stage 0 (Developer) gets the task title + description + grounded brain-node context instead.
+  - The returned `info["id"]` is written to `pipeline_stages.session_id`, and the resolved account to `pipeline_stages.account_id`.
+- **Auto-advance (additive, no conflict)**: add a small, separate collector branch in `server._poll_loop`'s COLLECT phase. For a session that is (a) NOT an orchestrator, (b) has NO parent, and (c) whose `_meta["mission"]` names an existing `pipeline_run`, when its `poller.poll()` reports `kind == "done"`, gather a `(run_id, stage_idx, report)` advance item — guarded by a once-only `_meta["pipeline_advanced"]` flag (mirrors the existing `finish_forwarded` guard) so a stage advances exactly once. In the DRAIN phase (no lock held), call `pipelines.complete_stage(...)` then spawn the next stage (threading the report as `report_context`); the **last** stage's completion marks the run `shipped` and moves the task to `status='shipped'`. A spawn failure marks the stage `failed` and the run `paused`, logged best-effort (never crashes the loop).
+- **Manual override**: `POST /pipelines/{id}/advance` does the same advance synchronously (used as the integration-test primary path with a fake spawn, and as a UI fallback).
+
+### Roles for the pipeline (idempotent seed)
+The foundation seeds only planner/developer/reviewer/plain/orchestrator. The pipeline needs `integrator` and `documentor` too. Add them to `roles.yaml` AND add an idempotent per-role upsert (`INSERT OR IGNORE INTO roles ...` for each of the 4 pipeline roles) that runs at startup — `seed_if_empty()` only seeds an empty table, so an existing DB would otherwise miss the two new roles. Give `integrator` (mode accept-edits: merges/commits the work) and `documentor` (mode accept-edits: writes docs/changelog) concise role instructions.
 
 ### Frontend (extend the existing `/ui` vanilla-JS app)
 - New nav-rail destinations: **Home**, **Backlog**, **Brain**, **Pipelines** (Orchestrator), alongside the foundation's Fleet/Projects/Accounts/Agents.
 - **Backlog** — 4 columns; task cards (id, title, feature chip, priority dot); click → task detail (origin, grounded nodes, pipeline status, "Run pipeline" button); create-task form; move via buttons (and/or drag).
-- **Brain** — SVG canvas of nodes (color by type) + edges; click a node → detail; add node / add edge / link-to-task.
+- **Brain** — SVG canvas of nodes (color by type) + edges; click a node → detail; add node / add edge / link-to-task. Baseline MVP may auto-layout (e.g. simple circular/grid placement from optional x/y) and render read-mostly (add-node + link-to-task required; drag-reposition and manual edge-drawing are nice-to-have, can be deferred without hurting the core loop).
 - **Pipelines/Orchestrator** — pipeline cards: task title, 4 stage chips (queued/running/done/gate) with the live agent session link; clicking a running stage focuses its agent in the Fleet screen.
 - **Home** — current project, task counts per column, active pipelines, recent brain nodes.
 - All views project-scoped to the current project (foundation's current-project state).
@@ -114,7 +128,8 @@ History note (consistent with the foundation): `pipeline_stages.session_id` is N
 - Pipeline auto-advance is best-effort and logged (mirrors the foundation's logging pattern); a spawn failure marks the stage `failed` and the run `paused`, never crashes the poll loop.
 
 ## 6. Testing
-- `tasks.py`: CRUD, SPD-id generation per project, move/column validation, grounding set/get.
+- `tasks.py`: CRUD, SPD-id generation per project, move/status validation (reject unknown status), grounding set/get.
+- roles seed: after startup, the `roles` table contains developer/reviewer/integrator/documentor (idempotent upsert covers an already-seeded DB).
 - `brain.py`: node/edge CRUD, project scoping, cascade on node delete.
 - `pipelines.py`: create_run builds 4 ordered stages; advance state machine (queued→running→done→next; last→shipped + task shipped); start/complete with an injected spawn callback (no tmux); failure → paused.
 - `spade_server.py`: endpoint flows via TestClient — create task, ground it, create+advance a pipeline with a fake spawn, move task, brain CRUD.
