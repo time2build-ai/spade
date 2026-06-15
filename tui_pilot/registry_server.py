@@ -31,6 +31,7 @@ class AccountCreate(BaseModel):
 class AccountPatch(BaseModel):
     label: str | None = None
     color: str | None = None
+    config_dir: str | None = None
 
 
 class AccountImport(BaseModel):

@@ -913,7 +913,9 @@ function renderAccountsPage() {
           </label>
           <label class="acct-edit-row">Color
             <input type="color" id="acctEditColor" value="${esc(color)}" />
-            <span class="acct-dir">${esc(a.config_dir)}</span>
+          </label>
+          <label class="acct-edit-row">Config dir
+            <input type="text" id="acctEditDir" value="${esc(a.config_dir || "")}" placeholder="/Users/you/.claude-work" />
           </label>
         </div>
         <div class="acct-actions">
@@ -963,8 +965,9 @@ function renderAccountsPage() {
 async function saveAccountEdit(id) {
   const label = $("acctEditLabel")?.value.trim();
   const color = $("acctEditColor")?.value;
+  const config_dir = $("acctEditDir")?.value.trim();
   try {
-    await api("PATCH", `/accounts/${id}`, { label: label || undefined, color }, "edit-account");
+    await api("PATCH", `/accounts/${id}`, { label: label || undefined, color, config_dir: config_dir || undefined }, "edit-account");
     log("account updated", "ok");
     editingAccount = null;
     await loadAccounts();
