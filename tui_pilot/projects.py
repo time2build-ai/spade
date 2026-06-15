@@ -76,8 +76,15 @@ def delete(id: str) -> None:
 # -- Pool management ----------------------------------------------------------
 
 def set_pool(project_id: str, account_ids: list[str]) -> None:
-    """Replace the ordered account pool for a project atomically."""
+    """Replace the ordered account pool for a project atomically.
+
+    Raises ValueError if any account id doesn't exist (so the API returns a clean
+    400 instead of a raw FOREIGN KEY 500)."""
     with db.tx() as cx:
+        known = {r["id"] for r in cx.execute("SELECT id FROM accounts").fetchall()}
+        bad = [a for a in account_ids if a not in known]
+        if bad:
+            raise ValueError(f"unknown account(s): {bad}")
         cx.execute(
             "DELETE FROM project_accounts WHERE project_id = ?", (project_id,)
         )

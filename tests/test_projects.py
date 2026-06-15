@@ -61,3 +61,10 @@ def test_current_project_get_set():
     assert projects.current_project_id() is None
     projects.set_current_project("acme")
     assert projects.current_project_id() == "acme"
+
+
+def test_set_pool_rejects_unknown_account():
+    import pytest
+    projects.create(id="p", name="P", path="/w")
+    with pytest.raises(ValueError):
+        projects.set_pool("p", ["does-not-exist"])

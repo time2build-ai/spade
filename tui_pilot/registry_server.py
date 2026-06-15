@@ -285,7 +285,10 @@ def delete_project(id: str) -> dict:
 def set_project_pool(id: str, req: PoolRequest) -> dict:
     if projects.get(id) is None:
         raise HTTPException(404, f"no project {id!r}")
-    projects.set_pool(id, req.account_ids)
+    try:
+        projects.set_pool(id, req.account_ids)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     return {"id": id, "pool": projects.pool(id)}
 
 
