@@ -343,7 +343,7 @@ The `feat/spade-mvp` branch adds a product-management layer (the "Spade" product
 
 | Feature | Description |
 |---|---|
-| **Tasks / Backlog** | SPD-id–keyed tasks (SPD-0001, …) with status kanban (ready → in_progress → review → shipped / blocked), priority (P0–P3), feature grouping, origin quotes, and task–brain-node grounding. |
+| **Tasks / Backlog** | SPD-id–keyed tasks (SPD-001, …) with status kanban (ready → in_progress → review → shipped / blocked), priority (P0–P3), feature grouping, origin quotes, and task–brain-node grounding. |
 | **Product Brain** | Typed knowledge graph: nodes (feature / decision / convention / feedback / bug / metric) + directed edges. Visualised as an SVG force layout; tasks can be grounded to nodes. |
 | **Pipelines** | 4-stage agent execution: Developer → Reviewer → Integrator → Documentor. Each stage runs a tmux `claude` agent on the project's account pool (round-robin). Stages auto-advance when the current agent emits a `finished` signal. |
 | **Home dashboard** | Default landing view: project KPI band (task counts by status), active pipeline list, recent brain nodes — all scoped to the current project. |
@@ -370,7 +370,7 @@ The `feat/spade-mvp` branch adds a product-management layer (the "Spade" product
 | `GET    /pipelines` | `?project_id=` | list pipeline runs |
 | `GET    /pipelines/{run_id}` | | get one pipeline run + stage states |
 | `POST   /pipelines/{run_id}/start` | | start the pipeline (spawns Developer agent) |
-| `POST   /pipelines/{run_id}/advance` | `{stage_role?}` | manually advance to the next stage |
+| `POST   /pipelines/{run_id}/advance` | `{report?}` | manually advance to the next stage |
 
 See [`docs/spade-alignment.md`](docs/spade-alignment.md) for the full product vision and remaining gap-list.
 
