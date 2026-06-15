@@ -459,7 +459,7 @@ def test_seed_is_idempotent():
 
 - [ ] **Step 4: Run, expect pass.**
 
-- [ ] **Step 5: Wire server** — in `server.py`, after imports call `roles_seed.seed_if_empty()` at module load, and set `ROLES = roles_seed.load_roles_from_db()`. Keep `load_roles()` for the seed source. Run full suite `.venv/bin/python -m pytest -q` — fix any role-shape mismatches (ensure DB rows expose `cmd` default `"claude"` if roles relied on it; add a `cmd` column default in `load_roles_from_db` if absent). Commit: `git commit -am "feat(server): seed roles into SQLite and serve from DB"`
+- [ ] **Step 5: Wire server** — in `server.py`, after imports call `roles_seed.seed_if_empty()` at module load, and set `ROLES = roles_seed.load_roles_from_db()`. Keep `load_roles()` for the seed source. Run full suite `.venv/bin/python -m pytest -q` — every key `_spawn_agent` reads (`cmd`, `mode`, `label`, `emoji`, `instructions`) is a real roles column (Step 3), so no synthetic defaults are needed; just fix any role-shape mismatches the tests surface. Commit: `git commit -am "feat(server): seed roles into SQLite and serve from DB"`
 
 ### Task 4.2: Resolve + persist account in `_spawn_agent`
 
@@ -491,7 +491,7 @@ def test_resolve_account_prefers_explicit_then_project_then_default(monkeypatch)
   - `acct = _resolve_account(account_id, project_id)`;
   - `env = {"CLAUDE_CONFIG_DIR": acct["config_dir"]} if acct else {}`;
   - pass `env=env` to `TmuxSession(...)`;
-  - **auth guard:** if `acct` and `accounts.auth_status(acct["config_dir"]) == "not_logged_in"`, raise `HTTPException(400, f"account {acct['id']} is not logged in")` BEFORE spawning;
+  - **auth guard:** if `acct` and `accounts.auth_status(acct["config_dir"]) == "not_logged_in"`, raise `HTTPException(400, f"account {acct['id']} is not logged in")` BEFORE spawning. Note `_spawn_agent` is also called from automated paths (poll-loop `_make_handoff`, orchestrator DRAIN) which already catch exceptions — there the 400 surfaces as a narrate/`prep_detail` note, not an HTTP response; only the direct `POST /sessions` path returns it to a client.
   - **`_meta` keys go INSIDE the existing `_meta[aid] = {...}` dict literal** (server.py lines 506–524, inside the `with _registry_lock:` block) — add `"account_id": acct and acct["id"]` and `"project_id": project_id` to that literal, never mutate `_meta[aid]` after the block;
   - persist the session row inside the same `with _registry_lock:` block, right after the `_meta[aid] = {...}` assignment: `sessions_store.insert(id=aid, project_id=project_id, account_id=(acct and acct["id"]), name=name, role=role, model=model, mode=eff_mode, cwd=eff_cwd, mission_id=mission, parent=parent, reason=reason, is_orchestrator=is_orchestrator, sort_order=_order, status="live", created_at=...)`.
   - Create `tui_pilot/sessions_store.py` (small store module, mirrors accounts/projects style) with `insert(**cols)`, `set_status(id, status)`, `all()`, `all_live()`, `get(id)` — all using `db.execute`/`db.query`.
