@@ -964,6 +964,11 @@ def index() -> str:
 # failure must never stop import/startup.
 try:
     _reconcile_sessions()
+    # Restore persisted missions (and their autopilot flags) into the in-memory
+    # _missions dict so a reattached worker's mission is live in GET /missions
+    # immediately — a persisted autopilot=1 must not silently degrade to
+    # supervised until the mission is next referenced.
+    orchestrator_server.reload_missions()
 except Exception:  # noqa: BLE001 - startup reconcile is best-effort (swallowed)
     logger.warning("startup session reconcile failed", exc_info=True)
 

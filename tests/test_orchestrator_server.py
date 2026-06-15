@@ -204,6 +204,29 @@ def test_one_spawn_signal_spawns_exactly_one_worker(client, tmp_path):
         client.delete(f"/sessions/{s['id']}")
 
 
+def test_reload_missions_repopulates_from_db(client):
+    """Missions persisted in the DB (e.g. from a previous run) must be restored
+    into the in-memory _missions dict on startup, preserving autopilot."""
+    from tui_pilot import db, orchestrator_server as osrv
+
+    mid = "reload-test-m"
+    db.execute(
+        "INSERT OR IGNORE INTO missions (id, project_id, autopilot, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (mid, None, 1, "active", osrv._now()),
+    )
+    # Confirm it is NOT in the in-memory dict yet (autouse fixture cleared it).
+    assert mid not in osrv._missions
+
+    osrv.reload_missions()
+
+    assert mid in osrv._missions
+    assert osrv._missions[mid]["autopilot"] is True
+    assert osrv._missions[mid]["activity"] == []
+    listed = client.get("/missions").json()["missions"]
+    assert any(m["mission"] == mid and m["autopilot"] for m in listed)
+
+
 def test_worker_finish_is_forwarded_to_orchestrator(client, tmp_path):
     """When a worker finishes, its parent orchestrator must be told (once) so it
     isn't left idle, unaware the work is done."""

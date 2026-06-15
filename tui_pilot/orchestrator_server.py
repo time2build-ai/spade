@@ -80,6 +80,27 @@ def _mission(mission: str | None) -> dict | None:
     return rec
 
 
+def reload_missions() -> None:
+    """Repopulate the in-memory ``_missions`` dict from the ``missions`` table.
+
+    Called once at startup (right after the session reconcile) so a reattached
+    worker's mission — and its persisted ``autopilot`` flag — are live in
+    ``GET /missions`` immediately, instead of only after the mission is next
+    referenced (which would silently degrade a persisted autopilot=1 to
+    supervised). The DB read is done OUTSIDE ``_state_lock``; the lock is then
+    taken only to merge, and an existing in-memory entry (with its accumulated
+    activity tail) is never clobbered."""
+    rows = db.query("SELECT id, autopilot FROM missions")
+    with _state_lock:
+        for row in rows:
+            if row["id"] in _missions:
+                continue
+            _missions[row["id"]] = {
+                "autopilot": bool(row["autopilot"]),
+                "activity": [],
+            }
+
+
 def _policy_for(mission: str | None) -> Policy:
     """Executor policy for a mission. Default supervised+sonnet ceiling when the
     mission is unknown (so an out-of-band signal is still policed). The ceiling
