@@ -52,3 +52,14 @@ CREATE TABLE IF NOT EXISTS task_nodes (
   PRIMARY KEY(task_id, node_id),
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS brain_nodes (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, type TEXT NOT NULL,
+  label TEXT NOT NULL, detail TEXT, x REAL, y REAL, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS brain_edges (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+  from_id TEXT NOT NULL, to_id TEXT NOT NULL, rel TEXT,
+  FOREIGN KEY(from_id) REFERENCES brain_nodes(id) ON DELETE CASCADE,
+  FOREIGN KEY(to_id) REFERENCES brain_nodes(id) ON DELETE CASCADE
+);
