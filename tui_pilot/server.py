@@ -24,6 +24,7 @@ import os
 import threading
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -32,7 +33,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import roles_seed
+from . import accounts, projects, roles_seed, sessions_store
 from .comms import Hub
 from .controller import Controller
 from .harness import HarnessPoller
@@ -199,6 +200,8 @@ class SpawnRequest(BaseModel):
     parent: str | None = Field(None, description="id of the agent that spawned this worker")
     reason: str | None = Field(None, description="why this worker was spawned")
     is_orchestrator: bool = Field(False, description="this session is the orchestrator")
+    account_id: str | None = Field(None, description="explicit account (CLAUDE_CONFIG_DIR) to use")
+    project_id: str | None = Field(None, description="project whose account pool to draw from")
     cols: int = Field(200, ge=20, le=500)
     rows: int = Field(50, ge=10, le=200)
 
@@ -433,6 +436,21 @@ def _make_handoff(*, predecessor_aid: str, name_hint: str, cwd: str | None):
     return _handoff
 
 
+def _resolve_account(account_id: str | None, project_id: str | None) -> dict | None:
+    """Pick the account a spawn should use.
+
+    Precedence: an explicit ``account_id`` wins; else a ``project_id`` advances
+    that project's round-robin pool (falling back to the default if the pool is
+    empty); else the global default. May return None when no accounts exist.
+    """
+    if account_id:
+        return accounts.get(account_id)
+    if project_id:
+        aid = projects.next_account(project_id)
+        return accounts.get(aid) if aid else accounts.default_account()
+    return accounts.default_account()
+
+
 def _spawn_agent(
     *,
     name: str,
@@ -450,6 +468,8 @@ def _spawn_agent(
     parent: str | None = None,
     reason: str | None = None,
     is_orchestrator: bool = False,
+    account_id: str | None = None,
+    project_id: str | None = None,
 ) -> dict:
     """Spawn a (optionally role-based) agent session and return its info.
 
@@ -498,7 +518,17 @@ def _spawn_agent(
         eff_cwd = str(Path.home() / ".tui-pilot" / "workspaces" / aid)
         os.makedirs(eff_cwd, exist_ok=True)
 
-    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd)
+    # Resolve which account (CLAUDE_CONFIG_DIR) this session runs under BEFORE
+    # spawning, so we can inject the config dir and guard against an account that
+    # isn't logged in. The round-robin advance happens here too (atomic in the DB).
+    acct = _resolve_account(account_id, project_id)
+    if acct and accounts.auth_status(acct["config_dir"]) == "not_logged_in":
+        raise HTTPException(
+            status_code=400, detail=f"account {acct['id']} is not logged in"
+        )
+    env = {"CLAUDE_CONFIG_DIR": acct["config_dir"]} if acct else {}
+
+    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd, env=env)
     try:
         sess.spawn()
     except SessionError as exc:
@@ -542,7 +572,32 @@ def _spawn_agent(
             "parent": parent,
             "reason": reason,
             "is_orchestrator": is_orchestrator,
+            "account_id": acct and acct["id"],
+            "project_id": project_id,
         }
+        # Persist the session row (best-effort: a DB hiccup must not abort the
+        # in-memory spawn, which is the live source of truth). Inside the same
+        # registry-lock block so the in-memory + persisted records are atomic.
+        try:
+            sessions_store.insert(
+                id=aid,
+                project_id=project_id,
+                account_id=(acct and acct["id"]),
+                name=name,
+                role=role,
+                model=model,
+                mode=eff_mode,
+                cwd=eff_cwd,
+                mission_id=mission,
+                parent=parent,
+                reason=reason,
+                is_orchestrator=1 if is_orchestrator else 0,
+                sort_order=_order,
+                status="live",
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
         _pollers[aid] = HarnessPoller(
             aid, sess, hub, cwd=eff_cwd,
             on_handoff=_make_handoff(predecessor_aid=aid, name_hint=name, cwd=eff_cwd),
@@ -589,6 +644,8 @@ def create_session(req: SpawnRequest) -> dict:
         parent=req.parent,
         reason=req.reason,
         is_orchestrator=req.is_orchestrator,
+        account_id=req.account_id,
+        project_id=req.project_id,
     )
 
 

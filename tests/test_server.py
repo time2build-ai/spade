@@ -90,3 +90,34 @@ def test_index_and_ui_routes(client):
     assert client.get("/").status_code == 200
     # the static UI is mounted
     assert client.get("/ui/").status_code in (200, 307, 308)
+
+
+# ---- account resolution at spawn -----------------------------------------
+
+
+def test_resolve_account_prefers_explicit_then_project_then_default():
+    from tui_pilot import accounts, projects, server
+
+    accounts.create(id="t2b", label="T2B", config_dir="/t2b")
+    accounts.create(id="inf", label="Inf", config_dir="/inf")
+    accounts.set_default("t2b")
+    projects.create(id="p", name="P", path="/w", account_strategy="round_robin")
+    projects.set_pool("p", ["inf"])
+    assert server._resolve_account(account_id="t2b", project_id="p")["id"] == "t2b"
+    assert server._resolve_account(account_id=None, project_id="p")["id"] == "inf"
+    assert server._resolve_account(account_id=None, project_id=None)["id"] == "t2b"
+
+
+def test_resolve_account_empty_pool_falls_back_to_default():
+    from tui_pilot import accounts, projects, server
+
+    accounts.create(id="t2b", label="T2B", config_dir="/t2b")
+    accounts.set_default("t2b")
+    projects.create(id="p", name="P", path="/w")
+    assert server._resolve_account(account_id=None, project_id="p")["id"] == "t2b"
+
+
+def test_resolve_account_none_when_no_accounts():
+    from tui_pilot import server
+
+    assert server._resolve_account(account_id=None, project_id=None) is None
