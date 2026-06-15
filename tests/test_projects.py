@@ -1,4 +1,4 @@
-from tui_pilot import projects, accounts
+from tui_pilot import projects, accounts, db
 
 
 def _mk_accounts():
@@ -32,9 +32,28 @@ def test_single_strategy_always_first():
     assert [projects.next_account("s") for _ in range(2)] == ["t2b", "t2b"]
 
 
-def test_next_account_skips_orphans_and_empty_pool_returns_none():
+def test_next_account_empty_pool_returns_none():
     projects.create(id="e", name="E", path="/w")
     assert projects.next_account("e") is None
+
+
+def test_next_account_skips_deleted_account():
+    _mk_accounts()
+    projects.create(id="acme", name="Acme", path="/w", account_strategy="round_robin")
+    projects.set_pool("acme", ["t2b", "inf"])
+    # Delete one account directly; FK cascade removes its project_accounts row.
+    db.execute("DELETE FROM accounts WHERE id = ?", ("inf",))
+    picks = [projects.next_account("acme") for _ in range(3)]
+    assert picks == ["t2b", "t2b", "t2b"]
+    assert "inf" not in picks
+
+
+def test_update_multiple_fields_atomic():
+    projects.create(id="acme", name="Acme", path="/w")
+    projects.update("acme", name="Acme Corp", model_ceiling="opus")
+    p = projects.get("acme")
+    assert p["name"] == "Acme Corp"
+    assert p["model_ceiling"] == "opus"
 
 
 def test_current_project_get_set():

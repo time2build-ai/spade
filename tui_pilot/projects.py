@@ -56,12 +56,16 @@ def list_all() -> list[dict]:
 
 
 def update(id: str, **fields) -> None:
-    """Update whitelisted columns on a project."""
+    """Update whitelisted columns on a project in a single atomic statement."""
     bad = set(fields) - _WRITABLE_COLS
     if bad:
-        raise ValueError(f"Non-writable fields: {bad}")
-    for col, val in fields.items():
-        db.execute(f"UPDATE projects SET {col} = ? WHERE id = ?", (val, id))
+        raise ValueError(f"non-writable columns: {sorted(bad)}")
+    if not fields:
+        return
+    set_clause = ", ".join(f"{col} = ?" for col in fields)
+    params = tuple(fields.values()) + (id,)
+    with db.tx() as cx:
+        cx.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", params)
 
 
 def delete(id: str) -> None:
@@ -106,6 +110,10 @@ def next_account(project_id: str) -> str | None:
     equivalent-or-stronger guard — two concurrent spawns are guaranteed to
     receive distinct accounts without any additional in-process locking.
     Do NOT "fix" this to use a registry lock.
+
+    Note: `account_strategy` is not read here. A `single`-strategy project
+    relies on its pool having exactly one entry (the pool-editing layer
+    enforces that); the cycling logic is identical either way.
     """
     with db.tx() as cx:
         # Fetch pool, filtering out accounts that no longer exist.
