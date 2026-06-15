@@ -2107,7 +2107,8 @@ async function renderHome() {
   await pollSessions();
   // ensure the orchestrator exists and make it the default focus.
   await focusOrchestrator();
-  // Show home dashboard on load
-  renderHome();
+  // Show home dashboard on load (switchView normalizes display so no other
+  // view — e.g. the Fleet workspace — leaks through underneath).
+  switchView("home");
 })();
 log("ready — chat with 🧠 Orchestrator, or use Advanced to spawn manually.");
