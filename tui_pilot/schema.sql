@@ -41,3 +41,14 @@ CREATE TABLE IF NOT EXISTS app_state (
   id INTEGER PRIMARY KEY CHECK (id = 1), current_project_id TEXT
 );
 INSERT OR IGNORE INTO app_state (id, current_project_id) VALUES (1, NULL);
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL,
+  feature TEXT, priority INTEGER DEFAULT 2, status TEXT DEFAULT 'ready',
+  origin_quote TEXT, origin_source TEXT, description TEXT, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS task_nodes (
+  task_id TEXT NOT NULL, node_id TEXT NOT NULL,
+  PRIMARY KEY(task_id, node_id),
+  FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
