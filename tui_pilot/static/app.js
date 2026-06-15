@@ -110,6 +110,7 @@ function switchView(name) {
   if (name === "accounts") { loadAccounts().then(renderAccountsPage); }
   if (name === "projects") renderProjectsPage();
   if (name === "agents") renderRolesPage();
+  if (name === "backlog") renderBacklog();
 }
 
 document.querySelectorAll(".rail-btn").forEach((b) => {
@@ -1435,6 +1436,152 @@ $("btnNewRole").onclick = () => {
   renderRolesPage();
   $("roleEditor").innerHTML = buildRoleEditorHtml(null);
   wireRoleEditor(null);
+};
+
+// ---- backlog kanban -------------------------------------------------------
+
+const BACKLOG_COLS = [
+  { id: "ready",       label: "Ready",       color: "#8b949e" },
+  { id: "in_progress", label: "In Progress", color: "#58a6ff" },
+  { id: "review",      label: "Review",      color: "#bc8cff" },
+  { id: "shipped",     label: "Shipped",     color: "#3fb950" },
+];
+const PRIORITY_COLORS = ["#f85149", "#d29922", "#58a6ff", "#8b949e"];
+const PRIORITY_LABELS = ["P0", "P1", "P2", "P3"];
+
+let backlogTasks = [];
+let selectedTaskId = null;
+
+async function renderBacklog() {
+  if (!currentProjectId) {
+    $("backlogKanban").innerHTML = `<div class="dim" style="padding:16px">Select a project first.</div>`;
+    return;
+  }
+  try {
+    const r = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+    backlogTasks = r.tasks || [];
+  } catch (e) {
+    $("backlogKanban").innerHTML = `<div class="dim" style="padding:16px">Error loading tasks.</div>`;
+    return;
+  }
+  renderKanban();
+}
+
+function renderKanban() {
+  const board = $("backlogKanban");
+  board.innerHTML = "";
+  for (const col of BACKLOG_COLS) {
+    const items = backlogTasks.filter(t => t.status === col.id);
+    const colEl = document.createElement("div");
+    colEl.className = "bk-col";
+    colEl.innerHTML = `
+      <div class="bk-col-head">
+        <span class="bk-col-dot" style="background:${col.color}"></span>
+        <span class="bk-col-label">${esc(col.label)}</span>
+        <span class="bk-col-count">${items.length}</span>
+      </div>
+      <div class="bk-col-body" id="bk-col-${col.id}">
+        ${items.length === 0 ? '<div class="dim" style="font-size:12px;padding:8px">—</div>' : ""}
+      </div>`;
+    board.appendChild(colEl);
+    const body = colEl.querySelector(`#bk-col-${col.id}`);
+    for (const t of items) {
+      body.appendChild(makeTaskCard(t));
+    }
+  }
+}
+
+function makeTaskCard(t) {
+  const pIdx = Math.min(Math.max(t.priority || 2, 0), 3);
+  const pColor = PRIORITY_COLORS[pIdx];
+  const pLabel = PRIORITY_LABELS[pIdx];
+  const card = document.createElement("div");
+  card.className = "bk-task-card";
+  card.innerHTML = `
+    <div class="bk-tc-head">
+      <span class="bk-priority-dot" style="background:${pColor}" title="${pLabel}"></span>
+      <span class="bk-tc-id">${esc(t.id)}</span>
+      ${t.feature ? `<span class="bk-feature-chip">${esc(t.feature)}</span>` : ""}
+    </div>
+    <div class="bk-tc-title">${esc(t.title)}</div>`;
+  card.onclick = () => openTaskDetail(t.id);
+  return card;
+}
+
+async function openTaskDetail(taskId) {
+  selectedTaskId = taskId;
+  try {
+    const t = await api("GET", `/tasks/${encodeURIComponent(taskId)}`);
+    const panel = $("taskDetailPanel");
+    $("tdpId").textContent = t.id;
+    $("tdpTitle").textContent = t.title;
+    const pIdx = Math.min(Math.max(t.priority || 2, 0), 3);
+    $("tdpFeature").textContent = t.feature ? `Feature: ${t.feature}` : "";
+    $("tdpStatus").textContent = `Status: ${t.status}`;
+    $("tdpOrigin").textContent = t.origin_quote
+      ? `"${t.origin_quote}"${t.origin_source ? ` — ${t.origin_source}` : ""}`
+      : "—";
+    $("tdpDescription").textContent = t.description || "—";
+    // Node chips
+    const nodesEl = $("tdpNodes");
+    nodesEl.innerHTML = "";
+    if (t.nodes && t.nodes.length) {
+      for (const nid of t.nodes) {
+        const chip = document.createElement("span");
+        chip.className = "bk-node-chip";
+        chip.textContent = nid;
+        nodesEl.appendChild(chip);
+      }
+    } else {
+      nodesEl.textContent = "None";
+    }
+    // Move buttons
+    const moveBtns = $("tdpMoveButtons");
+    moveBtns.innerHTML = "";
+    for (const col of BACKLOG_COLS) {
+      if (col.id === t.status) continue;
+      const btn = document.createElement("button");
+      btn.className = "tiny";
+      btn.textContent = col.label;
+      btn.style.borderColor = col.color;
+      btn.onclick = async () => {
+        try {
+          await api("POST", `/tasks/${encodeURIComponent(t.id)}/move`, { status: col.id });
+          await renderBacklog();
+          openTaskDetail(t.id);
+        } catch (ex) { log(`move task: ${ex.message}`, "err"); }
+      };
+      moveBtns.appendChild(btn);
+    }
+    panel.style.display = "";
+  } catch (ex) {
+    log(`task detail: ${ex.message}`, "err");
+  }
+}
+
+$("btnCloseDetail").onclick = () => { $("taskDetailPanel").style.display = "none"; };
+
+$("btnAddTask").onclick = () => {
+  const form = $("addTaskForm");
+  form.style.display = form.style.display === "none" ? "" : "none";
+};
+
+$("btnTaskCancel").onclick = () => { $("addTaskForm").style.display = "none"; };
+
+$("btnTaskSubmit").onclick = async () => {
+  if (!currentProjectId) { log("No project selected", "err"); return; }
+  const title = $("taskTitle").value.trim();
+  if (!title) { log("Title is required", "err"); return; }
+  const feature = $("taskFeature").value.trim() || null;
+  const priority = parseInt($("taskPriority").value, 10);
+  try {
+    await api("POST", "/tasks", { project_id: currentProjectId, title, feature, priority });
+    $("taskTitle").value = "";
+    $("taskFeature").value = "";
+    $("taskPriority").value = "2";
+    $("addTaskForm").style.display = "none";
+    await renderBacklog();
+  } catch (ex) { log(`add task: ${ex.message}`, "err"); }
 };
 
 // ---- init -----------------------------------------------------------------

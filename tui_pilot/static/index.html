@@ -39,6 +39,7 @@
     <button class="rail-btn" data-view="projects" title="Projects">📦</button>
     <button class="rail-btn" data-view="accounts" title="Accounts">🔑</button>
     <button class="rail-btn" data-view="agents" title="Agents">🤖</button>
+    <button class="rail-btn" data-view="backlog" title="Backlog">📋</button>
     <button class="rail-btn rail-bottom" data-view="settings" title="Settings">⚙️</button>
   </nav>
 
@@ -227,6 +228,57 @@ message.</pre>
         </div>
         <div class="page-main" id="roleEditor">
           <div class="page-empty">Select a role or create a new one.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BACKLOG VIEW -->
+    <div id="view-backlog" class="view" style="display:none">
+      <div class="backlog-page">
+        <div class="backlog-header">
+          <span class="backlog-title">Backlog</span>
+          <button id="btnAddTask" class="tiny primary-outline">+ Task</button>
+        </div>
+        <div id="addTaskForm" class="add-task-form" style="display:none">
+          <input type="text" id="taskTitle" placeholder="Title" />
+          <input type="text" id="taskFeature" placeholder="Feature (optional)" />
+          <select id="taskPriority">
+            <option value="0">P0 · Critical</option>
+            <option value="1">P1 · High</option>
+            <option value="2" selected>P2 · Medium</option>
+            <option value="3">P3 · Low</option>
+          </select>
+          <button id="btnTaskSubmit" class="tiny primary">Add</button>
+          <button id="btnTaskCancel" class="tiny">Cancel</button>
+        </div>
+        <div class="backlog-kanban" id="backlogKanban"></div>
+        <!-- Task detail panel -->
+        <div id="taskDetailPanel" class="task-detail-panel" style="display:none">
+          <div class="tdp-head">
+            <span id="tdpId" class="tdp-id"></span>
+            <button id="btnCloseDetail" class="tiny">✕</button>
+          </div>
+          <h3 id="tdpTitle"></h3>
+          <div class="tdp-meta">
+            <span id="tdpFeature"></span>
+            <span id="tdpStatus"></span>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Origin</div>
+            <div id="tdpOrigin" class="tdp-origin"></div>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Description</div>
+            <div id="tdpDescription" class="tdp-text"></div>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Grounded nodes</div>
+            <div id="tdpNodes" class="tdp-chips"></div>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Move to</div>
+            <div id="tdpMoveButtons" class="tdp-move-btns"></div>
+          </div>
         </div>
       </div>
     </div>
