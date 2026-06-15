@@ -650,3 +650,7 @@ small { color: var(--muted); font-size: 11px; }
 }
 .home-empty { padding: 12px 10px; font-size: 13px; color: var(--muted); }
 .home-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+/* Settings */
+.setting-row { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--border, #30363d); border-radius: 10px; background: rgba(255,255,255,.02); cursor: pointer; }
+.setting-row input[type=checkbox] { margin-top: 3px; width: 16px; height: 16px; flex: 0 0 auto; }

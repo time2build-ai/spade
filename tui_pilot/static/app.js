@@ -115,6 +115,35 @@ function switchView(name) {
   if (name === "backlog") renderBacklog();
   if (name === "brain") renderBrain();
   if (name === "pipelines") renderPipelines();
+  if (name === "settings") renderSettings();
+}
+
+async function renderSettings() {
+  const el = $("settingsBody");
+  if (!el) return;
+  let s = { force_bypass: true };
+  try { s = await api("GET", "/settings"); } catch (e) { /* ignore */ }
+  el.innerHTML = `
+    <label class="setting-row">
+      <input type="checkbox" id="setForceBypass" ${s.force_bypass ? "checked" : ""}/>
+      <span>
+        <b>Full permissions for all agents</b>
+        <span class="dim" style="display:block;font-size:12px;margin-top:2px">
+          Every spawned agent (orchestrator, pipeline stages, workers) launches in
+          bypass mode (<code>--dangerously-skip-permissions</code>) and runs
+          unattended — no "Do you want to proceed?" prompts. ⚠ Agents can run any
+          command without asking. Use trusted/sandboxed working dirs.
+        </span>
+      </span>
+    </label>
+    <p class="dim" style="font-size:12px;margin-top:10px">Applies to newly spawned agents.</p>`;
+  const cb = $("setForceBypass");
+  if (cb) cb.onchange = async () => {
+    try {
+      await api("PUT", "/settings", { force_bypass: cb.checked }, "settings");
+      log(`full permissions ${cb.checked ? "ON" : "OFF"}`, "ok");
+    } catch (e) { log(`settings: ${e.message}`, "err"); cb.checked = !cb.checked; }
+  };
 }
 
 document.querySelectorAll(".rail-btn").forEach((b) => {

@@ -75,3 +75,8 @@ CREATE TABLE IF NOT EXISTS pipeline_stages (
   session_id TEXT, account_id TEXT, created_at TEXT,
   FOREIGN KEY(pipeline_run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
 );
+
+-- Simple key/value app settings (string values; booleans stored as '0'/'1').
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY, value TEXT
+);

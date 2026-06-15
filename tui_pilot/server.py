@@ -43,7 +43,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import accounts, projects, roles_seed, sessions_store
+from . import accounts, projects, roles_seed, sessions_store, settings
 from .comms import Hub
 from .controller import Controller
 from .harness import HarnessPoller
@@ -587,6 +587,14 @@ def _spawn_agent(
 
     eff_cmd = cmd or (role_def.get("cmd") if role_def else None) or "claude"
     eff_mode = mode or (role_def.get("mode") if role_def else None) or "normal"
+
+    # Global "full permissions" setting: when on, EVERY spawned claude agent
+    # launches in bypass mode (--dangerously-skip-permissions) so it runs fully
+    # unattended without permission prompts. Toggle in Settings. Guarded to claude
+    # commands — the flag is claude-specific (a custom cmd like `cat` must not get
+    # it).
+    if settings.force_bypass() and "claude" in (eff_cmd or ""):
+        eff_mode = "bypass"
 
     # Permission mode is set at LAUNCH (no flaky post-boot Shift-Tab cycling):
     # bypass keeps the explicit danger flag; the others map to --permission-mode.

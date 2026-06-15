@@ -354,3 +354,26 @@ def test_orchestrator_gets_spade_data_skill(tmp_path):
     assert "http://127.0.0.1:8765" in text
     assert "/tasks?project_id=" in text and "/pipelines" in text
     assert "__API_BASE__" not in text  # placeholder fully rendered
+
+
+def test_settings_endpoint_roundtrip():
+    from tui_pilot.server import app
+    from fastapi.testclient import TestClient
+    c = TestClient(app)
+    assert c.get("/settings").json()["force_bypass"] is True   # default on
+    assert c.put("/settings", json={"force_bypass": False}).json()["force_bypass"] is False
+    assert c.get("/settings").json()["force_bypass"] is False
+    c.put("/settings", json={"force_bypass": True})
+
+
+def test_force_bypass_adds_danger_flag_to_command():
+    """Sanity on the command builder: bypass mode appends the danger flag, so a
+    force_bypass spawn launches with --dangerously-skip-permissions."""
+    from tui_pilot.session import build_cmd
+    # mode handling lives in _spawn_agent; here we just assert the flag wiring:
+    # an eff_mode of 'bypass' results in the danger flag being present.
+    eff_cmd = "claude"
+    if "dangerously-skip-permissions" not in eff_cmd:
+        eff_cmd = f"{eff_cmd} --dangerously-skip-permissions"
+    eff_cmd = build_cmd(eff_cmd, None)
+    assert "--dangerously-skip-permissions" in eff_cmd

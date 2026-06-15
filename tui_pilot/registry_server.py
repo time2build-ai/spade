@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import accounts, db, projects
+from . import accounts, db, projects, settings
 from .identity import new_agent_id
 from .session import TmuxSession
 
@@ -306,6 +306,25 @@ def set_current_project(req: CurrentProjectRequest) -> dict:
         raise HTTPException(404, f"no project {req.project_id!r}")
     projects.set_current_project(req.project_id)
     return {"project_id": projects.current_project_id()}
+
+
+# ---- settings -------------------------------------------------------------
+
+
+class SettingsPatch(BaseModel):
+    force_bypass: bool | None = None
+
+
+@router.get("/settings")
+def get_settings() -> dict:
+    return settings.all_settings()
+
+
+@router.put("/settings")
+def update_settings(req: SettingsPatch) -> dict:
+    if req.force_bypass is not None:
+        settings.set_bool("force_bypass", req.force_bypass)
+    return settings.all_settings()
 
 
 # ---- roles ----------------------------------------------------------------
