@@ -17,6 +17,14 @@ def _reset_orch_state():
     orchestrator_server._missions.clear()
     orchestrator_server._brakes.clear()
 
+def test_policy_reads_current_project_ceiling_and_autopilot():
+    from tui_pilot import projects, orchestrator_server as osrv
+    projects.create(id="p", name="P", path="/w", model_ceiling="opus", autopilot=1)
+    projects.set_current_project("p")
+    pol = osrv._policy_for(mission=None)
+    assert pol.ceiling == "opus" and pol.autopilot is True
+
+
 def test_spawn_records_model_mission_parent_reason(client, tmp_path):
     r = client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
         "model":"sonnet","mission":"m1","parent":"orch-1","reason":"standard markup"})

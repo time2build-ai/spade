@@ -29,6 +29,7 @@ import threading
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from . import projects
 from .orchestration import (
     OrchestrationExecutor,
     Policy,
@@ -57,11 +58,18 @@ def _mission(mission: str | None) -> dict | None:
 
 def _policy_for(mission: str | None) -> Policy:
     """Executor policy for a mission. Default supervised+sonnet ceiling when the
-    mission is unknown (so an out-of-band signal is still policed)."""
+    mission is unknown (so an out-of-band signal is still policed). The ceiling
+    and a baseline autopilot come from the current project (default supervised +
+    sonnet when there is no current project); a mission with autopilot on still
+    yields autopilot True."""
+    pid = projects.current_project_id()
+    project = projects.get(pid) if pid else None
+    ceiling = (project["model_ceiling"] if project else None) or "sonnet"
+    project_autopilot = bool(project and project.get("autopilot"))
     with _state_lock:
         rec = _missions.get(mission) if mission else None
-        autopilot = bool(rec and rec.get("autopilot"))
-    return Policy(ceiling="sonnet", autopilot=autopilot)
+        mission_autopilot = bool(rec and rec.get("autopilot"))
+    return Policy(ceiling=ceiling, autopilot=project_autopilot or mission_autopilot)
 
 
 def _narrate(mission: str | None, text: str) -> None:
