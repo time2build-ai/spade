@@ -64,11 +64,23 @@ def test_auth_status(tmp_path):
 
 def test_auth_status_claude_json_requires_oauth_account(tmp_path):
     # .claude.json can exist for config-only reasons; only treat as authed when
-    # it carries a real oauthAccount (or apiKey).
+    # it carries a real oauthAccount/apiKey AND a completed login.
     d = tmp_path / "acct2"; d.mkdir()
     (d / ".claude.json").write_text('{"foo": 1}')
     assert accounts.auth_status(str(d)) == "not_logged_in"
+    # oauthAccount metadata WITHOUT a completed login (the half-finished login
+    # case) is still not usable — Claude re-prompts the login menu.
     (d / ".claude.json").write_text('{"oauthAccount": {"emailAddress": "x@y.z"}}')
+    assert accounts.auth_status(str(d)) == "not_logged_in"
+    # oauthAccount + a completed login → authed.
+    (d / ".claude.json").write_text(
+        '{"oauthAccount": {"emailAddress": "x@y.z"}, "hasCompletedOnboarding": true}'
+    )
+    assert accounts.auth_status(str(d)) == "authed"
+    # …or evidence of prior successful starts.
+    (d / ".claude.json").write_text(
+        '{"oauthAccount": {"emailAddress": "x@y.z"}, "numStartups": 5}'
+    )
     assert accounts.auth_status(str(d)) == "authed"
 
 

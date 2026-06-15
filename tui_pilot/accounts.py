@@ -107,7 +107,14 @@ def auth_status(config_dir: str) -> str:
         object (dict with >=1 key) or a non-empty array — i.e. not {}/null/[]
         /empty-string/parse-error;
       * `.claude.json` as authed only when it is a JSON object with a non-empty
-        `oauthAccount` or `apiKey`.
+        `oauthAccount`/`apiKey` AND a *completed* login (`hasCompletedOnboarding`
+        is True, or `numStartups` > 0). `oauthAccount` metadata is written early
+        in the login flow, so a half-finished login (interrupted before
+        onboarding completes) has the metadata but still drops the agent at
+        Claude's "Select login method" screen — that must read as not_logged_in.
+        The real OAuth token lives in the macOS Keychain
+        (`Claude Code-credentials[-<sha256(config_dir)[:8]>]`), not the dir, so
+        the completed-onboarding flag is our best dir-only signal.
     Any parse error / missing file → not_logged_in.
     """
     d = Path(config_dir)
@@ -120,7 +127,11 @@ def auth_status(config_dir: str) -> str:
 
     data = _load_json(d / ".claude.json")
     if isinstance(data, dict) and (data.get("oauthAccount") or data.get("apiKey")):
-        return "authed"
+        completed = data.get("hasCompletedOnboarding") is True or (
+            isinstance(data.get("numStartups"), int) and data["numStartups"] > 0
+        )
+        if completed:
+            return "authed"
     return "not_logged_in"
 
 
