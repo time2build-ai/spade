@@ -112,3 +112,53 @@ def test_grounding_round_trip():
     node_map = {n["id"]: n["label"] for n in nodes_resp}
     assert node_map[n1_id] == "Checkout"
     assert node_map[n2_id] == "ADR-1"
+
+
+def test_pipeline_endpoints_manual_advance_to_shipped(monkeypatch):
+    from tui_pilot.server import app
+    from tui_pilot import server, projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+
+    spawned = []
+
+    def fake_spawn_agent(**kw):
+        spawned.append(kw)
+        return {"id": f"fakesess{len(spawned)}", "account_id": "a"}
+
+    monkeypatch.setattr(server, "_spawn_agent", fake_spawn_agent)
+
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Build X"}).json()["id"]
+
+    # create pipeline
+    run = c.post("/pipelines", json={"project_id": "acme", "task_id": tid}).json()
+    rid = run["id"]
+    assert [s["role"] for s in run["stages"]] == ["developer", "reviewer", "integrator", "documentor"]
+
+    # list + get
+    assert c.get("/pipelines?project_id=acme").json()["pipelines"][0]["id"] == rid
+    assert c.get(f"/pipelines/{rid}").json()["id"] == rid
+
+    # start stage 0
+    started = c.post(f"/pipelines/{rid}/start").json()
+    assert started["status"] == "running"
+    assert started["stages"][0]["state"] == "running"
+    assert started["stages"][0]["session_id"] == "fakesess1"
+
+    # advance through all 4 stages
+    for i in range(4):
+        c.post(f"/pipelines/{rid}/advance", json={"report": f"r{i}"})
+
+    final = c.get(f"/pipelines/{rid}").json()
+    assert final["status"] == "shipped"
+    assert [s["state"] for s in final["stages"]] == ["done"] * 4
+    assert c.get(f"/tasks/{tid}").json()["status"] == "shipped"
+
+
+def test_pipeline_create_404_for_missing_task():
+    from tui_pilot.server import app
+    from tui_pilot import projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+    assert c.post("/pipelines", json={"project_id": "acme", "task_id": "SPD-999"}).status_code == 404
+    assert c.post("/pipelines", json={"project_id": "nope", "task_id": "SPD-1"}).status_code == 404
