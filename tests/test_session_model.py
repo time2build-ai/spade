@@ -9,36 +9,39 @@ def _make_session(**kwargs) -> TmuxSession:
 
 
 def test_spawn_injects_env_flags():
-    """When env={'CLAUDE_CONFIG_DIR': '/cfg'}, spawn must pass -e CLAUDE_CONFIG_DIR=/cfg."""
+    """When env={'CLAUDE_CONFIG_DIR': '/cfg'}, spawn must pass -e CLAUDE_CONFIG_DIR=/cfg
+    as an adjacent pair (the value immediately follows the -e flag)."""
     session = _make_session(env={"CLAUDE_CONFIG_DIR": "/cfg"})
-    captured_args = []
+    calls = []
 
     def fake_run(self, *args, **kwargs):
-        captured_args.extend(args)
+        calls.append(args)
         return MagicMock(returncode=0)
 
     with patch.object(TmuxSession, "_run", fake_run), \
          patch.object(TmuxSession, "is_alive", return_value=False):
         session.spawn()
 
-    assert "-e" in captured_args
-    assert "CLAUDE_CONFIG_DIR=/cfg" in captured_args
+    spawn_args = calls[0]
+    assert "-e" in spawn_args
+    e_idx = spawn_args.index("-e")
+    assert spawn_args[e_idx + 1] == "CLAUDE_CONFIG_DIR=/cfg"
 
 
 def test_spawn_no_env_no_e_flag():
     """A session with no env must spawn without any -e flag."""
     session = _make_session()
-    captured_args = []
+    calls = []
 
     def fake_run(self, *args, **kwargs):
-        captured_args.extend(args)
+        calls.append(args)
         return MagicMock(returncode=0)
 
     with patch.object(TmuxSession, "_run", fake_run), \
          patch.object(TmuxSession, "is_alive", return_value=False):
         session.spawn()
 
-    assert "-e" not in captured_args
+    assert "-e" not in calls[0]
 
 
 def test_build_cmd_plain():

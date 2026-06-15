@@ -19,7 +19,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _row_to_dict(row) -> dict:
+def _row_to_dict(row) -> dict | None:
     return dict(row) if row is not None else None
 
 
@@ -54,10 +54,16 @@ def list_all() -> list[dict]:
 
 
 def set_default(id: str) -> None:
-    """Set account `id` as the sole default (clears all others first)."""
+    """Set account `id` as the sole default (clears all others first).
+
+    Raises ValueError if `id` does not exist; the transaction rolls back so a
+    previously-set default is never silently lost.
+    """
     with db.tx() as cx:
         cx.execute("UPDATE accounts SET is_default = 0")
-        cx.execute("UPDATE accounts SET is_default = 1 WHERE id = ?", (id,))
+        cur = cx.execute("UPDATE accounts SET is_default = 1 WHERE id = ?", (id,))
+        if cur.rowcount == 0:
+            raise ValueError(f"no account {id!r}")
 
 
 def default_account() -> dict | None:
@@ -94,27 +100,36 @@ def scan_importable() -> list[str]:
 def auth_status(config_dir: str) -> str:
     """Return 'authed' if the config dir holds real credentials, else 'not_logged_in'.
 
-    Content-aware (not mere file existence): a `.claude.json` can exist for
-    config-only reasons without the user being logged in. We treat:
-      * presence of `.credentials.json` as authed (some setups store creds there);
+    Content-aware (not mere file existence): both `.credentials.json` and
+    `.claude.json` can exist for config-only reasons without the user being
+    logged in. We treat:
+      * `.credentials.json` as authed only when it parses to a non-empty JSON
+        object (dict with >=1 key) or a non-empty array — i.e. not {}/null/[]
+        /empty-string/parse-error;
       * `.claude.json` as authed only when it is a JSON object with a non-empty
         `oauthAccount` or `apiKey`.
     Any parse error / missing file → not_logged_in.
     """
     d = Path(config_dir)
 
-    if (d / ".credentials.json").exists():
+    creds = _load_json(d / ".credentials.json")
+    if isinstance(creds, dict) and len(creds) > 0:
+        return "authed"
+    if isinstance(creds, list) and len(creds) > 0:
         return "authed"
 
-    claude_json = d / ".claude.json"
-    try:
-        data = json.loads(claude_json.read_text())
-    except (OSError, ValueError):
-        return "not_logged_in"
-
+    data = _load_json(d / ".claude.json")
     if isinstance(data, dict) and (data.get("oauthAccount") or data.get("apiKey")):
         return "authed"
     return "not_logged_in"
+
+
+def _load_json(path: Path):
+    """Parse a JSON file defensively; return None on any error / missing file."""
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
 
 
 # -- Managed creation & import ------------------------------------------------

@@ -23,6 +23,16 @@ def test_default_account_none_when_empty():
     assert accounts.default_account() is None
 
 
+def test_set_default_nonexistent_raises_and_preserves_default():
+    accounts.create(id="a", label="A", config_dir="/a")
+    accounts.set_default("a")
+    import pytest
+    with pytest.raises(ValueError):
+        accounts.set_default("nonexistent")
+    # The previously-set default must remain intact (transaction rolled back).
+    assert accounts.default_account()["id"] == "a"
+
+
 def test_scan_managed_lists_provider_dirs():
     base = accounts.provider_dir()  # = db.home()/agents/claude-code
     (base / "inforge").mkdir(parents=True)
@@ -38,12 +48,17 @@ def test_scan_importable_finds_dot_claude_dirs(monkeypatch, tmp_path):
     found = set(accounts.scan_importable())
     assert str(tmp_path / ".claude-t2b") in found
     assert str(tmp_path / ".claude-inforge") in found
+    assert str(tmp_path / ".claude") in found
 
 
 def test_auth_status(tmp_path):
     d = tmp_path / "acct"; d.mkdir()
     assert accounts.auth_status(str(d)) == "not_logged_in"
+    # An empty {} credentials file is NOT proof of login (false positive).
     (d / ".credentials.json").write_text("{}")
+    assert accounts.auth_status(str(d)) == "not_logged_in"
+    # A real credentials payload counts as authed.
+    (d / ".credentials.json").write_text('{"claudeAiOauth": {"accessToken": "x"}}')
     assert accounts.auth_status(str(d)) == "authed"
 
 
