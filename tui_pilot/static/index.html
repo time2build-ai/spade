@@ -35,21 +35,47 @@
 
   <!-- Nav rail -->
   <nav id="rail">
-    <button class="rail-btn active" data-view="fleet" title="Fleet">🚀</button>
-    <button class="rail-btn" data-view="projects" title="Projects">📦</button>
-    <button class="rail-btn" data-view="accounts" title="Accounts">🔑</button>
-    <button class="rail-btn" data-view="agents" title="Agents">🤖</button>
+    <button class="rail-btn active" data-view="home" title="Home">🏠</button>
     <button class="rail-btn" data-view="backlog" title="Backlog">📋</button>
     <button class="rail-btn" data-view="brain" title="Brain">🧠</button>
     <button class="rail-btn" data-view="pipelines" title="Pipelines">🛠️</button>
+    <button class="rail-btn" data-view="fleet" title="Fleet">🚀</button>
+    <button class="rail-btn" data-view="projects" title="Projects">📦</button>
+    <button class="rail-btn" data-view="accounts" title="Accounts">🔑</button>
+    <button class="rail-btn" data-view="agents" title="Agents">🤖</button>
     <button class="rail-btn rail-bottom" data-view="settings" title="Settings">⚙️</button>
   </nav>
 
   <!-- Views container -->
   <div id="views">
 
+    <!-- HOME VIEW -->
+    <div id="view-home" class="view active">
+      <div class="home-page">
+        <div class="home-header">
+          <h2 id="homeProjectName" class="home-title">Home</h2>
+          <span id="homeProjectHint" class="home-hint dim"></span>
+        </div>
+        <!-- KPI band -->
+        <div class="home-kpi-band" id="homeKpiBand"></div>
+        <!-- Two-column body -->
+        <div class="home-body">
+          <!-- Active pipelines -->
+          <div class="home-section">
+            <div class="home-section-head">Active Pipelines</div>
+            <div id="homeActivePipelines" class="home-section-body"></div>
+          </div>
+          <!-- Recent brain nodes -->
+          <div class="home-section">
+            <div class="home-section-head">Recent Brain Nodes</div>
+            <div id="homeRecentNodes" class="home-section-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- FLEET VIEW (existing workspace) -->
-    <div id="view-fleet" class="view active">
+    <div id="view-fleet" class="view">
       <main>
         <!-- LEFT: orchestrator + new agent + session list -->
         <aside class="sidebar">

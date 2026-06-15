@@ -96,7 +96,7 @@ function isWorking(s) {
 
 // ---- view switching -------------------------------------------------------
 
-let currentView = "fleet";
+let currentView = "home";
 
 function switchView(name) {
   currentView = name;
@@ -107,6 +107,7 @@ function switchView(name) {
     b.classList.toggle("active", b.dataset.view === name);
   });
   // Refresh pages when switching to them
+  if (name === "home") renderHome();
   if (name === "accounts") { loadAccounts().then(renderAccountsPage); }
   if (name === "projects") renderProjectsPage();
   if (name === "agents") renderRolesPage();
@@ -1975,6 +1976,127 @@ if (_btnRunPipeline) _btnRunPipeline.onclick = async () => {
   } catch (ex) { log(`run pipeline: ${ex.message}`, "err"); }
 };
 
+// ==========================================================================
+// HOME VIEW
+// ==========================================================================
+
+const HOME_STATUS_COLS = [
+  { id: "ready",       label: "Ready",       color: "#8b949e" },
+  { id: "in_progress", label: "In Progress", color: "#58a6ff" },
+  { id: "review",      label: "Review",      color: "#bc8cff" },
+  { id: "shipped",     label: "Shipped",     color: "#3fb950" },
+  { id: "blocked",     label: "Blocked",     color: "#f85149" },
+];
+
+async function renderHome() {
+  const proj = currentProjectId ? allProjects.find((p) => p.id === currentProjectId) : null;
+  const nameEl = $("homeProjectName");
+  const hintEl = $("homeProjectHint");
+  if (proj) {
+    nameEl.textContent = proj.name;
+    hintEl.textContent = "";
+  } else {
+    nameEl.textContent = "Home";
+    hintEl.textContent = "Pick or create a project to see your dashboard.";
+  }
+
+  // KPI band
+  const kpiBand = $("homeKpiBand");
+  kpiBand.innerHTML = "";
+  if (!currentProjectId) {
+    kpiBand.innerHTML = `<div class="home-empty">No project selected — use the project bar above to pick one.</div>`;
+  } else {
+    let tasks = [];
+    try {
+      const r = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+      tasks = r.tasks || [];
+    } catch (_) {}
+    const counts = {};
+    for (const col of HOME_STATUS_COLS) counts[col.id] = 0;
+    for (const t of tasks) { if (counts[t.status] !== undefined) counts[t.status]++; }
+    for (const col of HOME_STATUS_COLS) {
+      const card = document.createElement("div");
+      card.className = "home-kpi-card";
+      card.style.setProperty("--kpi-color", col.color);
+      card.innerHTML = `
+        <div class="home-kpi-value" style="color:${col.color}">${counts[col.id]}</div>
+        <div class="home-kpi-label">${esc(col.label)}</div>`;
+      card.onclick = () => switchView("backlog");
+      card.title = `Go to Backlog · ${col.label}`;
+      kpiBand.appendChild(card);
+    }
+    if (tasks.length === 0) {
+      const hint = document.createElement("div");
+      hint.className = "home-kpi-hint dim";
+      hint.textContent = "No tasks yet — open Backlog to add one.";
+      hint.onclick = () => switchView("backlog");
+      hint.style.cursor = "pointer";
+      kpiBand.appendChild(hint);
+    }
+  }
+
+  // Active pipelines
+  const plEl = $("homeActivePipelines");
+  plEl.innerHTML = "";
+  if (!currentProjectId) {
+    plEl.innerHTML = `<div class="home-empty">—</div>`;
+  } else {
+    let runs = [];
+    try {
+      const r = await api("GET", `/pipelines?project_id=${encodeURIComponent(currentProjectId)}`);
+      runs = (r.pipelines || []).filter((p) => p.status === "running");
+    } catch (_) {}
+    // resolve task titles
+    let taskMap = {};
+    try {
+      const tr = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+      taskMap = Object.fromEntries((tr.tasks || []).map((t) => [t.id, t]));
+    } catch (_) {}
+    if (!runs.length) {
+      plEl.innerHTML = `<div class="home-empty">No active pipelines — <span class="home-link" onclick="switchView('backlog')">open Backlog</span> to start one.</div>`;
+    } else {
+      for (const run of runs) {
+        const task = taskMap[run.task_id];
+        const runningStage = (run.stages || []).find((s) => s.state === "running");
+        const item = document.createElement("div");
+        item.className = "home-list-item home-list-item-clickable";
+        item.innerHTML = `
+          <span class="home-list-title">${task ? esc(task.title) : esc(run.task_id)}</span>
+          ${runningStage ? `<span class="home-stage-chip">${esc(runningStage.role)}</span>` : ""}`;
+        item.onclick = () => switchView("pipelines");
+        plEl.appendChild(item);
+      }
+    }
+  }
+
+  // Recent brain nodes
+  const nodesEl = $("homeRecentNodes");
+  nodesEl.innerHTML = "";
+  if (!currentProjectId) {
+    nodesEl.innerHTML = `<div class="home-empty">—</div>`;
+  } else {
+    let nodes = [];
+    try {
+      const r = await api("GET", `/brain/nodes?project_id=${encodeURIComponent(currentProjectId)}`);
+      nodes = (r.nodes || []).slice(-6).reverse();
+    } catch (_) {}
+    if (!nodes.length) {
+      nodesEl.innerHTML = `<div class="home-empty">No brain nodes yet — <span class="home-link" onclick="switchView('brain')">open Brain</span> to add one.</div>`;
+    } else {
+      for (const node of nodes) {
+        const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+        const item = document.createElement("div");
+        item.className = "home-list-item home-list-item-clickable";
+        item.innerHTML = `
+          <span class="home-list-title">${esc(node.label)}</span>
+          <span class="home-node-type-chip" style="border-color:${color};color:${color}">${esc(node.type)}</span>`;
+        item.onclick = () => switchView("brain");
+        nodesEl.appendChild(item);
+      }
+    }
+  }
+}
+
 // ---- init -----------------------------------------------------------------
 (async () => {
   await loadAccounts();
@@ -1985,5 +2107,7 @@ if (_btnRunPipeline) _btnRunPipeline.onclick = async () => {
   await pollSessions();
   // ensure the orchestrator exists and make it the default focus.
   await focusOrchestrator();
+  // Show home dashboard on load
+  renderHome();
 })();
 log("ready — chat with 🧠 Orchestrator, or use Advanced to spawn manually.");
