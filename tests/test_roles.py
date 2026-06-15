@@ -33,7 +33,25 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture()
 def client():
+    server.refresh_roles()
     return TestClient(server.app)
+
+
+def test_seed_roles_populates_db_from_yaml():
+    from tui_pilot import roles_seed, db
+
+    roles_seed.seed_if_empty()
+    ids = {r["id"] for r in db.query("SELECT id FROM roles")}
+    assert {"planner", "developer", "reviewer", "plain", "orchestrator"} <= ids
+
+
+def test_seed_is_idempotent():
+    from tui_pilot import roles_seed, db
+
+    roles_seed.seed_if_empty()
+    roles_seed.seed_if_empty()
+    n = db.query("SELECT count(*) c FROM roles")[0]["c"]
+    assert n == 5
 
 
 def test_roles_endpoint_lists_presets(client):

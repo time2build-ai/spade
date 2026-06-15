@@ -32,6 +32,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import roles_seed
 from .comms import Hub
 from .controller import Controller
 from .harness import HarnessPoller
@@ -71,14 +72,32 @@ _ROLES_PATH = Path(__file__).resolve().parent.parent / "roles.yaml"
 
 
 def load_roles() -> dict[str, dict]:
-    """Load agent-role presets from roles.yaml, keyed by id."""
+    """Load agent-role presets from roles.yaml, keyed by id (seed source only)."""
     if not _ROLES_PATH.exists():
         return {}
     data = yaml.safe_load(_ROLES_PATH.read_text()) or {}
     return {r["id"]: r for r in data.get("roles", [])}
 
 
-ROLES = load_roles()
+def refresh_roles() -> None:
+    """Reload ROLES from the DB (after a seed or a role edit)."""
+    global ROLES
+    ROLES = roles_seed.load_roles_from_db()
+
+
+def _ensure_roles() -> None:
+    """Seed the DB from YAML if empty and refresh the in-memory ROLES map.
+
+    Role-dependent paths call this so they work even under the per-test fixture
+    that hands each test a fresh, empty DB (ROLES is set once at import time and
+    would otherwise be stale/empty)."""
+    roles_seed.seed_if_empty()
+    refresh_roles()
+
+
+# Seed + load at import; role-dependent code paths re-ensure lazily.
+roles_seed.seed_if_empty()
+ROLES = roles_seed.load_roles_from_db()
 
 # In-memory registry. Guarded by a registry lock for structural changes; each
 # session has its own lock serialising *mutating* tmux operations. Read-only
@@ -365,6 +384,7 @@ def _prime(aid: str) -> None:
 @app.get("/roles")
 def list_roles() -> dict:
     """List the agent-role presets the UI can spawn."""
+    _ensure_roles()
     return {
         "roles": [
             {
@@ -439,6 +459,7 @@ def _spawn_agent(
     is responsible for 400ing unknown roles on direct API calls.
     """
     global _order
+    _ensure_roles()
     role_def = ROLES.get(role) if role else None
 
     eff_cmd = cmd or (role_def.get("cmd") if role_def else None) or "claude"
@@ -550,6 +571,7 @@ def create_session(req: SpawnRequest) -> dict:
     # Unknown-role 400 stays here (route-only) and OUTSIDE any lock; _spawn_agent
     # itself tolerates unknown roles (for the handoff path). It takes
     # _registry_lock internally, so do NOT wrap the call (non-reentrant lock).
+    _ensure_roles()
     if req.role and ROLES.get(req.role) is None:
         raise HTTPException(status_code=400, detail=f"unknown role {req.role!r}")
     return _spawn_agent(
