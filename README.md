@@ -335,6 +335,45 @@ This persistence + accounts/projects foundation is the basis for a broader
 product — see [`docs/spade-alignment.md`](docs/spade-alignment.md) for the
 roadmap it supports.
 
+## Spade MVP — product-work layer
+
+The `feat/spade-mvp` branch adds a product-management layer (the "Spade" product) on top of the agent-fleet foundation. All entities are stored in the same SQLite database and served from the same FastAPI server via a mounted router (`tui_pilot/spade_server.py`).
+
+### What's included
+
+| Feature | Description |
+|---|---|
+| **Tasks / Backlog** | SPD-id–keyed tasks (SPD-001, …) with status kanban (ready → in_progress → review → shipped / blocked), priority (P0–P3), feature grouping, origin quotes, and task–brain-node grounding. |
+| **Product Brain** | Typed knowledge graph: nodes (feature / decision / convention / feedback / bug / metric) + directed edges. Visualised as an SVG force layout; tasks can be grounded to nodes. |
+| **Pipelines** | 4-stage agent execution: Developer → Reviewer → Integrator → Documentor. Each stage runs a tmux `claude` agent on the project's account pool (round-robin). Stages auto-advance when the current agent emits a `finished` signal. |
+| **Home dashboard** | Default landing view: project KPI band (task counts by status), active pipeline list, recent brain nodes — all scoped to the current project. |
+
+### Spade endpoints
+
+| Method & path | Body / params | Does |
+|---|---|---|
+| `GET    /tasks` | `?project_id=` | list tasks for a project |
+| `POST   /tasks` | `{project_id, title, feature?, priority?, description?, origin_quote?, origin_source?}` | create a task (auto-assigns SPD-id) |
+| `GET    /tasks/{task_id}` | | get one task (includes grounded node ids) |
+| `PATCH  /tasks/{task_id}` | `{title?, feature?, priority?, description?, …}` | update task fields |
+| `DELETE /tasks/{task_id}` | | delete a task |
+| `POST   /tasks/{task_id}/move` | `{status}` | move task to a new kanban column |
+| `PUT    /tasks/{task_id}/nodes` | `{node_ids:[…]}` | set grounded brain-node links |
+| `GET    /brain/nodes` | `?project_id=` | list brain nodes |
+| `POST   /brain/nodes` | `{project_id, type, label, detail?}` | create a node |
+| `PATCH  /brain/nodes/{node_id}` | `{type?, label?, detail?}` | update a node |
+| `DELETE /brain/nodes/{node_id}` | | delete a node |
+| `GET    /brain/edges` | `?project_id=` | list edges |
+| `POST   /brain/edges` | `{project_id, from_id, to_id, rel?}` | create a directed edge |
+| `DELETE /brain/edges/{edge_id}` | | delete an edge |
+| `POST   /pipelines` | `{project_id, task_id}` | create a pipeline run |
+| `GET    /pipelines` | `?project_id=` | list pipeline runs |
+| `GET    /pipelines/{run_id}` | | get one pipeline run + stage states |
+| `POST   /pipelines/{run_id}/start` | | start the pipeline (spawns Developer agent) |
+| `POST   /pipelines/{run_id}/advance` | `{report?}` | manually advance to the next stage |
+
+See [`docs/spade-alignment.md`](docs/spade-alignment.md) for the full product vision and remaining gap-list.
+
 ## ⚠ Pattern tuning — the brittle part
 
 **`patterns.yaml` is version-specific and WILL drift when the TUI changes.** It

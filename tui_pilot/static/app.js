@@ -96,7 +96,7 @@ function isWorking(s) {
 
 // ---- view switching -------------------------------------------------------
 
-let currentView = "fleet";
+let currentView = "home";
 
 function switchView(name) {
   currentView = name;
@@ -107,9 +107,13 @@ function switchView(name) {
     b.classList.toggle("active", b.dataset.view === name);
   });
   // Refresh pages when switching to them
+  if (name === "home") renderHome();
   if (name === "accounts") { loadAccounts().then(renderAccountsPage); }
   if (name === "projects") renderProjectsPage();
   if (name === "agents") renderRolesPage();
+  if (name === "backlog") renderBacklog();
+  if (name === "brain") renderBrain();
+  if (name === "pipelines") renderPipelines();
 }
 
 document.querySelectorAll(".rail-btn").forEach((b) => {
@@ -1437,6 +1441,662 @@ $("btnNewRole").onclick = () => {
   wireRoleEditor(null);
 };
 
+// ---- backlog kanban -------------------------------------------------------
+
+// NOTE: a task with status 'blocked' won't render in any of these 4 columns —
+// Chunk 3 (pipelines) must handle/display blocked tasks (no blocked column here yet).
+const BACKLOG_COLS = [
+  { id: "ready",       label: "Ready",       color: "#8b949e" },
+  { id: "in_progress", label: "In Progress", color: "#58a6ff" },
+  { id: "review",      label: "Review",      color: "#bc8cff" },
+  { id: "shipped",     label: "Shipped",     color: "#3fb950" },
+];
+const PRIORITY_COLORS = ["#f85149", "#d29922", "#58a6ff", "#8b949e"];
+const PRIORITY_LABELS = ["P0", "P1", "P2", "P3"];
+
+let backlogTasks = [];
+let selectedTaskId = null;
+
+async function renderBacklog() {
+  if (!currentProjectId) {
+    $("backlogKanban").innerHTML = `<div class="dim" style="padding:16px">Select a project first.</div>`;
+    return;
+  }
+  try {
+    const r = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+    backlogTasks = r.tasks || [];
+  } catch (e) {
+    $("backlogKanban").innerHTML = `<div class="dim" style="padding:16px">Error loading tasks.</div>`;
+    return;
+  }
+  renderKanban();
+}
+
+function renderKanban() {
+  const board = $("backlogKanban");
+  board.innerHTML = "";
+  for (const col of BACKLOG_COLS) {
+    const items = backlogTasks.filter(t => t.status === col.id);
+    const colEl = document.createElement("div");
+    colEl.className = "bk-col";
+    colEl.innerHTML = `
+      <div class="bk-col-head">
+        <span class="bk-col-dot" style="background:${col.color}"></span>
+        <span class="bk-col-label">${esc(col.label)}</span>
+        <span class="bk-col-count">${items.length}</span>
+      </div>
+      <div class="bk-col-body" id="bk-col-${col.id}">
+        ${items.length === 0 ? '<div class="dim" style="font-size:12px;padding:8px">—</div>' : ""}
+      </div>`;
+    board.appendChild(colEl);
+    const body = colEl.querySelector(`#bk-col-${col.id}`);
+    for (const t of items) {
+      body.appendChild(makeTaskCard(t));
+    }
+  }
+}
+
+function makeTaskCard(t) {
+  const pIdx = Math.min(Math.max(t.priority || 2, 0), 3);
+  const pColor = PRIORITY_COLORS[pIdx];
+  const pLabel = PRIORITY_LABELS[pIdx];
+  const card = document.createElement("div");
+  card.className = "bk-task-card";
+  card.innerHTML = `
+    <div class="bk-tc-head">
+      <span class="bk-priority-dot" style="background:${pColor}" title="${pLabel}"></span>
+      <span class="bk-tc-id">${esc(t.id)}</span>
+      ${t.feature ? `<span class="bk-feature-chip">${esc(t.feature)}</span>` : ""}
+    </div>
+    <div class="bk-tc-title">${esc(t.title)}</div>`;
+  card.onclick = () => openTaskDetail(t.id);
+  return card;
+}
+
+async function openTaskDetail(taskId) {
+  selectedTaskId = taskId;
+  try {
+    const t = await api("GET", `/tasks/${encodeURIComponent(taskId)}`);
+    const panel = $("taskDetailPanel");
+    $("tdpId").textContent = t.id;
+    $("tdpTitle").textContent = t.title;
+    const pIdx = Math.min(Math.max(t.priority || 2, 0), 3);
+    $("tdpFeature").textContent = t.feature ? `Feature: ${t.feature}` : "";
+    $("tdpStatus").textContent = `Status: ${t.status}`;
+    $("tdpOrigin").textContent = t.origin_quote
+      ? `"${t.origin_quote}"${t.origin_source ? ` — ${t.origin_source}` : ""}`
+      : "—";
+    $("tdpDescription").textContent = t.description || "—";
+    // Node chips (grounding) — fetch brain nodes to resolve labels
+    const nodesEl = $("tdpNodes");
+    nodesEl.innerHTML = "";
+    let projectBrainNodes = [];
+    try {
+      const nr = await api("GET", `/brain/nodes?project_id=${encodeURIComponent(currentProjectId || t.project_id)}`);
+      projectBrainNodes = nr.nodes || [];
+    } catch (_) {}
+    const nodeMap = Object.fromEntries(projectBrainNodes.map(n => [n.id, n]));
+    const linkedNodeIds = new Set(t.nodes || []);
+    if (linkedNodeIds.size > 0) {
+      for (const nid of linkedNodeIds) {
+        const chip = document.createElement("span");
+        chip.className = "bk-node-chip";
+        const node = nodeMap[nid];
+        chip.textContent = node ? `${node.label} (${node.type})` : nid;
+        chip.style.borderColor = node ? (NODE_TYPE_COLORS[node.type] || "#8b949e") : "#8b949e";
+        nodesEl.appendChild(chip);
+      }
+    } else {
+      nodesEl.textContent = "None";
+    }
+    // Grounding checklist
+    const groundSection = $("tdpGroundSection");
+    if (groundSection && projectBrainNodes.length > 0) {
+      groundSection.style.display = "";
+      const list = $("tdpGroundList");
+      list.innerHTML = "";
+      for (const node of projectBrainNodes) {
+        const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+        const item = document.createElement("label");
+        item.className = "ground-item";
+        item.innerHTML = `<input type="checkbox" value="${esc(node.id)}" ${linkedNodeIds.has(node.id) ? "checked" : ""} />
+          <span class="bk-node-chip" style="border-color:${color}">${esc(node.label)} <span class="dim">${esc(node.type)}</span></span>`;
+        list.appendChild(item);
+      }
+    } else if (groundSection) {
+      groundSection.style.display = "none";
+    }
+    // Move buttons
+    const moveBtns = $("tdpMoveButtons");
+    moveBtns.innerHTML = "";
+    for (const col of BACKLOG_COLS) {
+      if (col.id === t.status) continue;
+      const btn = document.createElement("button");
+      btn.className = "tiny";
+      btn.textContent = col.label;
+      btn.style.borderColor = col.color;
+      btn.onclick = async () => {
+        try {
+          await api("POST", `/tasks/${encodeURIComponent(t.id)}/move`, { status: col.id });
+          await renderBacklog();
+          openTaskDetail(t.id);
+        } catch (ex) { log(`move task: ${ex.message}`, "err"); }
+      };
+      moveBtns.appendChild(btn);
+    }
+    panel.style.display = "";
+  } catch (ex) {
+    log(`task detail: ${ex.message}`, "err");
+  }
+}
+
+$("btnCloseDetail").onclick = () => { $("taskDetailPanel").style.display = "none"; };
+
+// Grounding save
+$("btnSaveGrounding").onclick = async () => {
+  if (!selectedTaskId) return;
+  const list = $("tdpGroundList");
+  if (!list) return;
+  const checked = [...list.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.value);
+  try {
+    await api("PUT", `/tasks/${encodeURIComponent(selectedTaskId)}/nodes`, { node_ids: checked });
+    log("grounding saved", "ok");
+    await openTaskDetail(selectedTaskId);
+  } catch (ex) { log(`ground: ${ex.message}`, "err"); }
+};
+
+$("btnAddTask").onclick = () => {
+  const form = $("addTaskForm");
+  form.style.display = form.style.display === "none" ? "" : "none";
+};
+
+$("btnTaskCancel").onclick = () => { $("addTaskForm").style.display = "none"; };
+
+$("btnTaskSubmit").onclick = async () => {
+  if (!currentProjectId) { log("No project selected", "err"); return; }
+  const title = $("taskTitle").value.trim();
+  if (!title) { log("Title is required", "err"); return; }
+  const feature = $("taskFeature").value.trim() || null;
+  const priority = parseInt($("taskPriority").value, 10);
+  try {
+    await api("POST", "/tasks", { project_id: currentProjectId, title, feature, priority });
+    $("taskTitle").value = "";
+    $("taskFeature").value = "";
+    $("taskPriority").value = "2";
+    $("addTaskForm").style.display = "none";
+    await renderBacklog();
+  } catch (ex) { log(`add task: ${ex.message}`, "err"); }
+};
+
+// ==========================================================================
+// BRAIN VIEW
+// ==========================================================================
+
+const NODE_TYPE_COLORS = {
+  feature:    "#c9b8ff",
+  decision:   "#e6b86a",
+  convention: "#e69bb6",
+  feedback:   "#7adcc7",
+  bug:        "#e87d7d",
+  metric:     "#7ab6e6",
+};
+
+let brainNodes = [];
+let brainEdges = [];
+let selectedNodeId = null;
+
+async function renderBrain() {
+  if (!currentProjectId) {
+    const svg = $("brainSvg");
+    if (svg) svg.innerHTML = `<text x="16" y="32" fill="#8b949e">Select a project first.</text>`;
+    return;
+  }
+  try {
+    const [nr, er] = await Promise.all([
+      api("GET", `/brain/nodes?project_id=${encodeURIComponent(currentProjectId)}`),
+      api("GET", `/brain/edges?project_id=${encodeURIComponent(currentProjectId)}`),
+    ]);
+    brainNodes = nr.nodes || [];
+    brainEdges = er.edges || [];
+  } catch (e) {
+    log(`brain load: ${e.message}`, "err");
+    return;
+  }
+  renderBrainSvg();
+  // populate edge form selects
+  populateEdgeSelects();
+}
+
+function brainLayout(nodes) {
+  // assign x/y: use stored if available, else auto-layout on a circle
+  const n = nodes.length;
+  if (!n) return {};
+  const cx = 350, cy = 220, R = Math.min(180, 40 * n);
+  const positions = {};
+  nodes.forEach((node, i) => {
+    if (node.x != null && node.y != null) {
+      positions[node.id] = { x: node.x, y: node.y };
+    } else {
+      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+      positions[node.id] = {
+        x: cx + R * Math.cos(angle),
+        y: cy + R * Math.sin(angle),
+      };
+    }
+  });
+  return positions;
+}
+
+function renderBrainSvg() {
+  const svg = $("brainSvg");
+  if (!svg) return;
+  const positions = brainLayout(brainNodes);
+  const W = 700, H = 440;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = "";
+
+  // Draw edges
+  for (const edge of brainEdges) {
+    const from = positions[edge.from_id];
+    const to = positions[edge.to_id];
+    if (!from || !to) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", from.x);
+    line.setAttribute("y1", from.y);
+    line.setAttribute("x2", to.x);
+    line.setAttribute("y2", to.y);
+    line.setAttribute("stroke", "#444");
+    line.setAttribute("stroke-width", "1.5");
+    line.setAttribute("opacity", "0.6");
+    svg.appendChild(line);
+    // Draw rel label if present
+    if (edge.rel) {
+      const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      txt.setAttribute("x", (from.x + to.x) / 2);
+      txt.setAttribute("y", (from.y + to.y) / 2 - 4);
+      txt.setAttribute("fill", "#8b949e");
+      txt.setAttribute("font-size", "9");
+      txt.setAttribute("text-anchor", "middle");
+      txt.textContent = edge.rel;
+      svg.appendChild(txt);
+    }
+  }
+
+  // Draw nodes
+  const R_NODE = 28;
+  for (const node of brainNodes) {
+    const pos = positions[node.id];
+    if (!pos) continue;
+    const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+    const isSelected = node.id === selectedNodeId;
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("cursor", "pointer");
+    g.addEventListener("click", () => openBrainNodeDetail(node.id));
+
+    // Circle
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", pos.x);
+    circle.setAttribute("cy", pos.y);
+    circle.setAttribute("r", R_NODE);
+    circle.setAttribute("fill", color + "33");
+    circle.setAttribute("stroke", color);
+    circle.setAttribute("stroke-width", isSelected ? "3" : "1.5");
+    g.appendChild(circle);
+
+    // Label (truncated)
+    const label = node.label.length > 12 ? node.label.slice(0, 11) + "…" : node.label;
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", pos.x);
+    txt.setAttribute("y", pos.y + 4);
+    txt.setAttribute("fill", color);
+    txt.setAttribute("font-size", "10");
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("font-weight", "600");
+    txt.textContent = label;
+    g.appendChild(txt);
+
+    // Type glyph
+    const typeGlyph = (node.type || "?")[0].toUpperCase();
+    const glyph = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    glyph.setAttribute("x", pos.x + R_NODE - 8);
+    glyph.setAttribute("y", pos.y - R_NODE + 12);
+    glyph.setAttribute("fill", color);
+    glyph.setAttribute("font-size", "8");
+    glyph.setAttribute("text-anchor", "middle");
+    glyph.textContent = typeGlyph;
+    g.appendChild(glyph);
+
+    svg.appendChild(g);
+  }
+
+  // empty state
+  if (!brainNodes.length) {
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("x", "350");
+    txt.setAttribute("y", "200");
+    txt.setAttribute("fill", "#8b949e");
+    txt.setAttribute("text-anchor", "middle");
+    txt.textContent = "No nodes yet. Click '+ Node' to add one.";
+    svg.appendChild(txt);
+  }
+}
+
+function populateEdgeSelects() {
+  const fromSel = $("edgeFrom");
+  const toSel = $("edgeTo");
+  if (!fromSel || !toSel) return;
+  const opts = brainNodes.map(n => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("");
+  fromSel.innerHTML = `<option value="">— From node —</option>${opts}`;
+  toSel.innerHTML = `<option value="">— To node —</option>${opts}`;
+}
+
+function openBrainNodeDetail(nodeId) {
+  selectedNodeId = nodeId;
+  renderBrainSvg(); // re-draw with selection highlight
+  const node = brainNodes.find(n => n.id === nodeId);
+  if (!node) return;
+  const panel = $("brainDetailPanel");
+  const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+  $("bdpType").textContent = node.type;
+  $("bdpType").style.color = color;
+  $("bdpLabel").textContent = node.label;
+  $("bdpDetail").textContent = node.detail || "—";
+  $("bdpEditForm").style.display = "none";
+  panel.style.display = "";
+}
+
+$("btnCloseBrainDetail").onclick = () => {
+  $("brainDetailPanel").style.display = "none";
+  selectedNodeId = null;
+  renderBrainSvg();
+};
+
+$("btnEditNode").onclick = () => {
+  const node = brainNodes.find(n => n.id === selectedNodeId);
+  if (!node) return;
+  $("bdpEditType").value = node.type;
+  $("bdpEditLabel").value = node.label;
+  $("bdpEditDetail").value = node.detail || "";
+  $("bdpEditForm").style.display = "";
+};
+
+$("btnCancelEditNode").onclick = () => { $("bdpEditForm").style.display = "none"; };
+
+$("btnSaveNode").onclick = async () => {
+  if (!selectedNodeId) return;
+  const type = $("bdpEditType").value;
+  const label = $("bdpEditLabel").value.trim();
+  const detail = $("bdpEditDetail").value.trim() || null;
+  if (!label) { log("Label required", "err"); return; }
+  try {
+    await api("PATCH", `/brain/nodes/${encodeURIComponent(selectedNodeId)}`, { type, label, detail });
+    await renderBrain();
+    openBrainNodeDetail(selectedNodeId);
+  } catch (ex) { log(`save node: ${ex.message}`, "err"); }
+};
+
+$("btnDeleteNode").onclick = async () => {
+  if (!selectedNodeId || !confirm("Delete this node?")) return;
+  try {
+    await api("DELETE", `/brain/nodes/${encodeURIComponent(selectedNodeId)}`);
+    $("brainDetailPanel").style.display = "none";
+    selectedNodeId = null;
+    await renderBrain();
+  } catch (ex) { log(`delete node: ${ex.message}`, "err"); }
+};
+
+$("btnAddNode").onclick = () => {
+  const form = $("addNodeForm");
+  form.style.display = form.style.display === "none" ? "" : "none";
+  $("addEdgeForm").style.display = "none";
+};
+
+$("btnNodeCancel").onclick = () => { $("addNodeForm").style.display = "none"; };
+
+$("btnNodeSubmit").onclick = async () => {
+  if (!currentProjectId) { log("No project selected", "err"); return; }
+  const type = $("nodeType").value;
+  const label = $("nodeLabel").value.trim();
+  const detail = $("nodeDetail").value.trim() || null;
+  if (!label) { log("Label required", "err"); return; }
+  try {
+    await api("POST", "/brain/nodes", { project_id: currentProjectId, type, label, detail });
+    $("nodeLabel").value = "";
+    $("nodeDetail").value = "";
+    $("addNodeForm").style.display = "none";
+    await renderBrain();
+  } catch (ex) { log(`add node: ${ex.message}`, "err"); }
+};
+
+$("btnAddEdge").onclick = () => {
+  const form = $("addEdgeForm");
+  form.style.display = form.style.display === "none" ? "" : "none";
+  $("addNodeForm").style.display = "none";
+  populateEdgeSelects();
+};
+
+$("btnEdgeCancel").onclick = () => { $("addEdgeForm").style.display = "none"; };
+
+$("btnEdgeSubmit").onclick = async () => {
+  if (!currentProjectId) { log("No project selected", "err"); return; }
+  const from_id = $("edgeFrom").value;
+  const to_id = $("edgeTo").value;
+  const rel = $("edgeRel").value.trim() || null;
+  if (!from_id || !to_id) { log("Select both nodes", "err"); return; }
+  try {
+    await api("POST", "/brain/edges", { project_id: currentProjectId, from_id, to_id, rel });
+    $("edgeRel").value = "";
+    $("addEdgeForm").style.display = "none";
+    await renderBrain();
+  } catch (ex) { log(`add edge: ${ex.message}`, "err"); }
+};
+
+// ---- pipelines (orchestrator) ---------------------------------------------
+
+const PIPELINE_STAGE_STATE_COLORS = {
+  queued: "#8b949e",   // grey
+  running: "#58a6ff",  // blue
+  done: "#3fb950",     // green
+  failed: "#f85149",   // red
+};
+
+async function renderPipelines() {
+  const list = $("pipelinesList");
+  if (!list) return;
+  if (!currentProjectId) {
+    list.innerHTML = `<p class="dim" style="padding:16px">Select a project first.</p>`;
+    return;
+  }
+  let runs = [];
+  try {
+    const r = await api("GET", `/pipelines?project_id=${encodeURIComponent(currentProjectId)}`);
+    runs = r.pipelines || [];
+  } catch (ex) {
+    log(`pipelines load: ${ex.message}`, "err");
+    return;
+  }
+  // Resolve task titles in one pass.
+  let taskMap = {};
+  try {
+    const tr = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+    taskMap = Object.fromEntries((tr.tasks || []).map((t) => [t.id, t]));
+  } catch (_) {}
+  list.innerHTML = "";
+  if (runs.length === 0) {
+    list.innerHTML = `<p class="dim" style="padding:16px">No pipelines yet. Run one from a Backlog task.</p>`;
+    return;
+  }
+  for (const run of runs) {
+    const task = taskMap[run.task_id];
+    const card = document.createElement("div");
+    card.className = "pl-card";
+    const title = task ? esc(task.title) : esc(run.task_id);
+    const chips = (run.stages || []).map((st) => {
+      const color = PIPELINE_STAGE_STATE_COLORS[st.state] || "#8b949e";
+      const pulse = st.state === "running" ? " pl-chip-pulse" : "";
+      const clickable = st.session_id ? " pl-chip-clickable" : "";
+      return `<span class="pl-chip${pulse}${clickable}" data-sid="${st.session_id ? esc(st.session_id) : ""}"
+        style="border-color:${color};color:${color}">${esc(st.role)}</span>`;
+    }).join("");
+    card.innerHTML = `
+      <div class="pl-card-head">
+        <span class="pl-card-task">${esc(run.task_id)}</span>
+        <span class="pl-card-status" data-status="${esc(run.status)}">${esc(run.status)}</span>
+      </div>
+      <div class="pl-card-title">${title}</div>
+      <div class="pl-chips">${chips}</div>`;
+    // Wire stage-chip clicks → focus the agent session in the Fleet view.
+    card.querySelectorAll(".pl-chip-clickable").forEach((chip) => {
+      chip.onclick = () => {
+        const sid = chip.dataset.sid;
+        if (!sid) return;
+        switchView("fleet");
+        focus(sid);
+      };
+    });
+    list.appendChild(card);
+  }
+}
+
+const _btnRefreshPipelines = $("btnRefreshPipelines");
+if (_btnRefreshPipelines) _btnRefreshPipelines.onclick = renderPipelines;
+
+const _btnRunPipeline = $("btnRunPipeline");
+if (_btnRunPipeline) _btnRunPipeline.onclick = async () => {
+  if (!selectedTaskId || !currentProjectId) { log("No task selected", "err"); return; }
+  try {
+    const run = await api("POST", "/pipelines", { project_id: currentProjectId, task_id: selectedTaskId });
+    try {
+      await api("POST", `/pipelines/${encodeURIComponent(run.id)}/start`);
+    } catch (ex) {
+      log(`pipeline start: ${ex.message}`, "err");
+    }
+    switchView("pipelines");
+  } catch (ex) { log(`run pipeline: ${ex.message}`, "err"); }
+};
+
+// ==========================================================================
+// HOME VIEW
+// ==========================================================================
+
+const HOME_STATUS_COLS = [
+  { id: "ready",       label: "Ready",       color: "#8b949e" },
+  { id: "in_progress", label: "In Progress", color: "#58a6ff" },
+  { id: "review",      label: "Review",      color: "#bc8cff" },
+  { id: "shipped",     label: "Shipped",     color: "#3fb950" },
+  { id: "blocked",     label: "Blocked",     color: "#f85149" },
+];
+
+async function renderHome() {
+  const proj = currentProjectId ? allProjects.find((p) => p.id === currentProjectId) : null;
+  const nameEl = $("homeProjectName");
+  const hintEl = $("homeProjectHint");
+  if (proj) {
+    nameEl.textContent = proj.name;
+    hintEl.textContent = "";
+  } else {
+    nameEl.textContent = "Home";
+    hintEl.textContent = "Pick or create a project to see your dashboard.";
+  }
+
+  // KPI band
+  const kpiBand = $("homeKpiBand");
+  kpiBand.innerHTML = "";
+  if (!currentProjectId) {
+    kpiBand.innerHTML = `<div class="home-empty">No project selected — use the project bar above to pick one.</div>`;
+  } else {
+    let tasks = [];
+    try {
+      const r = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+      tasks = r.tasks || [];
+    } catch (_) {}
+    const counts = {};
+    for (const col of HOME_STATUS_COLS) counts[col.id] = 0;
+    for (const t of tasks) { if (counts[t.status] !== undefined) counts[t.status]++; }
+    for (const col of HOME_STATUS_COLS) {
+      const card = document.createElement("div");
+      card.className = "home-kpi-card";
+      card.style.setProperty("--kpi-color", col.color);
+      card.innerHTML = `
+        <div class="home-kpi-value" style="color:${col.color}">${counts[col.id]}</div>
+        <div class="home-kpi-label">${esc(col.label)}</div>`;
+      card.onclick = () => switchView("backlog");
+      card.title = `Go to Backlog · ${col.label}`;
+      kpiBand.appendChild(card);
+    }
+    if (tasks.length === 0) {
+      const hint = document.createElement("div");
+      hint.className = "home-kpi-hint dim";
+      hint.textContent = "No tasks yet — open Backlog to add one.";
+      hint.onclick = () => switchView("backlog");
+      hint.style.cursor = "pointer";
+      kpiBand.appendChild(hint);
+    }
+  }
+
+  // Active pipelines
+  const plEl = $("homeActivePipelines");
+  plEl.innerHTML = "";
+  if (!currentProjectId) {
+    plEl.innerHTML = `<div class="home-empty">—</div>`;
+  } else {
+    let runs = [];
+    try {
+      const r = await api("GET", `/pipelines?project_id=${encodeURIComponent(currentProjectId)}`);
+      runs = (r.pipelines || []).filter((p) => p.status === "running");
+    } catch (_) {}
+    // resolve task titles
+    let taskMap = {};
+    try {
+      const tr = await api("GET", `/tasks?project_id=${encodeURIComponent(currentProjectId)}`);
+      taskMap = Object.fromEntries((tr.tasks || []).map((t) => [t.id, t]));
+    } catch (_) {}
+    if (!runs.length) {
+      plEl.innerHTML = `<div class="home-empty">No active pipelines — <span class="home-link" onclick="switchView('backlog')">open Backlog</span> to start one.</div>`;
+    } else {
+      for (const run of runs) {
+        const task = taskMap[run.task_id];
+        const runningStage = (run.stages || []).find((s) => s.state === "running");
+        const item = document.createElement("div");
+        item.className = "home-list-item home-list-item-clickable";
+        item.innerHTML = `
+          <span class="home-list-title">${task ? esc(task.title) : esc(run.task_id)}</span>
+          ${runningStage ? `<span class="home-stage-chip">${esc(runningStage.role)}</span>` : ""}`;
+        item.onclick = () => switchView("pipelines");
+        plEl.appendChild(item);
+      }
+    }
+  }
+
+  // Recent brain nodes
+  const nodesEl = $("homeRecentNodes");
+  nodesEl.innerHTML = "";
+  if (!currentProjectId) {
+    nodesEl.innerHTML = `<div class="home-empty">—</div>`;
+  } else {
+    let nodes = [];
+    try {
+      const r = await api("GET", `/brain/nodes?project_id=${encodeURIComponent(currentProjectId)}`);
+      nodes = (r.nodes || []).slice(-6).reverse();
+    } catch (_) {}
+    if (!nodes.length) {
+      nodesEl.innerHTML = `<div class="home-empty">No brain nodes yet — <span class="home-link" onclick="switchView('brain')">open Brain</span> to add one.</div>`;
+    } else {
+      for (const node of nodes) {
+        const color = NODE_TYPE_COLORS[node.type] || "#8b949e";
+        const item = document.createElement("div");
+        item.className = "home-list-item home-list-item-clickable";
+        item.innerHTML = `
+          <span class="home-list-title">${esc(node.label)}</span>
+          <span class="home-node-type-chip" style="border-color:${color};color:${color}">${esc(node.type)}</span>`;
+        item.onclick = () => switchView("brain");
+        nodesEl.appendChild(item);
+      }
+    }
+  }
+}
+
 // ---- init -----------------------------------------------------------------
 (async () => {
   await loadAccounts();
@@ -1447,5 +2107,8 @@ $("btnNewRole").onclick = () => {
   await pollSessions();
   // ensure the orchestrator exists and make it the default focus.
   await focusOrchestrator();
+  // Show home dashboard on load (switchView normalizes display so no other
+  // view — e.g. the Fleet workspace — leaks through underneath).
+  switchView("home");
 })();
 log("ready — chat with 🧠 Orchestrator, or use Advanced to spawn manually.");

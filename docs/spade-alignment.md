@@ -6,6 +6,8 @@
 
 > **Scope note (2026-06-15):** the current tui-pilot work (projects, accounts, SQLite persistence, project-aware orchestrator — see `docs/superpowers/plans/2026-06-15-projects-accounts.md`) IS the foundation. The richer Spade entities below (tasks/pipelines/brain/sprints/ADRs/feedback/meetings/integrations) are the **post-foundation** roadmap and each warrant their own spec→plan→build cycle. This brief is the input to those.
 
+> **Status (2026-06-15, branch `feat/spade-mvp`):** Spade MVP is built. Tasks/Backlog (kanban, SPD-id auto-assignment, grounding), Product Brain (typed nodes + edges graph, task grounding), 4-stage Pipelines (Developer → Reviewer → Integrator → Documentor; agent execution on the project's account pool, auto-advance on finish signal), and a Home dashboard (KPI band, active pipelines, recent brain nodes) are all live. Remaining gap-list items — sprints, ADR-conflict gates, feedback/meetings/integrations ingestion, conversational Ask, multi-provider accounts (Codex/Cursor/Gemini/Aider), cost tracking — are post-MVP.
+
 ---
 
 ## What Spade Is

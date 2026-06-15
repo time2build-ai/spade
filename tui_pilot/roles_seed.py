@@ -52,6 +52,42 @@ def seed_if_empty() -> None:
             )
 
 
+_PIPELINE_ROLES = ["developer", "reviewer", "integrator", "documentor"]
+
+
+def upsert_pipeline_roles() -> None:
+    """Idempotently ensure the four pipeline roles exist in the `roles` table.
+
+    `seed_if_empty()` only seeds an empty table, so an already-seeded DB would
+    miss `integrator` and `documentor` (added after the foundation seed). This
+    INSERT OR IGNOREs each pipeline role from roles.yaml so existing rows are
+    preserved and only the missing ones are added.
+    """
+    by_id = {r["id"]: r for r in _load_yaml()}
+    with db.tx() as cx:
+        for rid in _PIPELINE_ROLES:
+            r = by_id.get(rid)
+            if r is None:
+                continue
+            cx.execute(
+                "INSERT OR IGNORE INTO roles "
+                "(id, label, emoji, mode, cmd, default_model, description, "
+                " instructions, is_system) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    rid,
+                    r.get("label", rid),
+                    r.get("emoji", ""),
+                    r.get("mode", "normal"),
+                    r.get("cmd", "claude"),
+                    r.get("default_model"),
+                    r.get("description", ""),
+                    r.get("instructions", ""),
+                    0,
+                ),
+            )
+
+
 def load_roles_from_db() -> dict[str, dict]:
     """Return all roles keyed by id, in the shape server.ROLES uses."""
     out: dict[str, dict] = {}

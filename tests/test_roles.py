@@ -51,7 +51,8 @@ def test_seed_is_idempotent():
     roles_seed.seed_if_empty()
     roles_seed.seed_if_empty()
     n = db.query("SELECT count(*) c FROM roles")[0]["c"]
-    assert n == 5
+    # planner, developer, reviewer, integrator, documentor, plain, orchestrator
+    assert n == 7
 
 
 def test_roles_endpoint_lists_presets(client):

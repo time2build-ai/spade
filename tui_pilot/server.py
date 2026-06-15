@@ -73,9 +73,11 @@ import sys  # noqa: E402
 
 from . import orchestrator_server  # noqa: E402
 from . import registry_server  # noqa: E402
+from . import spade_server  # noqa: E402
 
 app.include_router(orchestrator_server.router)
 app.include_router(registry_server.router)
+app.include_router(spade_server.router)
 
 # This module object, passed to orchestrator_server helpers so they can reach
 # back into the registry (_sessions/_meta/_pollers/_lock_for/_spawn_agent/…)
@@ -112,12 +114,16 @@ def _ensure_roles() -> None:
     ``refresh_roles()`` reloads it; in production after the first load, ``ROLES``
     stays non-empty so we skip the per-spawn SELECT *."""
     roles_seed.seed_if_empty()
-    if not ROLES:
+    roles_seed.upsert_pipeline_roles()
+    if not ROLES or "integrator" not in ROLES:
         refresh_roles()
 
 
 # Seed + load at import; role-dependent code paths re-ensure lazily.
 roles_seed.seed_if_empty()
+# Ensure the pipeline roles (integrator/documentor added after the foundation
+# seed) exist even on an already-seeded DB, then reload ROLES.
+roles_seed.upsert_pipeline_roles()
 ROLES = roles_seed.load_roles_from_db()
 
 # In-memory registry. Guarded by a registry lock for structural changes; each
@@ -163,6 +169,7 @@ def _poll_loop() -> None:
     while True:
         signals: list = []   # (orch_aid, OrchestrationSignal)
         forwards: list = []  # (orch_aid, note)
+        advances: list = []  # (run_id, stage_idx, report) for parentless pipeline stages
         for aid, poller in list(_pollers.items()):
             try:
                 # HarnessPoller is not internally synchronized; every poll()
@@ -183,6 +190,13 @@ def _poll_loop() -> None:
                         forwards.extend(
                             orchestrator_server.collect_worker_forward(_module, aid, st)
                         )
+                        # Pipeline stage (parentless, has a pipeline_run_id):
+                        # gather a once-only auto-advance item. collect_worker_forward
+                        # returns early for parentless workers, so there is no
+                        # conflict with orchestrator finish-forwarding.
+                        item = _collect_pipeline_advance(aid, st)
+                        if item is not None:
+                            advances.append(item)
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
         # DRAIN: no session lock held here; each item takes at most one lock.
@@ -190,7 +204,55 @@ def _poll_loop() -> None:
             orchestrator_server.drain(_module, signals, forwards)
         except Exception:  # noqa: BLE001 - never let drain kill the loop
             pass
+        for run_id, stage_idx, report in advances:
+            try:
+                _drain_pipeline_advance(run_id, stage_idx, report)
+            except Exception:  # noqa: BLE001 - never let one advance kill the loop
+                logger.warning(
+                    "pipeline auto-advance failed for run %s stage %s",
+                    run_id, stage_idx, exc_info=True,
+                )
         time.sleep(1.0)
+
+
+def _collect_pipeline_advance(aid: str, harness_state):
+    """COLLECT phase (under the worker's lock): if ``aid`` is a parentless
+    pipeline stage that just finished, mark it advanced once and return a
+    ``(run_id, stage_idx, report)`` item; else None.
+
+    The ``pipeline_advanced`` flag is a per-worker scratch key written under the
+    worker's session lock (held by the caller), mirroring the ``finish_forwarded``
+    guard in collect_worker_forward — so a stage advances exactly once.
+    """
+    m = _meta.get(aid)
+    if not m or m.get("parent") or m.get("is_orchestrator"):
+        return None
+    run_id = m.get("pipeline_run_id")
+    if not run_id:
+        return None
+    if harness_state is None or harness_state.kind != "done":
+        return None
+    if m.get("pipeline_advanced"):
+        return None
+    # Confirm the run still exists before claiming the advance.
+    from . import pipelines
+    if pipelines.get(run_id) is None:
+        return None
+    m["pipeline_advanced"] = True
+    report = (harness_state.report or "").strip()
+    return (run_id, m.get("pipeline_stage_idx", 0), report)
+
+
+def _drain_pipeline_advance(run_id: str, stage_idx: int, report: str) -> None:
+    """DRAIN phase (no session lock held): complete the finished stage and start
+    the next (or ship the run). The spawn callback may take _registry_lock."""
+    from . import pipelines
+    from .spade_server import _pipeline_spawn
+
+    run = pipelines.get(run_id)
+    if run is None:
+        return
+    pipelines.complete_stage(run_id, stage_idx, report, spawn=_pipeline_spawn(run))
 
 
 threading.Thread(target=_poll_loop, daemon=True).start()
@@ -702,6 +764,22 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                     "account_id": row.get("account_id"),
                     "project_id": row.get("project_id"),
                 }
+                # Restore pipeline linkage from already-persisted stage data so a
+                # reattached pipeline-stage worker stays visible to the
+                # auto-advance collector. Best-effort: never break reconcile.
+                # Deliberately do NOT set pipeline_advanced, so a stage that
+                # finished during downtime can still advance after reattach.
+                try:
+                    from tui_pilot import pipelines
+                    link = pipelines.stage_by_session(sid)
+                    if link is not None:
+                        _meta[sid]["pipeline_run_id"] = link["pipeline_run_id"]
+                        _meta[sid]["pipeline_stage_idx"] = link["stage_order"]
+                except Exception:  # noqa: BLE001 - best-effort linkage restore
+                    logger.warning(
+                        "failed to restore pipeline linkage for %s", sid,
+                        exc_info=True,
+                    )
                 kept.append(sid)
             except Exception:  # noqa: BLE001 - one bad row can't abort reconcile (swallowed)
                 logger.warning("failed to reconcile session %s", sid, exc_info=True)
