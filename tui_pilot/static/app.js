@@ -1084,6 +1084,9 @@ function renderProjectsPage() {
 
 async function openProjectEditor(id) {
   editingProject = id;
+  // Refresh the accounts list so the pool picker reflects accounts created
+  // since page load (otherwise the "add to pool" dropdown can look empty).
+  await loadAccounts();
   renderProjectsPage();
   const pane = $("projectEditor");
   if (!id) {
@@ -1247,7 +1250,10 @@ function wireProjectEditor(proj, initialPool) {
     if (!sel) return;
     sel.innerHTML = accounts.filter((a) => !pool.includes(a.id))
       .map((a) => `<option value="${esc(a.id)}">${esc(a.label)}</option>`).join("");
-    if (!sel.options.length) sel.innerHTML = `<option value="">— all accounts in pool —</option>`;
+    if (!sel.options.length) {
+      const msg = accounts.length ? "— all accounts already in pool —" : "— no accounts yet (add one in Accounts) —";
+      sel.innerHTML = `<option value="">${msg}</option>`;
+    }
   }
   refreshAddSelect();
 
