@@ -93,7 +93,7 @@ curl -s -X DELETE $B/sessions/s
 | Method & path                       | Body                          | Does                          |
 |-------------------------------------|-------------------------------|-------------------------------|
 | `GET    /roles`                     |                               | list agent-role presets       |
-| `POST   /sessions`                  | `{name, role?, task?, cmd?, instructions?, mode?, cwd?}` | spawn an (optionally role-based) agent, optionally with a mission |
+| `POST   /sessions`                  | `{name, role?, task?, cmd?, instructions?, mode?, cwd?, account_id?, project_id?}` | spawn an (optionally role-based) agent, optionally with a mission; `account_id` pins a specific account (CLAUDE_CONFIG_DIR), `project_id` draws from that project's round-robin account pool |
 | `GET    /sessions`                  |                               | list sessions + role/prep/state |
 | `GET    /sessions/{name}`           |                               | one session's full info       |
 | `GET    /sessions/{name}/state`     |                               | current `State` + `prep`      |
@@ -281,6 +281,60 @@ behind it the fleet shows each worker's **model badge + "why"**, grouped by
 mission with a per-mission autopilot toggle; brakes appear as **Allow / Skip**
 cards; the manual spawn form moves to **Advanced**.
 
+## Persistence, accounts & projects
+
+The control plane keeps an in-memory registry as its live source of truth, but
+it is now **backed by SQLite** at `~/.tui-pilot/tui-pilot.db` (override the home
+with `$TUI_PILOT_HOME`). Sessions, roles, projects, accounts and missions are
+all persisted. On startup the server **reconciles**: still-live tmux agents from
+a prior run are reattached (Controller / poller / meta rebuilt) and kept `live`;
+dead rows are marked `exited`; persisted missions (and their autopilot flags) are
+restored so `GET /missions` is correct immediately. Roles are seeded from
+`roles.yaml` into the DB on first run and are then editable at runtime via
+`/roles` (the YAML is only a seed source).
+
+**Accounts** each wrap a Claude `CLAUDE_CONFIG_DIR` (its own auth/login). The
+server manages them under `~/.tui-pilot/agents/claude-code/` and can import
+existing ones from `~/.claude-*`. A spawn runs under a resolved account's config
+dir, and a not-logged-in account is rejected at spawn (auth guard).
+
+**Projects** own an ordered **account pool** and are selected round-robin: a
+spawn that passes a `project_id` advances that project's cursor and runs on the
+next account in the pool (falling back to the default account when the pool is
+empty). A project also carries a `model_ceiling` and an `autopilot` baseline that
+the orchestrator policy reads. There is one **current project** (app-wide).
+
+**Management endpoints:**
+
+| Method & path                          | Does                                              |
+|----------------------------------------|---------------------------------------------------|
+| `GET    /accounts`                     | list accounts                                     |
+| `POST   /accounts`                     | register an account `{id,label,config_dir,color?,provider?}` |
+| `PATCH  /accounts/{id}`                | update label/color                                |
+| `DELETE /accounts/{id}`                | remove an account                                 |
+| `POST   /accounts/scan`               | discover `managed` + `importable` candidate dirs   |
+| `POST   /accounts/import`              | import an existing config dir as an account        |
+| `POST   /accounts/{id}/default`        | mark the global default account                    |
+| `POST   /accounts/{id}/login`          | open an interactive `claude` to complete OAuth     |
+| `GET    /projects`                     | list projects                                      |
+| `POST   /projects`                     | create a project `{id,name,path,account_strategy?,model_ceiling?,autopilot?}` |
+| `GET    /projects/{id}`                | one project + its account `pool`                   |
+| `PATCH  /projects/{id}`                | update fields (e.g. clear `model_ceiling`)         |
+| `DELETE /projects/{id}`                | delete a project                                   |
+| `PUT    /projects/{id}/accounts`       | set the ordered account pool `{account_ids:[…]}`   |
+| `GET    /current-project`              | the current project id                             |
+| `PUT    /current-project`              | set the current project `{project_id}`             |
+| `POST   /roles`                        | upsert a role                                      |
+| `PATCH  /roles/{id}`                   | update a role                                      |
+| `DELETE /roles/{id}`                   | delete a role                                      |
+
+A **`/ui`** frontend exposes all of this: a nav rail, a project bar, and
+accounts / projects / agents pages (with each worker's account shown).
+
+This persistence + accounts/projects foundation is the basis for a broader
+product — see [`docs/spade-alignment.md`](docs/spade-alignment.md) for the
+roadmap it supports.
+
 ## ⚠ Pattern tuning — the brittle part
 
 **`patterns.yaml` is version-specific and WILL drift when the TUI changes.** It
@@ -331,5 +385,7 @@ report/handoff endpoints + concurrency). `test_integration.py` (incl.
 
 ## Out of scope
 
-Persisting sessions across server restarts; auth on the HTTP API; any TUI other
-than the one demoed (retune `patterns.yaml` for a different target).
+Auth on the HTTP API; any TUI other than the one demoed (retune `patterns.yaml`
+for a different target). (Sessions, roles, projects, accounts and missions *are*
+now persisted in SQLite, and live tmux agents are reattached on restart — see
+[Persistence, accounts & projects](#persistence-accounts--projects).)

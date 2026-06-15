@@ -1,9 +1,17 @@
 """FastAPI HTTP layer — multi-agent control plane.
 
-An in-memory registry of named sessions, each a
+A live registry of named sessions, each a
 :class:`~tui_pilot.controller.Controller` over a
-:class:`~tui_pilot.session.TmuxSession`. On top of the raw drive-a-TUI API this
-adds **agent roles**: presets (Planner, Developer, …) that customise an
+:class:`~tui_pilot.session.TmuxSession`. The registry is the in-memory source of
+truth, but it is backed by SQLite persistence under ``~/.tui-pilot`` (sessions,
+roles, projects, accounts, missions). On startup ``_reconcile_sessions()``
+reattaches any still-live tmux agents from the previous run and
+``orchestrator_server.reload_missions()`` restores their missions (and persisted
+autopilot flags); dead rows are marked exited.
+
+On top of the raw drive-a-TUI API this
+adds **agent roles**: presets (Planner, Developer, …) — seeded from
+``roles.yaml`` into SQLite and editable via ``/roles`` — that customise an
 interactive ``claude`` session WITHOUT any headless flag or SDK —
 
   * autonomy via ``Controller.set_mode`` (Shift-Tab keystrokes), and
