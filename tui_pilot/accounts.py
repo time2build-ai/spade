@@ -6,6 +6,7 @@ db.home()/agents/<provider>/<id>/. Users can also import existing ~/.claude-* di
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -90,15 +91,29 @@ def scan_importable() -> list[str]:
     return [str(p) for p in _user_home().glob(".claude*") if p.is_dir()]
 
 
-_CRED_FILES = {".credentials.json", ".claude.json"}
-
-
 def auth_status(config_dir: str) -> str:
-    """Return 'authed' if a credentials file exists in config_dir, else 'not_logged_in'."""
+    """Return 'authed' if the config dir holds real credentials, else 'not_logged_in'.
+
+    Content-aware (not mere file existence): a `.claude.json` can exist for
+    config-only reasons without the user being logged in. We treat:
+      * presence of `.credentials.json` as authed (some setups store creds there);
+      * `.claude.json` as authed only when it is a JSON object with a non-empty
+        `oauthAccount` or `apiKey`.
+    Any parse error / missing file → not_logged_in.
+    """
     d = Path(config_dir)
-    for fname in _CRED_FILES:
-        if (d / fname).exists():
-            return "authed"
+
+    if (d / ".credentials.json").exists():
+        return "authed"
+
+    claude_json = d / ".claude.json"
+    try:
+        data = json.loads(claude_json.read_text())
+    except (OSError, ValueError):
+        return "not_logged_in"
+
+    if isinstance(data, dict) and (data.get("oauthAccount") or data.get("apiKey")):
+        return "authed"
     return "not_logged_in"
 
 

@@ -47,12 +47,19 @@ def test_auth_status(tmp_path):
     assert accounts.auth_status(str(d)) == "authed"
 
 
-def test_auth_status_claude_json(tmp_path):
-    # Real Claude Code credential file is .claude.json, not .credentials.json
+def test_auth_status_claude_json_requires_oauth_account(tmp_path):
+    # .claude.json can exist for config-only reasons; only treat as authed when
+    # it carries a real oauthAccount (or apiKey).
     d = tmp_path / "acct2"; d.mkdir()
+    (d / ".claude.json").write_text('{"foo": 1}')
     assert accounts.auth_status(str(d)) == "not_logged_in"
-    (d / ".claude.json").write_text("{}")
+    (d / ".claude.json").write_text('{"oauthAccount": {"emailAddress": "x@y.z"}}')
     assert accounts.auth_status(str(d)) == "authed"
+
+
+def test_auth_status_empty_dir(tmp_path):
+    d = tmp_path / "empty"; d.mkdir()
+    assert accounts.auth_status(str(d)) == "not_logged_in"
 
 
 def test_create_managed_makes_dir():
