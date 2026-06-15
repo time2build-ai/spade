@@ -25,11 +25,12 @@ from its poll loop.
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import projects
+from . import db, projects
 from .orchestration import (
     OrchestrationExecutor,
     Policy,
@@ -48,12 +49,29 @@ _state_lock = threading.Lock()
 _brake_seq = 0
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _mission(mission: str | None) -> dict | None:
-    """Lazily create + return a mission record, or None for a missing key."""
+    """Lazily create + return a mission record, or None for a missing key.
+
+    The in-memory ``_missions`` dict holds the runtime activity tail; on first
+    reference the mission is also written through to the ``missions`` table
+    (idempotent INSERT OR IGNORE), linked to the current project. The DB write is
+    done OUTSIDE ``_state_lock``."""
     if mission is None:
         return None
     with _state_lock:
-        return _missions.setdefault(mission, {"autopilot": False, "activity": []})
+        is_new = mission not in _missions
+        rec = _missions.setdefault(mission, {"autopilot": False, "activity": []})
+    if is_new:
+        db.execute(
+            "INSERT OR IGNORE INTO missions (id, project_id, autopilot, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (mission, projects.current_project_id(), 0, "active", _now()),
+        )
+    return rec
 
 
 def _policy_for(mission: str | None) -> Policy:
@@ -410,6 +428,10 @@ def set_autopilot(mission: str, req: AutopilotRequest) -> dict:
     rec = _mission(mission)
     with _state_lock:
         rec["autopilot"] = req.autopilot
+    db.execute(
+        "UPDATE missions SET autopilot=? WHERE id=?",
+        (1 if req.autopilot else 0, mission),
+    )
     return {"autopilot": req.autopilot}
 
 

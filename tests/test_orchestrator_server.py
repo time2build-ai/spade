@@ -36,6 +36,14 @@ def test_orchestrator_spawn_passes_current_project(monkeypatch):
     assert captured["project_id"] == "p"
 
 
+def test_mission_persisted_with_project():
+    from tui_pilot import projects, db, orchestrator_server as osrv
+    projects.create(id="p", name="P", path="/w"); projects.set_current_project("p")
+    osrv._mission("build-x")
+    row = db.query("SELECT project_id FROM missions WHERE id='build-x'")[0]
+    assert row["project_id"] == "p"
+
+
 def test_spawn_records_model_mission_parent_reason(client, tmp_path):
     r = client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
         "model":"sonnet","mission":"m1","parent":"orch-1","reason":"standard markup"})
