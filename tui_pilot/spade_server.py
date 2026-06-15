@@ -1,4 +1,4 @@
-"""Spade HTTP router — tasks, backlog, grounding.
+"""Spade HTTP router — tasks, backlog, grounding, brain.
 
 Mounted into server.py via app.include_router(spade_server.router).
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import tasks
+from . import brain, tasks
 
 router = APIRouter()
 
@@ -117,3 +117,105 @@ def set_task_nodes(task_id: str, req: NodesRequest) -> dict:
     _task_or_404(task_id)
     tasks.set_nodes(task_id, req.node_ids)
     return _enrich(tasks.get(task_id))
+
+
+# ---- brain request models ---------------------------------------------------
+
+class NodeCreate(BaseModel):
+    project_id: str
+    type: str
+    label: str
+    detail: str | None = None
+    x: float | None = None
+    y: float | None = None
+
+
+class NodePatch(BaseModel):
+    type: str | None = None
+    label: str | None = None
+    detail: str | None = None
+    x: float | None = None
+    y: float | None = None
+
+
+class EdgeCreate(BaseModel):
+    project_id: str
+    from_id: str
+    to_id: str
+    rel: str | None = None
+
+
+# ---- brain helpers ----------------------------------------------------------
+
+def _node_or_404(node_id: str) -> dict:
+    n = brain.get_node(node_id)
+    if n is None:
+        raise HTTPException(404, f"no brain node {node_id!r}")
+    return n
+
+
+# ---- brain endpoints --------------------------------------------------------
+
+@router.get("/brain/nodes")
+def list_brain_nodes(project_id: str) -> dict:
+    return {"nodes": brain.list_nodes(project_id)}
+
+
+@router.post("/brain/nodes")
+def create_brain_node(req: NodeCreate) -> dict:
+    try:
+        return brain.create_node(
+            project_id=req.project_id,
+            type=req.type,
+            label=req.label,
+            detail=req.detail,
+            x=req.x,
+            y=req.y,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.patch("/brain/nodes/{node_id}")
+def patch_brain_node(node_id: str, req: NodePatch) -> dict:
+    _node_or_404(node_id)
+    fields = {k: v for k, v in req.model_dump().items() if v is not None}
+    if fields:
+        try:
+            brain.update_node(node_id, **fields)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return brain.get_node(node_id)
+
+
+@router.delete("/brain/nodes/{node_id}")
+def delete_brain_node(node_id: str) -> dict:
+    _node_or_404(node_id)
+    brain.delete_node(node_id)
+    return {"id": node_id, "status": "deleted"}
+
+
+@router.get("/brain/edges")
+def list_brain_edges(project_id: str) -> dict:
+    return {"edges": brain.list_edges(project_id)}
+
+
+@router.post("/brain/edges")
+def create_brain_edge(req: EdgeCreate) -> dict:
+    return brain.add_edge(
+        project_id=req.project_id,
+        from_id=req.from_id,
+        to_id=req.to_id,
+        rel=req.rel,
+    )
+
+
+@router.delete("/brain/edges/{edge_id}")
+def delete_brain_edge(edge_id: str) -> dict:
+    db_edge = None
+    from tui_pilot import db as _db
+    rows = _db.query("SELECT * FROM brain_edges WHERE id = ?", (edge_id,))
+    if not rows:
+        raise HTTPException(404, f"no brain edge {edge_id!r}")
+    brain.delete_edge(edge_id)
+    return {"id": edge_id, "status": "deleted"}
