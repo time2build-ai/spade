@@ -764,6 +764,22 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                     "account_id": row.get("account_id"),
                     "project_id": row.get("project_id"),
                 }
+                # Restore pipeline linkage from already-persisted stage data so a
+                # reattached pipeline-stage worker stays visible to the
+                # auto-advance collector. Best-effort: never break reconcile.
+                # Deliberately do NOT set pipeline_advanced, so a stage that
+                # finished during downtime can still advance after reattach.
+                try:
+                    from tui_pilot import pipelines
+                    link = pipelines.stage_by_session(sid)
+                    if link is not None:
+                        _meta[sid]["pipeline_run_id"] = link["pipeline_run_id"]
+                        _meta[sid]["pipeline_stage_idx"] = link["stage_order"]
+                except Exception:  # noqa: BLE001 - best-effort linkage restore
+                    logger.warning(
+                        "failed to restore pipeline linkage for %s", sid,
+                        exc_info=True,
+                    )
                 kept.append(sid)
             except Exception:  # noqa: BLE001 - one bad row can't abort reconcile (swallowed)
                 logger.warning("failed to reconcile session %s", sid, exc_info=True)

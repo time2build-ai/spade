@@ -145,6 +145,34 @@ def test_reconcile_marks_dead_and_keeps_live():
             server._pollers.pop("a", None)
 
 
+def test_reconcile_restores_pipeline_linkage():
+    from tui_pilot import sessions_store, server, pipelines, projects, tasks, db
+
+    projects.create(id="acme", name="Acme", path="/w")
+    tid = tasks.create(project_id="acme", title="Build X")["id"]
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    # Persist a stage->session link the way a running stage would (stage_order 1).
+    db.execute(
+        "UPDATE pipeline_stages SET session_id = ? "
+        "WHERE pipeline_run_id = ? AND stage_order = ?",
+        ("psess", run["id"], 1),
+    )
+    sessions_store.insert(id="psess", status="live", cwd="/w", name="psess")
+    try:
+        kept = server._reconcile_sessions(is_alive=lambda sid: True)
+        assert "psess" in kept
+        meta = server._meta["psess"]
+        assert meta["pipeline_run_id"] == run["id"]
+        assert meta["pipeline_stage_idx"] == 1
+        assert "pipeline_advanced" not in meta
+    finally:
+        with server._registry_lock:
+            server._sessions.pop("psess", None)
+            server._locks.pop("psess", None)
+            server._meta.pop("psess", None)
+            server._pollers.pop("psess", None)
+
+
 # ---- registry HTTP endpoints ----------------------------------------------
 
 

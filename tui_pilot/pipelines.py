@@ -66,6 +66,24 @@ def get(run_id: str) -> dict | None:
     return run
 
 
+def stage_by_session(session_id: str) -> dict | None:
+    """Return ``{pipeline_run_id, stage_order}`` for the stage whose
+    ``session_id`` matches, or None. Used to restore in-memory pipeline linkage
+    on reconnect from already-persisted data."""
+    rows = db.query(
+        "SELECT pipeline_run_id, stage_order FROM pipeline_stages "
+        "WHERE session_id = ?",
+        (session_id,),
+    )
+    if not rows:
+        return None
+    r = rows[0]
+    return {
+        "pipeline_run_id": r["pipeline_run_id"],
+        "stage_order": r["stage_order"],
+    }
+
+
 def list_for_project(project_id: str) -> list[dict]:
     """Return all runs (with stages) for a project, newest first."""
     rows = db.query(
@@ -113,7 +131,19 @@ def start_stage(run_id: str, idx: int, spawn, report: str | None = None) -> None
 
 def complete_stage(run_id: str, idx: int, report: str | None, spawn) -> None:
     """Mark stage ``idx`` done, then start the next stage (threading ``report``)
-    or ship the run if this was the last stage."""
+    or ship the run if this was the last stage.
+
+    Re-entry-safe: if stage ``idx`` is already terminal (``done``/``failed``)
+    this is an idempotent no-op, so a manual ``/advance`` racing the poll loop's
+    auto-advance for the same finished worker cannot double-spawn the next stage.
+    """
+    rows = db.query(
+        "SELECT state FROM pipeline_stages "
+        "WHERE pipeline_run_id = ? AND stage_order = ?",
+        (run_id, idx),
+    )
+    if rows and rows[0]["state"] in ("done", "failed"):
+        return
     _set_stage(run_id, idx, state="done")
     if idx < len(STAGES) - 1:
         # Thread the finishing stage's report into the next stage's spawn.
