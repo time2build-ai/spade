@@ -99,7 +99,14 @@ projects(
 project_accounts(                 -- ordered M:N pool
   project_id TEXT, account_id TEXT,
   position INTEGER,
-  PRIMARY KEY(project_id, account_id)
+  PRIMARY KEY(project_id, account_id),
+  FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+)
+
+app_state(                        -- single-row app-wide state
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  current_project_id TEXT
 )
 
 roles(                            -- migrated from roles.yaml
@@ -138,10 +145,13 @@ spawns can't read the same cursor.
   access guarded by the existing registry lock.
 - **`accounts.py`** — account CRUD; `scan_managed()` (list `agents/claude-code/*`);
   `scan_importable()` (`~/.claude-*`); `auth_status(account)`; `create(label, …)`
-  (mkdir + login session); `config_dir(account_id)`; `default_account()`.
+  (mkdir + login session); `config_dir(account_id)`; `default_account()`. **Single
+  default is enforced here:** `set_default(id)` clears `is_default` on all other rows
+  in the same transaction, so `default_account()` always resolves to exactly one.
 - **`projects.py`** — project CRUD; pool management (add/remove/reorder accounts);
-  `next_account(project)` round-robin; `current_project()` getter/setter (single-row
-  app state, persisted).
+  `next_account(project)` round-robin (skips any pool entry whose account row no
+  longer exists — defensive, even with `ON DELETE CASCADE`); `current_project()`
+  getter/setter backed by the `app_state` single row.
 
 ### Backend (changed)
 - **`session.py`** — `TmuxSession.spawn()` gains an optional `env: dict[str,str]`
@@ -160,6 +170,13 @@ spawns can't read the same cursor.
 - **`orchestration.py`** — the `spawn` executor resolves account from the current
   project (round-robin) unless the orchestrator pinned one; records `account_id` +
   `reason` on the session.
+- **Project defaults wiring** — `model_ceiling` and `autopilot` on the project are
+  not dangling columns: the orchestrator policy (today the hardcoded
+  `Policy(ceiling="sonnet", …)` in `orchestrator_server.py`) is replaced by
+  `_policy_for()` reading the **current project's** `model_ceiling` (default `sonnet`
+  when null) and `autopilot`. Missions move out of the in-memory `_missions` dict into
+  the `missions` table (each row carries `project_id` + `autopilot`), so a mission's
+  autopilot defaults from its project but can still be toggled per mission.
 
 ### Frontend
 - **Nav rail + project bar** in `index.html` (Fleet · Projects · Accounts · Agents ·
@@ -184,6 +201,9 @@ spawns can't read the same cursor.
   recreate and lose projects.
 - **Reconcile race** — a tmux session that dies mid-reconcile is treated as dead
   (idempotent; the poller would catch it next tick anyway).
+- **Deleted account still in a pool** → `ON DELETE CASCADE` removes its
+  `project_accounts` rows, and `next_account` additionally skips any orphan; if that
+  empties the pool the default-account fallback above applies.
 
 ## 7. Testing
 
