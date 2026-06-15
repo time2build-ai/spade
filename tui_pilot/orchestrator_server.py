@@ -25,10 +25,12 @@ from its poll loop.
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from . import db, projects
 from .orchestration import (
     OrchestrationExecutor,
     Policy,
@@ -47,21 +49,72 @@ _state_lock = threading.Lock()
 _brake_seq = 0
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _mission(mission: str | None) -> dict | None:
-    """Lazily create + return a mission record, or None for a missing key."""
+    """Lazily create + return a mission record, or None for a missing key.
+
+    The in-memory ``_missions`` dict holds the runtime activity tail; on first
+    reference the mission is also written through to the ``missions`` table
+    (idempotent INSERT OR IGNORE), linked to the current project. The DB write is
+    done OUTSIDE ``_state_lock``."""
     if mission is None:
         return None
     with _state_lock:
-        return _missions.setdefault(mission, {"autopilot": False, "activity": []})
+        is_new = mission not in _missions
+        # Snapshot the current project INSIDE the lock, atomically with the
+        # is_new determination, so a concurrent project switch can't cause the
+        # WRONG project_id to be persisted on first INSERT. current_project_id()
+        # only takes db's independent leaf-level _exec_lock (never _state_lock),
+        # so holding _state_lock across it cannot deadlock.
+        pid_snapshot = projects.current_project_id() if is_new else None
+        rec = _missions.setdefault(mission, {"autopilot": False, "activity": []})
+    if is_new:
+        db.execute(
+            "INSERT OR IGNORE INTO missions (id, project_id, autopilot, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (mission, pid_snapshot, 0, "active", _now()),
+        )
+    return rec
+
+
+def reload_missions() -> None:
+    """Repopulate the in-memory ``_missions`` dict from the ``missions`` table.
+
+    Called once at startup (right after the session reconcile) so a reattached
+    worker's mission — and its persisted ``autopilot`` flag — are live in
+    ``GET /missions`` immediately, instead of only after the mission is next
+    referenced (which would silently degrade a persisted autopilot=1 to
+    supervised). The DB read is done OUTSIDE ``_state_lock``; the lock is then
+    taken only to merge, and an existing in-memory entry (with its accumulated
+    activity tail) is never clobbered."""
+    rows = db.query("SELECT id, autopilot FROM missions")
+    with _state_lock:
+        for row in rows:
+            if row["id"] in _missions:
+                continue
+            _missions[row["id"]] = {
+                "autopilot": bool(row["autopilot"]),
+                "activity": [],
+            }
 
 
 def _policy_for(mission: str | None) -> Policy:
     """Executor policy for a mission. Default supervised+sonnet ceiling when the
-    mission is unknown (so an out-of-band signal is still policed)."""
+    mission is unknown (so an out-of-band signal is still policed). The ceiling
+    and a baseline autopilot come from the current project (default supervised +
+    sonnet when there is no current project); a mission with autopilot on still
+    yields autopilot True."""
+    pid = projects.current_project_id()
+    project = projects.get(pid) if pid else None
+    ceiling = (project["model_ceiling"] if project else None) or "sonnet"
+    project_autopilot = bool(project and project.get("autopilot"))
     with _state_lock:
         rec = _missions.get(mission) if mission else None
-        autopilot = bool(rec and rec.get("autopilot"))
-    return Policy(ceiling="sonnet", autopilot=autopilot)
+        mission_autopilot = bool(rec and rec.get("autopilot"))
+    return Policy(ceiling=ceiling, autopilot=project_autopilot or mission_autopilot)
 
 
 def _narrate(mission: str | None, text: str) -> None:
@@ -101,7 +154,7 @@ class _Callbacks:
         self._orch = orch_aid
         self._mission = mission
 
-    def spawn(self, **kw) -> str:
+    def spawn(self, account=None, **kw) -> str:
         # Takes _registry_lock internally; caller holds no session lock.
         info = self._server._spawn_agent(
             name=kw.get("role") or "worker",
@@ -114,6 +167,8 @@ class _Callbacks:
             mission=kw.get("mission"),
             parent=self._orch,
             reason=kw.get("reason"),
+            project_id=projects.current_project_id(),
+            account_id=account,
         )
         return info["id"]
 
@@ -400,6 +455,10 @@ def set_autopilot(mission: str, req: AutopilotRequest) -> dict:
     rec = _mission(mission)
     with _state_lock:
         rec["autopilot"] = req.autopilot
+    db.execute(
+        "UPDATE missions SET autopilot=? WHERE id=?",
+        (1 if req.autopilot else 0, mission),
+    )
     return {"autopilot": req.autopilot}
 
 

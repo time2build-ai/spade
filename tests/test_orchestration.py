@@ -52,6 +52,16 @@ def test_spawn_threads_cmd_to_callback():
     assert spy.calls[0][0] == "spawn"
     assert spy.calls[0][1]["cmd"] == "cat"
 
+def test_spawn_threads_account_pin_to_callback():
+    s = parse_orchestration_signal({"action":"spawn","role":"developer","model":"sonnet",
+                                    "task":"x","account":"acct-x"})
+    assert s.account == "acct-x"
+    ex, spy = _exec()
+    r = ex.run(s)
+    assert r.kind == "spawned"
+    assert spy.calls[0][0] == "spawn"
+    assert spy.calls[0][1]["account"] == "acct-x"
+
 def test_spawn_above_ceiling_supervised_is_braked():
     ex, spy = _exec(Policy(ceiling="sonnet", autopilot=False))
     r = ex.run(parse_orchestration_signal({"action":"spawn","model":"opus","task":"hard","reason":"gnarly"}))

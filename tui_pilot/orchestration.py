@@ -25,6 +25,7 @@ class OrchestrationSignal:
     reason: str = ""
     worker: str | None = None
     text: str = ""
+    account: str | None = None
 
 def parse_orchestration_signal(data: dict) -> OrchestrationSignal:
     action = data.get("action")
@@ -36,6 +37,7 @@ def parse_orchestration_signal(data: dict) -> OrchestrationSignal:
         task=data.get("task", ""),
         cwd=data.get("cwd"), mode=data.get("mode"), mission=data.get("mission"),
         reason=data.get("reason", ""), worker=data.get("worker"), text=data.get("text", ""),
+        account=data.get("account"),
     )
 
 @dataclass
@@ -82,7 +84,8 @@ class OrchestrationExecutor:
             return Result("brake", brake="opus_spawn",
                           detail=f"requested {sig.model} (ceiling {self.policy.ceiling}): {sig.reason}")
         worker = self.cb.spawn(role=sig.role, cmd=sig.cmd, model=sig.model, task=sig.task,
-                               cwd=sig.cwd, mode=sig.mode, mission=sig.mission, reason=sig.reason)
+                               cwd=sig.cwd, mode=sig.mode, mission=sig.mission, reason=sig.reason,
+                               account=sig.account)
         return Result("spawned", worker=worker)
 
     def _answer(self, sig) -> Result:

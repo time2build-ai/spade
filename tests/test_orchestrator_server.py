@@ -17,6 +17,33 @@ def _reset_orch_state():
     orchestrator_server._missions.clear()
     orchestrator_server._brakes.clear()
 
+def test_policy_reads_current_project_ceiling_and_autopilot():
+    from tui_pilot import projects, orchestrator_server as osrv
+    projects.create(id="p", name="P", path="/w", model_ceiling="opus", autopilot=1)
+    projects.set_current_project("p")
+    pol = osrv._policy_for(mission=None)
+    assert pol.ceiling == "opus" and pol.autopilot is True
+
+
+def test_orchestrator_spawn_passes_current_project(monkeypatch):
+    from tui_pilot import projects, orchestrator_server as osrv
+    projects.create(id="p", name="P", path="/w"); projects.set_current_project("p")
+    captured = {}
+    class FakeServer:
+        def _spawn_agent(self, **kw): captured.update(kw); return {"id": "w1"}
+    cb = osrv._callbacks_for(FakeServer(), "orch-1", mission="m")
+    cb.spawn(role="developer", model="sonnet", task="do")
+    assert captured["project_id"] == "p"
+
+
+def test_mission_persisted_with_project():
+    from tui_pilot import projects, db, orchestrator_server as osrv
+    projects.create(id="p", name="P", path="/w"); projects.set_current_project("p")
+    osrv._mission("build-x")
+    row = db.query("SELECT project_id FROM missions WHERE id='build-x'")[0]
+    assert row["project_id"] == "p"
+
+
 def test_spawn_records_model_mission_parent_reason(client, tmp_path):
     r = client.post("/sessions", json={"name":"w","cmd":"cat","cwd":str(tmp_path),
         "model":"sonnet","mission":"m1","parent":"orch-1","reason":"standard markup"})
@@ -80,6 +107,9 @@ def test_missions_list_and_autopilot_toggle(client, tmp_path):
     r = client.post("/missions/m1/autopilot", json={"autopilot": True})
     assert r.status_code == 200 and r.json()["autopilot"] is True
     assert any(m["mission"]=="m1" and m["autopilot"] for m in client.get("/missions").json()["missions"])
+    from tui_pilot import db
+    row = db.query("SELECT autopilot FROM missions WHERE id='m1'")
+    assert row and row[0]["autopilot"] == 1
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
 
@@ -172,6 +202,29 @@ def test_one_spawn_signal_spawns_exactly_one_worker(client, tmp_path):
     assert len(workers) == 1, f"expected exactly 1 worker, got {len(workers)} (runaway)"
     for s in client.get("/sessions").json()["sessions"]:
         client.delete(f"/sessions/{s['id']}")
+
+
+def test_reload_missions_repopulates_from_db(client):
+    """Missions persisted in the DB (e.g. from a previous run) must be restored
+    into the in-memory _missions dict on startup, preserving autopilot."""
+    from tui_pilot import db, orchestrator_server as osrv
+
+    mid = "reload-test-m"
+    db.execute(
+        "INSERT OR IGNORE INTO missions (id, project_id, autopilot, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (mid, None, 1, "active", osrv._now()),
+    )
+    # Confirm it is NOT in the in-memory dict yet (autouse fixture cleared it).
+    assert mid not in osrv._missions
+
+    osrv.reload_missions()
+
+    assert mid in osrv._missions
+    assert osrv._missions[mid]["autopilot"] is True
+    assert osrv._missions[mid]["activity"] == []
+    listed = client.get("/missions").json()["missions"]
+    assert any(m["mission"] == mid and m["autopilot"] for m in listed)
 
 
 def test_worker_finish_is_forwarded_to_orchestrator(client, tmp_path):

@@ -1,9 +1,17 @@
 """FastAPI HTTP layer — multi-agent control plane.
 
-An in-memory registry of named sessions, each a
+A live registry of named sessions, each a
 :class:`~tui_pilot.controller.Controller` over a
-:class:`~tui_pilot.session.TmuxSession`. On top of the raw drive-a-TUI API this
-adds **agent roles**: presets (Planner, Developer, …) that customise an
+:class:`~tui_pilot.session.TmuxSession`. The registry is the in-memory source of
+truth, but it is backed by SQLite persistence under ``~/.tui-pilot`` (sessions,
+roles, projects, accounts, missions). On startup ``_reconcile_sessions()``
+reattaches any still-live tmux agents from the previous run and
+``orchestrator_server.reload_missions()`` restores their missions (and persisted
+autopilot flags); dead rows are marked exited.
+
+On top of the raw drive-a-TUI API this
+adds **agent roles**: presets (Planner, Developer, …) — seeded from
+``roles.yaml`` into SQLite and editable via ``/roles`` — that customise an
 interactive ``claude`` session WITHOUT any headless flag or SDK —
 
   * autonomy via ``Controller.set_mode`` (Shift-Tab keystrokes), and
@@ -20,10 +28,12 @@ Run with::
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -32,6 +42,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import accounts, projects, roles_seed, sessions_store
 from .comms import Hub
 from .controller import Controller
 from .harness import HarnessPoller
@@ -46,6 +57,8 @@ from .session import (
     install_orchestrator_skill,
 )
 
+logger = logging.getLogger("tui_pilot")
+
 app = FastAPI(
     title="tui-pilot",
     description="Drive & orchestrate interactive TUI agents over HTTP, via tmux only.",
@@ -59,8 +72,10 @@ app = FastAPI(
 import sys  # noqa: E402
 
 from . import orchestrator_server  # noqa: E402
+from . import registry_server  # noqa: E402
 
 app.include_router(orchestrator_server.router)
+app.include_router(registry_server.router)
 
 # This module object, passed to orchestrator_server helpers so they can reach
 # back into the registry (_sessions/_meta/_pollers/_lock_for/_spawn_agent/…)
@@ -71,14 +86,39 @@ _ROLES_PATH = Path(__file__).resolve().parent.parent / "roles.yaml"
 
 
 def load_roles() -> dict[str, dict]:
-    """Load agent-role presets from roles.yaml, keyed by id."""
+    """Load agent-role presets from roles.yaml, keyed by id (seed source only)."""
     if not _ROLES_PATH.exists():
         return {}
     data = yaml.safe_load(_ROLES_PATH.read_text()) or {}
     return {r["id"]: r for r in data.get("roles", [])}
 
 
-ROLES = load_roles()
+def refresh_roles() -> None:
+    """Reload ROLES from the DB (after a seed or a role edit)."""
+    global ROLES
+    ROLES = roles_seed.load_roles_from_db()
+
+
+def _ensure_roles() -> None:
+    """Seed the DB from YAML if empty and refresh the in-memory ROLES map.
+
+    Role-dependent paths call this so they work even under the per-test fixture
+    that hands each test a fresh, empty DB (ROLES is set once at import time and
+    would otherwise be stale/empty).
+
+    Hot-path trim: ``seed_if_empty()`` is one cheap idempotent SELECT count, but
+    the SELECT * in ``refresh_roles()`` only runs when ``ROLES`` is currently
+    empty. On a fresh-DB test, ``seed_if_empty()`` repopulates the table and
+    ``refresh_roles()`` reloads it; in production after the first load, ``ROLES``
+    stays non-empty so we skip the per-spawn SELECT *."""
+    roles_seed.seed_if_empty()
+    if not ROLES:
+        refresh_roles()
+
+
+# Seed + load at import; role-dependent code paths re-ensure lazily.
+roles_seed.seed_if_empty()
+ROLES = roles_seed.load_roles_from_db()
 
 # In-memory registry. Guarded by a registry lock for structural changes; each
 # session has its own lock serialising *mutating* tmux operations. Read-only
@@ -180,6 +220,8 @@ class SpawnRequest(BaseModel):
     parent: str | None = Field(None, description="id of the agent that spawned this worker")
     reason: str | None = Field(None, description="why this worker was spawned")
     is_orchestrator: bool = Field(False, description="this session is the orchestrator")
+    account_id: str | None = Field(None, description="explicit account (CLAUDE_CONFIG_DIR) to use")
+    project_id: str | None = Field(None, description="project whose account pool to draw from")
     cols: int = Field(200, ge=20, le=500)
     rows: int = Field(50, ge=10, le=200)
 
@@ -276,6 +318,8 @@ def _info(aid: str) -> dict:
         "state": _safe_state(ctrl),
         "harness_state": harness_state,
         "has_menu": has_menu,
+        "account_id": m.get("account_id"),
+        "project_id": m.get("project_id"),
     }
 
 
@@ -365,6 +409,7 @@ def _prime(aid: str) -> None:
 @app.get("/roles")
 def list_roles() -> dict:
     """List the agent-role presets the UI can spawn."""
+    _ensure_roles()
     return {
         "roles": [
             {
@@ -413,6 +458,25 @@ def _make_handoff(*, predecessor_aid: str, name_hint: str, cwd: str | None):
     return _handoff
 
 
+def _resolve_account(account_id: str | None, project_id: str | None) -> dict | None:
+    """Pick the account a spawn should use.
+
+    Precedence: an explicit ``account_id`` wins; else a ``project_id`` advances
+    that project's round-robin pool (falling back to the default if the pool is
+    empty); else the global default. May return None when no accounts exist.
+    """
+    if account_id:
+        return accounts.get(account_id)
+    if project_id:
+        # next_account advances the round-robin cursor as a side effect; the
+        # caller may still reject this spawn (not-logged-in / tmux failure),
+        # intentionally consuming a rotation slot — see the call site in
+        # _spawn_agent.
+        aid = projects.next_account(project_id)
+        return accounts.get(aid) if aid else accounts.default_account()
+    return accounts.default_account()
+
+
 def _spawn_agent(
     *,
     name: str,
@@ -430,6 +494,8 @@ def _spawn_agent(
     parent: str | None = None,
     reason: str | None = None,
     is_orchestrator: bool = False,
+    account_id: str | None = None,
+    project_id: str | None = None,
 ) -> dict:
     """Spawn a (optionally role-based) agent session and return its info.
 
@@ -439,6 +505,7 @@ def _spawn_agent(
     is responsible for 400ing unknown roles on direct API calls.
     """
     global _order
+    _ensure_roles()
     role_def = ROLES.get(role) if role else None
 
     eff_cmd = cmd or (role_def.get("cmd") if role_def else None) or "claude"
@@ -477,7 +544,21 @@ def _spawn_agent(
         eff_cwd = str(Path.home() / ".tui-pilot" / "workspaces" / aid)
         os.makedirs(eff_cwd, exist_ok=True)
 
-    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd)
+    # Resolve which account (CLAUDE_CONFIG_DIR) this session runs under BEFORE
+    # spawning, so we can inject the config dir and guard against an account that
+    # isn't logged in. The round-robin advance happens here too (atomic in the DB).
+    acct = _resolve_account(account_id, project_id)
+    # Note: for a round_robin project the cursor has already advanced by this
+    # point; a rejected spawn (auth guard / tmux failure below) consumes a
+    # rotation slot intentionally — the retry then lands on the next account
+    # rather than re-hitting the same one.
+    if acct and accounts.auth_status(acct["config_dir"]) == "not_logged_in":
+        raise HTTPException(
+            status_code=400, detail=f"account {acct['id']} is not logged in"
+        )
+    env = {"CLAUDE_CONFIG_DIR": acct["config_dir"]} if acct else {}
+
+    sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd, env=env)
     try:
         sess.spawn()
     except SessionError as exc:
@@ -521,7 +602,32 @@ def _spawn_agent(
             "parent": parent,
             "reason": reason,
             "is_orchestrator": is_orchestrator,
+            "account_id": acct and acct["id"],
+            "project_id": project_id,
         }
+        # Persist the session row (best-effort: a DB hiccup must not abort the
+        # in-memory spawn, which is the live source of truth). Inside the same
+        # registry-lock block so the in-memory + persisted records are atomic.
+        try:
+            sessions_store.insert(
+                id=aid,
+                project_id=project_id,
+                account_id=(acct and acct["id"]),
+                name=name,
+                role=role,
+                model=model,
+                mode=eff_mode,
+                cwd=eff_cwd,
+                mission_id=mission,
+                parent=parent,
+                reason=reason,
+                is_orchestrator=1 if is_orchestrator else 0,
+                sort_order=_order,
+                status="live",
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception:  # noqa: BLE001 - persistence is best-effort (still swallowed)
+            logger.warning("failed to persist session %s", aid, exc_info=True)
         _pollers[aid] = HarnessPoller(
             aid, sess, hub, cwd=eff_cwd,
             on_handoff=_make_handoff(predecessor_aid=aid, name_hint=name, cwd=eff_cwd),
@@ -539,6 +645,71 @@ def _spawn_agent(
     return _info(aid)
 
 
+def _reconcile_sessions(is_alive=None) -> list[str]:
+    """Reattach still-live tmux sessions on startup; mark the rest exited.
+
+    For each persisted ``live`` session: if its tmux session is still alive,
+    rebuild the in-memory registry entry (Controller/lock/poller/meta) with the
+    SAME wiring as _spawn_agent and keep it ``live``; otherwise mark it
+    ``exited`` in the DB. Per-row work is wrapped so one bad row can't abort the
+    whole reconcile. Returns the ids that were kept (reattached)."""
+    global _order
+    if is_alive is None:
+        is_alive = lambda sid: TmuxSession(sid, "").is_alive()  # noqa: E731
+    _ensure_roles()
+    kept: list[str] = []
+    max_order = 0
+    rows = sessions_store.all_live()
+    with _registry_lock:
+        for row in rows:
+            sid = row["id"]
+            try:
+                max_order = max(max_order, row.get("sort_order") or 0)
+                if not is_alive(sid):
+                    sessions_store.set_status(sid, "exited")
+                    continue
+                cwd = row.get("cwd")
+                sess = TmuxSession(sid, "claude", cwd=cwd)
+                _sessions[sid] = Controller(sess)
+                _locks[sid] = threading.Lock()
+                hub = _hub_for(cwd)
+                _pollers[sid] = HarnessPoller(
+                    sid, sess, hub, cwd=cwd,
+                    on_handoff=_make_handoff(
+                        predecessor_aid=sid, name_hint=row.get("name") or sid, cwd=cwd
+                    ),
+                )
+                role_def = ROLES.get(row.get("role")) if row.get("role") else None
+                _meta[sid] = {
+                    "id": sid,
+                    "name": row.get("name") or sid,
+                    "cwd": cwd,
+                    "role": row.get("role"),
+                    "label": (role_def.get("label") if role_def else None)
+                    or (row.get("name") or sid),
+                    "emoji": (role_def.get("emoji") if role_def else None) or "💬",
+                    "mode": row.get("mode"),
+                    "instructions": (role_def.get("instructions", "") if role_def else ""),
+                    "task": None,
+                    "prep": "ready",
+                    "prep_detail": None,
+                    "order": row.get("sort_order") or 0,
+                    "model": row.get("model"),
+                    "mission": row.get("mission_id"),
+                    "parent": row.get("parent"),
+                    "reason": row.get("reason"),
+                    "is_orchestrator": bool(row.get("is_orchestrator")),
+                    "account_id": row.get("account_id"),
+                    "project_id": row.get("project_id"),
+                }
+                kept.append(sid)
+            except Exception:  # noqa: BLE001 - one bad row can't abort reconcile (swallowed)
+                logger.warning("failed to reconcile session %s", sid, exc_info=True)
+        # Resume the module order counter past the highest reattached row.
+        _order = max(_order, max_order)
+    return kept
+
+
 @app.post("/sessions")
 def create_session(req: SpawnRequest) -> dict:
     """Spawn a new (optionally role-based) agent session.
@@ -550,6 +721,7 @@ def create_session(req: SpawnRequest) -> dict:
     # Unknown-role 400 stays here (route-only) and OUTSIDE any lock; _spawn_agent
     # itself tolerates unknown roles (for the handoff path). It takes
     # _registry_lock internally, so do NOT wrap the call (non-reentrant lock).
+    _ensure_roles()
     if req.role and ROLES.get(req.role) is None:
         raise HTTPException(status_code=400, detail=f"unknown role {req.role!r}")
     return _spawn_agent(
@@ -567,6 +739,8 @@ def create_session(req: SpawnRequest) -> dict:
         parent=req.parent,
         reason=req.reason,
         is_orchestrator=req.is_orchestrator,
+        account_id=req.account_id,
+        project_id=req.project_id,
     )
 
 
@@ -798,6 +972,21 @@ def index() -> str:
         "<li><a href='/docs'>OpenAPI docs</a></li>"
         "</ul></body></html>"
     )
+
+
+# Reattach any still-live tmux sessions persisted by a prior run, AFTER all
+# helpers above are defined (the poll loop thread, started near the top, only
+# begins ticking these once they are in the registry). Best-effort: a reconcile
+# failure must never stop import/startup.
+try:
+    _reconcile_sessions()
+    # Restore persisted missions (and their autopilot flags) into the in-memory
+    # _missions dict so a reattached worker's mission is live in GET /missions
+    # immediately — a persisted autopilot=1 must not silently degrade to
+    # supervised until the mission is next referenced.
+    orchestrator_server.reload_missions()
+except Exception:  # noqa: BLE001 - startup reconcile is best-effort (swallowed)
+    logger.warning("startup session reconcile failed", exc_info=True)
 
 
 def main() -> None:

@@ -20,6 +20,9 @@ const el = {
 
 let roles = [];
 let sessions = [];          // latest GET /sessions snapshot
+let accounts = [];          // latest GET /accounts snapshot
+let allProjects = [];       // latest GET /projects snapshot
+let currentProjectId = null; // current-project id
 let current = null;         // focused session id
 let pending = new Set();    // session ids with an in-flight prompt
 let lastJson = "{ }";
@@ -71,6 +74,9 @@ async function api(method, path, body, label) {
 const findSession = (id) => sessions.find((s) => s.id === id);
 const blockedSessions = () => sessions.filter((s) => s.harness_state === "blocked");
 const isOrch = (s) => s && (s.role === "orchestrator" || s.id === orchId);
+const accountById = (id) => accounts.find((a) => a.id === id);
+const accountColor = (id) => { const a = accountById(id); return (a && a.color) || "#8b949e"; };
+const accountInitials = (a) => (a.label || a.id).slice(0, 2).toUpperCase();
 
 // A session "needs attention" if a harness signal is blocking OR the TUI itself
 // is showing a permission/input dialog that only a human can resolve.
@@ -87,6 +93,114 @@ function isWorking(s) {
   if (pending.has(s.id)) return true;
   return false;
 }
+
+// ---- view switching -------------------------------------------------------
+
+let currentView = "fleet";
+
+function switchView(name) {
+  currentView = name;
+  document.querySelectorAll(".view").forEach((v) => {
+    v.style.display = v.id === `view-${name}` ? "flex" : "none";
+  });
+  document.querySelectorAll(".rail-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.view === name);
+  });
+  // Refresh pages when switching to them
+  if (name === "accounts") { loadAccounts().then(renderAccountsPage); }
+  if (name === "projects") renderProjectsPage();
+  if (name === "agents") renderRolesPage();
+}
+
+document.querySelectorAll(".rail-btn").forEach((b) => {
+  b.onclick = () => switchView(b.dataset.view);
+});
+
+// ---- project bar ----------------------------------------------------------
+
+async function loadCurrentProject() {
+  try {
+    const r = await api("GET", "/current-project");
+    currentProjectId = r.project_id || null;
+  } catch (e) { /* ignore */ }
+  await loadProjects();
+  renderProjectBar();
+}
+
+async function loadProjects() {
+  try {
+    const r = await api("GET", "/projects");
+    allProjects = r.projects || [];
+  } catch (e) { /* ignore */ }
+}
+
+async function loadAccounts() {
+  try {
+    const r = await api("GET", "/accounts");
+    accounts = r.accounts || [];
+  } catch (e) { /* ignore */ }
+}
+
+function renderProjectBar() {
+  const proj = currentProjectId ? allProjects.find((p) => p.id === currentProjectId) : null;
+  const chip = $("projectChipName");
+  const icon = $("projectChipIcon");
+  const dots = $("projectChipDots");
+  chip.textContent = proj ? proj.name : "No project";
+  icon.textContent = "📦";
+  dots.innerHTML = "";
+  if (proj && proj.pool) {
+    for (const aid of (proj.pool || [])) {
+      const d = document.createElement("span");
+      d.className = "acct-dot";
+      d.style.background = accountColor(aid);
+      d.title = (accountById(aid) || {}).label || aid;
+      dots.appendChild(d);
+    }
+  }
+}
+
+// project chip dropdown toggle
+$("projectChip").onclick = (e) => {
+  e.stopPropagation();
+  const dd = $("projectDropdown");
+  const open = dd.style.display !== "none";
+  if (open) { dd.style.display = "none"; return; }
+  renderProjectDropdown();
+  dd.style.display = "";
+};
+document.addEventListener("click", () => { $("projectDropdown").style.display = "none"; });
+$("projectDropdown").addEventListener("click", (e) => e.stopPropagation());
+
+function renderProjectDropdown() {
+  const list = $("projectDropdownList");
+  list.innerHTML = "";
+  if (!allProjects.length) {
+    list.innerHTML = `<div class="pd-item dim">No projects yet</div>`;
+    return;
+  }
+  for (const p of allProjects) {
+    const item = document.createElement("div");
+    item.className = "pd-item" + (p.id === currentProjectId ? " active" : "");
+    item.textContent = p.name;
+    item.onclick = async () => {
+      try {
+        await api("PUT", "/current-project", { project_id: p.id });
+        currentProjectId = p.id;
+        await loadProjects();
+        renderProjectBar();
+        $("projectDropdown").style.display = "none";
+      } catch (ex) { log(`switch project: ${ex.message}`, "err"); }
+    };
+    list.appendChild(item);
+  }
+}
+
+$("btnNewProjectQuick").onclick = () => {
+  $("projectDropdown").style.display = "none";
+  switchView("projects");
+  setTimeout(() => openProjectEditor(null), 50);
+};
 
 // ---- roles ----------------------------------------------------------------
 
@@ -123,6 +237,13 @@ function nextName(roleId) {
 
 // ---- agents list ----------------------------------------------------------
 
+function acctDotHtml(accountId) {
+  if (!accountId) return "";
+  const color = accountColor(accountId);
+  const label = (accountById(accountId) || {}).label || accountId;
+  return `<span class="acct-dot" style="background:${esc(color)}" title="${esc(label)}"></span>`;
+}
+
 function cardHtml(s) {
   const prep = s.prep && s.prep !== "ready" ? `<span class="badge prep-${s.prep}">${s.prep}</span>` : "";
   const busy = pending.has(s.id) ? `<span class="badge prep-working">working…</span>` : "";
@@ -137,10 +258,12 @@ function cardHtml(s) {
   const model = s.model
     ? `<span class="badge model-${esc(s.model)}" title="${esc(s.reason || "why this model")}">${esc(s.model)}</span>`
     : "";
+  const dot = acctDotHtml(s.account_id);
   return `
     <div class="top">
       <span class="emoji">${isOrch(s) ? "🧠" : (s.emoji || "💬")}</span>
       <span class="nm" title="${esc(s.name)}">${esc(s.name)}</span>
+      ${dot}
       <button class="x" title="kill">✕</button>
     </div>
     ${cwd}
@@ -664,6 +787,7 @@ el.spawn.onclick = async () => {
     instructions: el.instructions.value,
     task,
     cwd: el.cwd.value.trim() || undefined,
+    project_id: currentProjectId || undefined,
   };
   el.spawn.disabled = true;
   try {
@@ -754,11 +878,572 @@ el.copyJson.onclick = async () => {
 
 el.orchBtn.onclick = focusOrchestrator;
 
+// ==========================================================================
+// ACCOUNTS PAGE
+// ==========================================================================
+
+function colorForAcct(a) {
+  return a.color || "#8b949e";
+}
+
+function renderAccountsPage() {
+  const list = $("accountsList");
+  list.innerHTML = "";
+  if (!accounts.length) {
+    list.innerHTML = `<div class="page-empty">No accounts yet. Scan or add one.</div>`;
+    return;
+  }
+  for (const a of accounts) {
+    const color = colorForAcct(a);
+    const initials = accountInitials(a);
+    const isDefault = a.is_default;
+    const card = document.createElement("div");
+    card.className = "acct-card";
+    card.innerHTML = `
+      <div class="acct-swatch" style="background:${color}22;color:${color}">${esc(initials)}</div>
+      <div class="acct-info">
+        <div class="acct-name">${esc(a.label)}</div>
+        <div class="acct-tags">
+          <span class="badge provider">${esc(a.provider || "claude-code")}</span>
+          ${isDefault ? `<span class="badge is-default">⭐ default</span>` : ""}
+        </div>
+        <div class="acct-dir">${esc(a.config_dir)}</div>
+      </div>
+      <div class="acct-actions">
+        ${!isDefault ? `<button class="tiny set-default" data-id="${esc(a.id)}">Set default</button>` : ""}
+        <button class="tiny login-btn" data-id="${esc(a.id)}">Log in ↗</button>
+        <button class="tiny red del-acct" data-id="${esc(a.id)}">✕</button>
+      </div>`;
+    list.appendChild(card);
+  }
+  list.querySelectorAll(".set-default").forEach((b) => {
+    b.onclick = () => setAccountDefault(b.dataset.id);
+  });
+  list.querySelectorAll(".login-btn").forEach((b) => {
+    b.onclick = () => loginAccount(b.dataset.id);
+  });
+  list.querySelectorAll(".del-acct").forEach((b) => {
+    b.onclick = () => deleteAccount(b.dataset.id);
+  });
+}
+
+async function setAccountDefault(id) {
+  try {
+    await api("POST", `/accounts/${id}/default`, undefined, "set-default");
+    log("default account set", "ok");
+    await loadAccounts();
+    renderAccountsPage();
+  } catch (e) { log(`set-default: ${e.message}`, "err"); }
+}
+
+async function deleteAccount(id) {
+  if (!confirm("Delete this account?")) return;
+  try {
+    await api("DELETE", `/accounts/${id}`, undefined, "del-account");
+    log("account deleted", "ok");
+    await loadAccounts();
+    renderAccountsPage();
+    renderProjectBar();
+  } catch (e) { log(`del-account: ${e.message}`, "err"); }
+}
+
+async function loginAccount(id) {
+  try {
+    const r = await api("POST", `/accounts/${id}/login`, undefined, "login");
+    if (r && r.id) {
+      log(`login session: ${r.id}`, "ok");
+      await pollSessions();
+      // switch to fleet view and focus the login session
+      switchView("fleet");
+      focus(r.id);
+    }
+  } catch (e) { log(`login: ${e.message}`, "err"); }
+}
+
+// scan
+$("btnScanAccounts").onclick = async () => {
+  const scanResults = $("scanResults");
+  const accountForm = $("accountForm");
+  accountForm.style.display = "none";
+  scanResults.style.display = "";
+  scanResults.innerHTML = `<div class="dim">Scanning…</div>`;
+  try {
+    const r = await api("POST", "/accounts/scan", undefined, "scan");
+    const managed = r.managed || [];
+    const importable = r.importable || [];
+    let html = "";
+    if (!managed.length && !importable.length) {
+      html = `<div class="dim">Nothing new found.</div>`;
+    } else {
+      if (managed.length) {
+        html += `<div class="scan-section-head">Managed (new dirs found)</div>`;
+        for (const s of managed) {
+          html += `<div class="scan-item">
+            <div class="si-info"><b>${esc(s.id || s.label || s.config_dir)}</b><div class="si-dir">${esc(s.config_dir)}</div></div>
+            <button class="tiny import-managed" data-id="${esc(s.id || "")}" data-label="${esc(s.label || s.id || "")}" data-dir="${esc(s.config_dir)}" data-provider="${esc(s.provider || "claude-code")}">Import</button>
+          </div>`;
+        }
+      }
+      if (importable.length) {
+        html += `<div class="scan-section-head" style="margin-top:12px">Importable (existing ~/.claude-* dirs)</div>`;
+        for (const s of importable) {
+          html += `<div class="scan-item">
+            <div class="si-info"><b>${esc(s.id || s.label || s.config_dir)}</b><div class="si-dir">${esc(s.config_dir)}</div></div>
+            <button class="tiny import-existing" data-id="${esc(s.id || "")}" data-label="${esc(s.label || s.id || "")}" data-dir="${esc(s.config_dir)}" data-provider="${esc(s.provider || "claude-code")}">Import</button>
+          </div>`;
+        }
+      }
+    }
+    scanResults.innerHTML = html;
+    scanResults.querySelectorAll(".import-managed, .import-existing").forEach((b) => {
+      const isManaged = b.classList.contains("import-managed");
+      b.onclick = async () => {
+        const color = randomColor();
+        try {
+          const endpoint = isManaged ? "/accounts" : "/accounts/import";
+          await api("POST", endpoint, {
+            id: b.dataset.id, label: b.dataset.label,
+            config_dir: b.dataset.dir, provider: b.dataset.provider, color,
+          }, "import");
+          log(`imported: ${b.dataset.label}`, "ok");
+          await loadAccounts();
+          renderAccountsPage();
+          renderProjectBar();
+          b.closest(".scan-item").remove();
+        } catch (ex) { log(`import: ${ex.message}`, "err"); }
+      };
+    });
+  } catch (e) {
+    scanResults.innerHTML = `<div style="color:var(--red)">scan error: ${esc(e.message)}</div>`;
+  }
+};
+
+// new account form
+$("btnNewAccount").onclick = () => {
+  const scanResults = $("scanResults");
+  const accountForm = $("accountForm");
+  scanResults.style.display = "none";
+  accountForm.style.display = "";
+  const color = randomColor();
+  accountForm.innerHTML = `
+    <h3>New account</h3>
+    <div class="pef-field"><label>ID (slug)</label><input type="text" id="newAcctId" placeholder="e.g. mywork" /></div>
+    <div class="pef-field"><label>Label</label><input type="text" id="newAcctLabel" placeholder="My Work Account" /></div>
+    <div class="pef-field"><label>Config dir</label><input type="text" id="newAcctDir" placeholder="/path/to/config" /></div>
+    <div class="pef-field"><label>Provider</label>
+      <select id="newAcctProvider"><option value="claude-code">claude-code</option></select>
+    </div>
+    <div class="row">
+      <button id="btnCreateAcct" class="primary">Create account</button>
+      <button id="btnCancelAcct">Cancel</button>
+    </div>`;
+  $("btnCancelAcct").onclick = () => { accountForm.style.display = "none"; };
+  $("btnCreateAcct").onclick = async () => {
+    const id = $("newAcctId").value.trim();
+    const label = $("newAcctLabel").value.trim();
+    const config_dir = $("newAcctDir").value.trim();
+    const provider = $("newAcctProvider").value;
+    if (!id || !label || !config_dir) return log("id, label, config_dir required", "err");
+    try {
+      await api("POST", "/accounts", { id, label, config_dir, color, provider }, "create-account");
+      log(`account created: ${label}`, "ok");
+      await loadAccounts();
+      renderAccountsPage();
+      renderProjectBar();
+      accountForm.style.display = "none";
+    } catch (ex) { log(`create-account: ${ex.message}`, "err"); }
+  };
+};
+
+function randomColor() {
+  const colors = ["#34d399","#60a5fa","#f87171","#fbbf24","#a78bfa","#fb923c","#38bdf8","#4ade80"];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// ==========================================================================
+// PROJECTS PAGE
+// ==========================================================================
+
+let editingProject = null; // null = new, else project id
+
+function renderProjectsPage() {
+  const list = $("projectList");
+  list.innerHTML = "";
+  for (const p of allProjects) {
+    const item = document.createElement("div");
+    item.className = "page-list-item" + (editingProject === p.id ? " active" : "");
+    item.innerHTML = `<span class="item-label">${esc(p.name)}</span>`;
+    item.onclick = () => openProjectEditor(p.id);
+    list.appendChild(item);
+  }
+}
+
+async function openProjectEditor(id) {
+  editingProject = id;
+  renderProjectsPage();
+  const pane = $("projectEditor");
+  if (!id) {
+    // new project form
+    pane.innerHTML = buildProjectEditorHtml(null, []);
+    wireProjectEditor(null, []);
+    return;
+  }
+  try {
+    const proj = await api("GET", `/projects/${id}`);
+    pane.innerHTML = buildProjectEditorHtml(proj, proj.pool || []);
+    wireProjectEditor(proj, proj.pool || []);
+  } catch (e) {
+    pane.innerHTML = `<div class="page-empty">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+function buildProjectEditorHtml(proj, pool) {
+  const isNew = !proj;
+  const name = proj ? proj.name : "";
+  const path = proj ? (proj.path || "") : "";
+  const strategy = proj ? (proj.account_strategy || "single") : "single";
+  const modelCeiling = proj ? (proj.model_ceiling || "") : "";
+  const autopilot = proj ? !!proj.autopilot : false;
+  return `
+    <div class="proj-editor-form">
+      <div class="pef-head">
+        <h2>${isNew ? "New Project" : esc(proj.name)}</h2>
+        ${!isNew ? `<button id="btnDeleteProject" class="tiny red">Delete</button>` : ""}
+      </div>
+      <div class="pef-field"><label>Project name</label>
+        <input type="text" id="pefName" value="${esc(name)}" placeholder="My Project" />
+      </div>
+      <div class="pef-field"><label>Working directory</label>
+        <input type="text" id="pefPath" style="font-family:ui-monospace,monospace" value="${esc(path)}" placeholder="/path/to/project" />
+      </div>
+      ${isNew ? `<div class="pef-field"><label>ID (slug)</label>
+        <input type="text" id="pefId" value="" placeholder="my-project" />
+      </div>` : ""}
+      <div class="pef-field"><label>Account strategy</label>
+        <div class="seg-toggle">
+          <button class="strat-btn ${strategy === "single" ? "on" : ""}" data-strat="single">Single account</button>
+          <button class="strat-btn ${strategy === "round_robin" ? "on" : ""}" data-strat="round_robin">Round-robin pool ⟳</button>
+        </div>
+        <p class="hint" id="stratHint">${strategyHint(strategy)}</p>
+      </div>
+      <div class="pef-field">
+        <label>Account pool <span style="opacity:.4">· use ↑↓ to reorder</span></label>
+        <div id="poolList" class="pool-list">${buildPoolHtml(pool)}</div>
+        <div class="pool-add-row">
+          <select id="poolAddSelect"></select>
+          <button id="btnAddToPool" class="tiny">+ Add</button>
+        </div>
+        <div class="next-worker-hint" id="nextWorkerHint">${nextWorkerHint(pool, strategy)}</div>
+      </div>
+      <div class="pef-field"><label>Defaults (optional)</label>
+        <div class="row">
+          <select id="pefModelCeiling" style="flex:1">
+            <option value="">— no model ceiling —</option>
+            <option value="haiku" ${modelCeiling === "haiku" ? "selected" : ""}>haiku</option>
+            <option value="sonnet" ${modelCeiling === "sonnet" ? "selected" : ""}>sonnet</option>
+            <option value="opus" ${modelCeiling === "opus" ? "selected" : ""}>opus</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;text-transform:none;color:var(--fg);white-space:nowrap">
+            <input type="checkbox" id="pefAutopilot" ${autopilot ? "checked" : ""}> autopilot
+          </label>
+        </div>
+      </div>
+      <div class="pef-actions">
+        <button id="btnSaveProject" class="primary">${isNew ? "Create project" : "Save changes"}</button>
+      </div>
+    </div>`;
+}
+
+function strategyHint(s) {
+  return s === "round_robin"
+    ? "Round-robin: each new worker takes the next account in the pool."
+    : "Single: all workers use the first account in the pool.";
+}
+
+function buildPoolHtml(pool) {
+  if (!pool.length) return `<div class="dim" style="font-size:12px;padding:4px 0">No accounts in pool yet.</div>`;
+  return pool.map((aid, i) => {
+    const a = accountById(aid);
+    const color = a ? colorForAcct(a) : "#8b949e";
+    const label = a ? a.label : aid;
+    return `<div class="pool-pill" data-aid="${esc(aid)}">
+      <span class="pp-pos">${i + 1}</span>
+      <span class="pp-dot" style="background:${esc(color)}"></span>
+      <span class="pp-label">${esc(label)}</span>
+      <button class="pp-up" data-idx="${i}" title="move up">↑</button>
+      <button class="pp-dn" data-idx="${i}" title="move down">↓</button>
+      <button class="pp-rm" data-idx="${i}" title="remove">✕</button>
+    </div>`;
+  }).join("");
+}
+
+function nextWorkerHint(pool, strategy) {
+  if (!pool.length) return "";
+  const a = accountById(pool[0]);
+  const name = a ? a.label : pool[0];
+  if (strategy === "round_robin" && pool.length > 1) {
+    const b = accountById(pool[1]);
+    const name2 = b ? b.label : pool[1];
+    return `Next worker → <b>${esc(name)}</b>, then <b>${esc(name2)}</b>…`;
+  }
+  return `Next worker → <b>${esc(name)}</b>`;
+}
+
+function wireProjectEditor(proj, initialPool) {
+  let pool = [...initialPool];
+  let strategy = proj ? (proj.account_strategy || "single") : "single";
+
+  function refreshPool() {
+    $("poolList").innerHTML = buildPoolHtml(pool);
+    const hint = $("nextWorkerHint");
+    if (hint) hint.innerHTML = nextWorkerHint(pool, strategy);
+    wirePoolButtons();
+  }
+
+  function wirePoolButtons() {
+    $("poolList").querySelectorAll(".pp-up").forEach((b) => {
+      b.onclick = () => {
+        const i = parseInt(b.dataset.idx);
+        if (i <= 0) return;
+        [pool[i - 1], pool[i]] = [pool[i], pool[i - 1]];
+        refreshPool();
+      };
+    });
+    $("poolList").querySelectorAll(".pp-dn").forEach((b) => {
+      b.onclick = () => {
+        const i = parseInt(b.dataset.idx);
+        if (i >= pool.length - 1) return;
+        [pool[i], pool[i + 1]] = [pool[i + 1], pool[i]];
+        refreshPool();
+      };
+    });
+    $("poolList").querySelectorAll(".pp-rm").forEach((b) => {
+      b.onclick = () => {
+        const i = parseInt(b.dataset.idx);
+        pool.splice(i, 1);
+        refreshPool();
+      };
+    });
+  }
+
+  // strategy toggle
+  document.querySelectorAll(".strat-btn").forEach((b) => {
+    b.onclick = () => {
+      strategy = b.dataset.strat;
+      document.querySelectorAll(".strat-btn").forEach((x) => x.classList.toggle("on", x.dataset.strat === strategy));
+      const hint = $("stratHint");
+      if (hint) hint.textContent = strategyHint(strategy);
+      refreshPool();
+    };
+  });
+
+  // pool add select — populate with accounts not yet in pool
+  function refreshAddSelect() {
+    const sel = $("poolAddSelect");
+    if (!sel) return;
+    sel.innerHTML = accounts.filter((a) => !pool.includes(a.id))
+      .map((a) => `<option value="${esc(a.id)}">${esc(a.label)}</option>`).join("");
+    if (!sel.options.length) sel.innerHTML = `<option value="">— all accounts in pool —</option>`;
+  }
+  refreshAddSelect();
+
+  const addBtn = $("btnAddToPool");
+  if (addBtn) {
+    addBtn.onclick = () => {
+      const sel = $("poolAddSelect");
+      const aid = sel && sel.value;
+      if (!aid || pool.includes(aid)) return;
+      pool.push(aid);
+      refreshPool();
+      refreshAddSelect();
+    };
+  }
+
+  wirePoolButtons();
+
+  // save
+  $("btnSaveProject").onclick = async () => {
+    const name = $("pefName").value.trim();
+    const path = $("pefPath").value.trim();
+    const modelCeiling = $("pefModelCeiling").value || null;
+    const autopilot = $("pefAutopilot").checked ? 1 : 0;
+    if (!name || !path) return log("name and path required", "err");
+    try {
+      let id = proj ? proj.id : ($("pefId") ? $("pefId").value.trim() : null);
+      if (!id) { log("id required", "err"); return; }
+      if (!proj) {
+        await api("POST", "/projects", { id, name, path, account_strategy: strategy, model_ceiling: modelCeiling, autopilot }, "create-project");
+      } else {
+        await api("PATCH", `/projects/${id}`, { name, path, account_strategy: strategy, model_ceiling: modelCeiling, autopilot }, "patch-project");
+      }
+      // save pool
+      await api("PUT", `/projects/${id}/accounts`, { account_ids: pool }, "set-pool");
+      log(`project saved: ${name}`, "ok");
+      await loadProjects();
+      renderProjectsPage();
+      openProjectEditor(id);
+      renderProjectBar();
+    } catch (ex) { log(`save-project: ${ex.message}`, "err"); }
+  };
+
+  // delete
+  const delBtn = $("btnDeleteProject");
+  if (delBtn) {
+    delBtn.onclick = async () => {
+      if (!proj || !confirm(`Delete project "${proj.name}"?`)) return;
+      try {
+        await api("DELETE", `/projects/${proj.id}`, undefined, "delete-project");
+        log(`project deleted: ${proj.name}`, "ok");
+        if (currentProjectId === proj.id) {
+          currentProjectId = null;
+          await api("PUT", "/current-project", { project_id: null });
+        }
+        editingProject = null;
+        await loadProjects();
+        renderProjectsPage();
+        $("projectEditor").innerHTML = `<div class="page-empty">Select a project or create a new one.</div>`;
+        renderProjectBar();
+      } catch (ex) { log(`delete-project: ${ex.message}`, "err"); }
+    };
+  }
+}
+
+$("btnNewProject").onclick = () => openProjectEditor(null);
+
+// ==========================================================================
+// AGENTS/ROLES EDITOR
+// ==========================================================================
+
+let editingRole = null;
+
+function renderRolesPage() {
+  const list = $("roleList");
+  list.innerHTML = "";
+  for (const r of roles) {
+    const item = document.createElement("div");
+    item.className = "page-list-item" + (editingRole === r.id ? " active" : "");
+    item.innerHTML = `<span>${esc(r.emoji || "")}</span><span class="item-label">${esc(r.label)}</span>
+      ${r.is_system ? `<span class="badge" style="font-size:9px">sys</span>` : ""}`;
+    item.onclick = () => openRoleEditor(r.id);
+    list.appendChild(item);
+  }
+}
+
+function openRoleEditor(id) {
+  editingRole = id;
+  renderRolesPage();
+  const pane = $("roleEditor");
+  const r = id ? roles.find((x) => x.id === id) : null;
+  if (!r && id) { pane.innerHTML = `<div class="page-empty">Role not found.</div>`; return; }
+  pane.innerHTML = buildRoleEditorHtml(r);
+  wireRoleEditor(r);
+}
+
+function buildRoleEditorHtml(r) {
+  const isNew = !r;
+  return `
+    <div class="role-editor-form">
+      <div class="ref-head">
+        <h2>${isNew ? "New Role" : esc(r.label || r.id)}</h2>
+        ${!isNew && !r.is_system ? `<button id="btnDeleteRole" class="tiny red">Delete</button>` : ""}
+      </div>
+      ${isNew ? `<div class="ref-field"><label>ID (slug)</label>
+        <input type="text" id="refId" placeholder="my-role" /></div>` : ""}
+      <div class="ref-row">
+        <div class="ref-field" style="flex:0 0 72px"><label>Emoji</label>
+          <input type="text" id="refEmoji" value="${esc(r ? (r.emoji || "") : "")}" style="text-align:center" placeholder="🤖" />
+        </div>
+        <div class="ref-field"><label>Label</label>
+          <input type="text" id="refLabel" value="${esc(r ? (r.label || "") : "")}" placeholder="My Role" />
+        </div>
+      </div>
+      <div class="ref-row">
+        <div class="ref-field"><label>Permission mode</label>
+          <select id="refMode">
+            <option value="normal" ${(!r || r.mode === "normal") ? "selected" : ""}>normal</option>
+            <option value="accept-edits" ${r && r.mode === "accept-edits" ? "selected" : ""}>accept-edits</option>
+            <option value="auto" ${r && r.mode === "auto" ? "selected" : ""}>auto</option>
+            <option value="plan" ${r && r.mode === "plan" ? "selected" : ""}>plan</option>
+            <option value="bypass" ${r && r.mode === "bypass" ? "selected" : ""}>⚠ bypass</option>
+          </select>
+        </div>
+        <div class="ref-field"><label>Default model</label>
+          <select id="refModel">
+            <option value="" ${(!r || !r.default_model) ? "selected" : ""}>— let orchestrator pick —</option>
+            <option value="haiku" ${r && r.default_model === "haiku" ? "selected" : ""}>haiku</option>
+            <option value="sonnet" ${r && r.default_model === "sonnet" ? "selected" : ""}>sonnet</option>
+            <option value="opus" ${r && r.default_model === "opus" ? "selected" : ""}>opus</option>
+          </select>
+        </div>
+      </div>
+      <div class="ref-field"><label>Description <span class="dim">(shown in pickers)</span></label>
+        <input type="text" id="refDesc" value="${esc(r ? (r.description || "") : "")}" placeholder="What does this role do?" />
+      </div>
+      <div class="ref-field"><label>Instructions <span class="dim">(priming — typed as first message)</span></label>
+        <textarea id="refInstructions" rows="6" style="font-family:ui-monospace,monospace;font-size:12px">${esc(r ? (r.instructions || "") : "")}</textarea>
+      </div>
+      <div class="ref-note">🔑 Account: <b>inherited from project at spawn</b> — round-robin pool, or single account.</div>
+      <div class="ref-actions">
+        <button id="btnSaveRole" class="primary">Save role</button>
+        <span class="dim">Stored in SQLite</span>
+      </div>
+    </div>`;
+}
+
+function wireRoleEditor(r) {
+  $("btnSaveRole").onclick = async () => {
+    const id = r ? r.id : ($("refId") ? $("refId").value.trim() : null);
+    const label = $("refLabel").value.trim();
+    const emoji = $("refEmoji").value.trim();
+    const mode = $("refMode").value;
+    const default_model = $("refModel").value || null;
+    const description = $("refDesc").value.trim();
+    const instructions = $("refInstructions").value;
+    if (!id) { log("id required", "err"); return; }
+    if (!label) { log("label required", "err"); return; }
+    try {
+      if (!r) {
+        await api("POST", "/roles", { id, label, emoji, mode, default_model, description, instructions }, "create-role");
+      } else {
+        await api("PATCH", `/roles/${id}`, { label, emoji, mode, default_model, description, instructions }, "patch-role");
+      }
+      log(`role saved: ${label}`, "ok");
+      await loadRoles();
+      renderRolesPage();
+      openRoleEditor(id);
+    } catch (ex) { log(`save-role: ${ex.message}`, "err"); }
+  };
+
+  const delBtn = $("btnDeleteRole");
+  if (delBtn) {
+    delBtn.onclick = async () => {
+      if (!r || !confirm(`Delete role "${r.label}"?`)) return;
+      try {
+        await api("DELETE", `/roles/${r.id}`, undefined, "delete-role");
+        log(`role deleted: ${r.label}`, "ok");
+        editingRole = null;
+        await loadRoles();
+        renderRolesPage();
+        $("roleEditor").innerHTML = `<div class="page-empty">Select a role or create a new one.</div>`;
+      } catch (ex) { log(`delete-role: ${ex.message}`, "err"); }
+    };
+  }
+}
+
+$("btnNewRole").onclick = () => {
+  editingRole = null;
+  renderRolesPage();
+  $("roleEditor").innerHTML = buildRoleEditorHtml(null);
+  wireRoleEditor(null);
+};
+
 // ---- init -----------------------------------------------------------------
-loadRoles();
-pollMissions();
-pollBrakes();
 (async () => {
+  await loadAccounts();
+  await loadRoles();
+  await loadCurrentProject();
+  pollMissions();
+  pollBrakes();
   await pollSessions();
   // ensure the orchestrator exists and make it the default focus.
   await focusOrchestrator();
