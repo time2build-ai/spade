@@ -107,7 +107,7 @@ function switchView(name) {
     b.classList.toggle("active", b.dataset.view === name);
   });
   // Refresh pages when switching to them
-  if (name === "accounts") renderAccountsPage();
+  if (name === "accounts") { loadAccounts().then(renderAccountsPage); }
   if (name === "projects") renderProjectsPage();
   if (name === "agents") renderRolesPage();
 }
@@ -147,7 +147,7 @@ function renderProjectBar() {
   const icon = $("projectChipIcon");
   const dots = $("projectChipDots");
   chip.textContent = proj ? proj.name : "No project";
-  icon.textContent = proj ? "📦" : "📦";
+  icon.textContent = "📦";
   dots.innerHTML = "";
   if (proj && proj.pool) {
     for (const aid of (proj.pool || [])) {

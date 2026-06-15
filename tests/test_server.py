@@ -177,6 +177,65 @@ def test_account_default_and_delete_and_scan():
     assert not any(a["id"] == "a1" for a in c.get("/accounts").json()["accounts"])
 
 
+def test_scan_returns_rich_candidates(monkeypatch, tmp_path):
+    from tui_pilot import accounts
+    from tui_pilot.server import app
+
+    c = TestClient(app)
+
+    # Create a managed provider dir candidate.
+    pdir = accounts.provider_dir()
+    (pdir / "founder").mkdir(parents=True, exist_ok=True)
+
+    # Create a fake importable ~/.claude-* dir via a monkeypatched user home.
+    fake_home = tmp_path / "userhome"
+    (fake_home / ".claude-work").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(accounts, "_user_home", lambda: fake_home)
+
+    body = c.post("/accounts/scan").json()
+    managed = body["managed"]
+    importable = body["importable"]
+
+    assert any(m["id"] == "founder" for m in managed)
+    for m in managed:
+        assert m["id"] and m["label"] and m["config_dir"]
+        assert m["config_dir"].endswith("/founder")
+
+    assert any(i["label"] == ".claude-work" for i in importable)
+    for i in importable:
+        assert i["id"] and i["label"] and i["config_dir"]
+    work = next(i for i in importable if i["label"] == ".claude-work")
+    assert work["id"] == "work"
+
+    # An already-registered config_dir must be excluded from a re-scan.
+    c.post("/accounts", json={
+        "id": "founder", "label": "Founder",
+        "config_dir": str(pdir / "founder"),
+    })
+    body2 = c.post("/accounts/scan").json()
+    assert not any(m["config_dir"] == str(pdir / "founder") for m in body2["managed"])
+
+
+def test_patch_project_can_clear_model_ceiling():
+    from tui_pilot.server import app
+
+    c = TestClient(app)
+    c.post("/projects", json={
+        "id": "mc", "name": "MC", "path": "/w",
+        "account_strategy": "single", "model_ceiling": "sonnet",
+    })
+    assert c.get("/projects/mc").json()["model_ceiling"] == "sonnet"
+
+    # Partial patch leaves model_ceiling intact.
+    c.patch("/projects/mc", json={"name": "MC2"})
+    assert c.get("/projects/mc").json()["model_ceiling"] == "sonnet"
+    assert c.get("/projects/mc").json()["name"] == "MC2"
+
+    # Explicit null clears it.
+    c.patch("/projects/mc", json={"model_ceiling": None})
+    assert c.get("/projects/mc").json()["model_ceiling"] is None
+
+
 def test_roles_endpoints_write_and_refresh():
     from tui_pilot import server
     from tui_pilot.server import app

@@ -138,10 +138,45 @@ def set_account_default(id: str) -> dict:
 
 @router.post("/accounts/scan")
 def scan_accounts() -> dict:
-    return {
-        "managed": accounts.scan_managed(),
-        "importable": accounts.scan_importable(),
-    }
+    """Return rich candidate objects for NEW (unregistered) account dirs.
+
+    The frontend renders each candidate as an object with id/label/config_dir/
+    provider, so we enrich the bare names/paths from the discovery helpers and
+    skip any whose config_dir already maps to a registered account.
+    """
+    from pathlib import Path
+
+    registered_dirs = {a.get("config_dir") for a in accounts.list_all()}
+
+    managed = []
+    pdir = accounts.provider_dir()
+    for n in accounts.scan_managed():
+        cdir = str(pdir / n)
+        if cdir in registered_dirs:
+            continue
+        managed.append({
+            "id": n,
+            "label": n,
+            "config_dir": cdir,
+            "provider": "claude-code",
+            "kind": "managed",
+        })
+
+    importable = []
+    for p in accounts.scan_importable():
+        if p in registered_dirs:
+            continue
+        name = Path(p).name
+        cid = name.replace(".claude-", "").replace(".claude", "base") or "import"
+        importable.append({
+            "id": cid,
+            "label": name,
+            "config_dir": p,
+            "provider": "claude-code",
+            "kind": "importable",
+        })
+
+    return {"managed": managed, "importable": importable}
 
 
 @router.post("/accounts/import")
@@ -229,7 +264,10 @@ def get_project(id: str) -> dict:
 def patch_project(id: str, req: ProjectPatch) -> dict:
     if projects.get(id) is None:
         raise HTTPException(404, f"no project {id!r}")
-    fields = {k: v for k, v in req.model_dump().items() if v is not None}
+    # Apply only fields the client actually sent (exclude_unset), so an
+    # explicit `model_ceiling: null` clears the column while omitted fields
+    # are left untouched.
+    fields = req.model_dump(exclude_unset=True)
     projects.update(id, **fields)
     return projects.get(id)
 
