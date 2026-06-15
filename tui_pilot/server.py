@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import threading
 import time
 from dataclasses import asdict
@@ -386,77 +387,31 @@ def _info(aid: str) -> dict:
 
 
 def _prime(aid: str) -> None:
-    """Background worker: boot → set mode → inject instructions → ready."""
+    """Background worker: boot → accept the trust prompt → ready.
+
+    Mode and the first message are now configured at LAUNCH (``--permission-mode``
+    / ``--dangerously-skip-permissions`` and Claude's prompt argument), so this no
+    longer cycles Shift-Tab or types the first message — it only waits for the REPL
+    and clears the one-time "trust this folder?" prompt that can block boot."""
     ctrl = _sessions.get(aid)
     if ctrl is None:
         return
     m = _meta[aid]
     lock = _lock_for(aid)
     try:
-        # 1. wait for the REPL to finish booting.
+        # wait for the REPL to finish booting.
         ctrl.wait_for_settle(timeout=40)
 
         # A fresh working directory triggers Claude's "Quick safety check / trust
-        # this folder?" prompt at boot, which blocks before the composer is ready.
-        # The default selection (❯) is "Yes, I trust this folder", so a bare
-        # Enter accepts it. We provision the cwd ourselves, so this is expected.
+        # this folder?" prompt at boot, which blocks before the launch prompt runs.
+        # The default selection (❯) is "Yes, I trust this folder", so a bare Enter
+        # accepts it; Claude then proceeds with the launch prompt. We provision the
+        # cwd ourselves, so this is expected.
         boot_screen = ctrl.session.capture().lower()
         if "trust this folder" in boot_screen or "quick safety check" in boot_screen:
             with lock:
                 ctrl.session.send_key("Enter")
             ctrl.wait_for_settle(timeout=20)
-
-        mode = m.get("mode") or "normal"
-        instructions = (m.get("instructions") or "").strip()
-
-        with lock:
-            # 2. set autonomy via Shift-Tab keystrokes (best-effort). "normal"
-            # is the default and "bypass" is already set at launch (via the
-            # danger flag) — neither needs cycling.
-            if mode and mode not in ("normal", "bypass"):
-                m["prep"] = "priming"
-                m["prep_detail"] = f"setting mode → {mode}"
-                ok = ctrl.set_mode(mode)
-                if not ok:
-                    m["prep_detail"] = f"could not reach mode {mode}; left as-is"
-
-            # 3. Send the FIRST message in one shot: a short control-center
-            # preamble + the role instructions + (if given) the mission. We send
-            # it as ONE message rather than priming-then-task because two
-            # separate sends race/merge (the task can land glued to the priming,
-            # so the agent "acknowledges and waits" and never starts). It is
-            # fire-and-forget (send_text, not prompt) so we never hold the lock
-            # for the whole turn (spec §3.5) — otherwise answer() could never
-            # acquire the lock to reply. The agent's exact outbox path lives in
-            # the installed agent-comms skill, so we don't repeat it here.
-            task = (m.get("task") or "").strip()
-            if instructions or task:
-                m["prep"] = "priming"
-                m["prep_detail"] = "sending first message"
-                preamble = (
-                    f"You are agent '{aid}' running under an automated control "
-                    "center. To ask a question, request context/help, report "
-                    "progress, or finish, use the agent-comms skill (it has your "
-                    "exact outbox path). "
-                )
-                parts = [preamble]
-                if instructions:
-                    parts.append(instructions)
-                if task:
-                    parts.append(" --- YOUR TASK (begin now) --- " + task)
-                else:
-                    parts.append(
-                        " Acknowledge in one sentence that you are ready, "
-                        "then wait for my next message."
-                    )
-                # Collapse ALL whitespace (incl. newlines) to single spaces:
-                # a MULTI-LINE send is captured by Claude as a bracketed "paste"
-                # and the trailing Enter gets absorbed, leaving the message
-                # unsubmitted in the composer. A single line submits reliably.
-                first_msg = " ".join("".join(parts).split())
-                # NOTE: we are already inside the `with lock:` above (step 2);
-                # threading.Lock is non-reentrant, so do NOT re-acquire it here.
-                ctrl.session.send_text(first_msg)
 
         m["prep"] = "ready"
         m["prep_detail"] = None
@@ -539,6 +494,37 @@ def _resolve_account(account_id: str | None, project_id: str | None) -> dict | N
     return accounts.default_account()
 
 
+# App permission-mode names → Claude Code's --permission-mode values. "normal"
+# is Claude's default (no flag) and "bypass" uses --dangerously-skip-permissions.
+_PERM_MODE = {"accept-edits": "acceptEdits", "auto": "auto", "plan": "plan"}
+
+
+def _build_first_message(aid: str, instructions: str | None, task: str | None) -> str:
+    """The agent's first message: a control-center preamble + role instructions +
+    (optional) task, collapsed to a single line. Passed as Claude's launch prompt
+    so Claude submits it directly. Empty when there's nothing to prime/task."""
+    instructions = (instructions or "").strip()
+    task = (task or "").strip()
+    if not instructions and not task:
+        return ""
+    parts = [
+        f"You are agent '{aid}' running under an automated control center. To ask "
+        "a question, request context/help, report progress, or finish, use the "
+        "agent-comms skill (it has your exact outbox path). "
+    ]
+    if instructions:
+        parts.append(instructions)
+    if task:
+        parts.append(" --- YOUR TASK (begin now) --- " + task)
+    else:
+        parts.append(
+            " Acknowledge in one sentence that you are ready, then wait for my "
+            "next message."
+        )
+    # Collapse all whitespace so it's a clean single-line prompt argument.
+    return " ".join("".join(parts).split())
+
+
 def _spawn_agent(
     *,
     name: str,
@@ -573,11 +559,16 @@ def _spawn_agent(
     eff_cmd = cmd or (role_def.get("cmd") if role_def else None) or "claude"
     eff_mode = mode or (role_def.get("mode") if role_def else None) or "normal"
 
-    # "bypass" is the one mode not reachable via Shift-Tab keystrokes; it must be
-    # requested at launch with --dangerously-skip-permissions. We still drive the
-    # session purely through tmux afterwards — this only configures startup.
-    if eff_mode == "bypass" and "dangerously-skip-permissions" not in eff_cmd:
-        eff_cmd = f"{eff_cmd} --dangerously-skip-permissions"
+    # Permission mode is set at LAUNCH (no flaky post-boot Shift-Tab cycling):
+    # bypass keeps the explicit danger flag; the others map to --permission-mode.
+    # "normal" is Claude's default and needs no flag.
+    if eff_mode == "bypass":
+        if "dangerously-skip-permissions" not in eff_cmd:
+            eff_cmd = f"{eff_cmd} --dangerously-skip-permissions"
+    else:
+        perm = _PERM_MODE.get(eff_mode)
+        if perm and "--permission-mode" not in eff_cmd:
+            eff_cmd = f"{eff_cmd} --permission-mode {perm}"
     # Launch the worker on the requested model tier (idempotent; no-op if None).
     eff_cmd = build_cmd(eff_cmd, model_id(model))
     eff_instructions = (
@@ -619,6 +610,14 @@ def _spawn_agent(
             status_code=400, detail=f"account {acct['id']} is not logged in"
         )
     env = {"CLAUDE_CONFIG_DIR": acct["config_dir"]} if acct else {}
+
+    # Pass the first message (preamble + instructions + task) as Claude's launch
+    # PROMPT argument instead of typing it into the TUI afterwards. Claude submits
+    # it itself, so we avoid the bracketed-paste bug where a long typed message
+    # sits unsubmitted in the composer (the agent looked "frozen" on start).
+    first_msg = _build_first_message(aid, eff_instructions, eff_task)
+    if first_msg:
+        eff_cmd = f"{eff_cmd} {shlex.quote(first_msg)}"
 
     sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd, env=env)
     try:
