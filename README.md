@@ -1,5 +1,21 @@
 # tui-pilot
 
+## Quick start
+
+```bash
+make setup     # one-time: create the venv (uv) + install dependencies
+make dev       # start the server with auto-reload → http://127.0.0.1:8765/ui/
+```
+
+`make dev` runs the API + web UI in one process with hot-reload (Python changes
+apply automatically — no manual restart). Data (the SQLite DB + managed account
+dirs) lives in `~/spade-qa` by default; override with
+`make dev DATA_HOME=~/other PORT=9000`. Other targets: `make test`, `make stop`,
+`make open`, `make fresh` (wipe the data dir). Requires `tmux` and the `claude`
+CLI on PATH. Run `make` with no args to list everything.
+
+---
+
 A programmatic controller for an **interactive** terminal TUI, driven entirely
 through **tmux** and exposed over an HTTP API. The reference target is the
 Claude Code interactive REPL, but nothing here is Claude-specific — it works
