@@ -21,6 +21,14 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   projects: () => http<{ projects: Project[] }>("/projects"),
+  createProject: (body: {
+    id: string;
+    name: string;
+    path: string;
+    account_strategy?: string;
+    model_ceiling?: string | null;
+    autopilot?: number;
+  }) => http<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
   // Global fleet (no project param) and the provider account pool.
   sessions: () => http<{ sessions: Session[] }>("/sessions"),
   accounts: () => http<{ accounts: Account[] }>("/accounts"),
