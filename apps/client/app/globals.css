@@ -436,3 +436,78 @@ body {
 .sb-proj-slug { font-size: 10.5px; color: var(--text-4); margin-top: 2px; }
 .sb-foot { margin-top: auto; padding: 18px 8px 6px; color: var(--text-4); font-size: 11px; line-height: 1.5; }
 .sb-foot .mono { color: var(--text-3); }
+
+/* === ORCHESTRATOR (lifted from Spade.html) === */
+.orch-summary-strip {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+  padding: 0; border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.stat-cell { padding: 12px 18px; border-right: 1px solid var(--line); }
+.stat-cell:last-child { border-right: none; }
+.stat-cell .lbl { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-4); }
+.stat-cell .val { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; margin-top: 3px; font-family: var(--mono); }
+.stat-cell .sub { font-size: 11px; color: var(--text-3); font-family: var(--mono); margin-top: 2px; }
+
+.filter-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 20px; font-size: 12px; color: var(--text-3);
+  border-bottom: 1px solid var(--line);
+}
+.seg { display: inline-flex; background: var(--bg-1); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { padding: 4px 10px; font-size: 12px; color: var(--text-3); border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: none; }
+.seg button.on { background: var(--bg-3); color: var(--text); }
+
+.stages-mini { display: flex; gap: 3px; }
+.stages-mini span {
+  width: 26px; height: 5px; border-radius: 2px; background: var(--bg-3); display: block;
+}
+.stages-mini span.done { background: var(--green); }
+.stages-mini span.run  { background: var(--blue); animation: blink 1.2s infinite; }
+.stages-mini span.gate { background: var(--amber); }
+.stages-mini span.queue { background: var(--bg-3); }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+.orch-card {
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg-1);
+  margin-bottom: 8px; overflow: hidden;
+}
+.orch-card.selected { border-color: rgba(201,184,255,.4); }
+.orch-card-row {
+  display: grid; grid-template-columns: 14px minmax(0,1fr) auto auto;
+  gap: 12px; align-items: center; padding: 12px 14px; cursor: pointer;
+}
+.orch-card-row:hover { background: var(--bg-2); }
+.orch-chev { color: var(--text-4); font-size: 9px; transition: transform .15s ease; display: inline-block; }
+.orch-card.open .orch-chev { color: var(--accent); }
+.orch-card-task { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+.orch-card-title { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orch-card-meta { display: flex; align-items: center; gap: 10px; }
+.orch-card-acct { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.orch-card-step { font-size: 11px; color: var(--text-3); }
+
+.orch-detail { background: var(--bg); border-top: 1px solid rgba(201,184,255,.18); }
+.orch-detail-inner { padding: 16px 18px 18px; }
+.orch-d-stages { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.orch-d-stage {
+  background: var(--bg-1); border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.orch-d-stage.done { border-color: rgba(122,209,154,.3); }
+.orch-d-stage.run { border-color: rgba(122,182,230,.3); background: linear-gradient(180deg, rgba(122,182,230,.06), var(--bg-1)); }
+.orch-d-stage.gate { border-color: rgba(230,184,106,.4); background: linear-gradient(180deg, rgba(230,184,106,.07), var(--bg-1)); }
+.orch-d-stage.queue { opacity: .6; }
+.orch-d-stage-h { display: flex; justify-content: space-between; align-items: center; }
+.orch-d-stage-h .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
+.orch-d-stage-h .state { font-size: 12px; color: var(--text-2); }
+.orch-d-stage .meta { font-size: 10.5px; color: var(--text-3); font-family: var(--mono); }
+.orch-d-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.orch-d-err { color: var(--red); font-size: 11.5px; }
+
+.term {
+  background: #08080a; border: 1px solid var(--line);
+  border-radius: 8px; padding: 14px 16px; font-family: var(--mono); font-size: 12px;
+  color: var(--text-2); line-height: 1.65; overflow: auto;
+  white-space: pre;
+}
+.term-empty { color: var(--text-4); font-size: 12px; font-family: var(--mono); }

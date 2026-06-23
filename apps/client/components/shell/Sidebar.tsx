@@ -42,7 +42,7 @@ const GROUPS: NavGroup[] = [
   {
     label: "Execution",
     items: [
-      { label: "Orchestrator", icon: "orch", href: "#", badge: "7", badgeKind: "live" },
+      { label: "Orchestrator", icon: "orch", href: "/orchestrator", badge: "7", badgeKind: "live" },
       { label: "Agent pool", icon: "board", href: "#", badge: "10" },
       { label: "Human gates", icon: "gate", href: "#", badge: "2", badgeKind: "amber" },
     ],
