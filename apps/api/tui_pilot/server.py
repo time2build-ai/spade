@@ -3,7 +3,7 @@
 A live registry of named sessions, each a
 :class:`~tui_pilot.controller.Controller` over a
 :class:`~tui_pilot.session.TmuxSession`. The registry is the in-memory source of
-truth, but it is backed by SQLite persistence under ``~/.tui-pilot`` (sessions,
+truth, but it is backed by SQLite persistence under ``~/.spade`` (sessions,
 roles, projects, accounts, missions). On startup ``_reconcile_sessions()``
 reattaches any still-live tmux agents from the previous run and
 ``orchestrator_server.reload_missions()`` restores their missions (and persisted
@@ -631,7 +631,7 @@ def _spawn_agent(
     if cwd:
         eff_cwd = cwd
     else:
-        eff_cwd = str(Path.home() / ".tui-pilot" / "workspaces" / aid)
+        eff_cwd = str(Path.home() / ".spade" / "workspaces" / aid)
         os.makedirs(eff_cwd, exist_ok=True)
 
     # Resolve which account (CLAUDE_CONFIG_DIR) this session runs under BEFORE

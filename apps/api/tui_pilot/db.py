@@ -1,4 +1,4 @@
-"""SQLite persistence: one DB file under $TUI_PILOT_HOME (default ~/.tui-pilot)."""
+"""SQLite persistence: one DB file under $TUI_PILOT_HOME (default ~/.spade)."""
 from __future__ import annotations
 import contextlib
 import os
@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def home() -> Path:
-    return Path(os.environ.get("TUI_PILOT_HOME", str(Path.home() / ".tui-pilot")))
+    return Path(os.environ.get("TUI_PILOT_HOME", str(Path.home() / ".spade")))
 
 
 def db_path() -> Path:

@@ -256,6 +256,13 @@ def get_env() -> dict:
 def create_project(req: ProjectCreate) -> dict:
     # Expand a leading ~ (and ~user) so clients can pass "~/code/foo".
     path = os.path.expanduser(req.path)
+    # The path is the agents' working directory; best-effort create it so pipelines
+    # can spawn into it (the agent spawn does not create a caller-supplied cwd). A
+    # failure here (e.g. an unwritable path) is non-fatal — surfaced later at spawn.
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        pass
     return projects.create(
         id=req.id, name=req.name, path=path,
         account_strategy=req.account_strategy,

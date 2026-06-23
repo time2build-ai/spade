@@ -244,3 +244,13 @@ def test_create_project_expands_tilde():
     stored = r.json()["path"]
     assert "~" not in stored
     assert stored == os.path.expanduser("~/code/tld")
+
+
+def test_create_project_creates_the_path(tmp_path):
+    from tui_pilot.server import app
+    c = TestClient(app)
+    target = tmp_path / "ws" / "myproj"
+    assert not target.exists()
+    r = c.post("/projects", json={"id": "mk", "name": "Mk", "path": str(target)})
+    assert r.status_code == 200
+    assert target.is_dir()
