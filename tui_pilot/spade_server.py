@@ -41,6 +41,12 @@ class NodesRequest(BaseModel):
     node_ids: list[str]
 
 
+class CommentCreate(BaseModel):
+    body: str
+    author: str | None = "you"
+    kind: str = "note"
+
+
 # ---- helpers ----------------------------------------------------------------
 
 def _task_or_404(task_id: str) -> dict:
@@ -117,6 +123,21 @@ def set_task_nodes(task_id: str, req: NodesRequest) -> dict:
     _task_or_404(task_id)
     tasks.set_nodes(task_id, req.node_ids)
     return _enrich(tasks.get(task_id))
+
+
+@router.get("/tasks/{task_id}/comments")
+def list_task_comments(task_id: str) -> dict:
+    _task_or_404(task_id)
+    return {"comments": tasks.comments(task_id)}
+
+
+@router.post("/tasks/{task_id}/comments")
+def add_task_comment(task_id: str, req: CommentCreate) -> dict:
+    _task_or_404(task_id)
+    body = req.body.strip()
+    if not body:
+        raise HTTPException(400, "comment body must not be empty")
+    return tasks.add_comment(task_id, body=body, author=req.author, kind=req.kind)
 
 
 # ---- brain request models ---------------------------------------------------

@@ -92,3 +92,48 @@ def test_spawn_failure_pauses_run():
     pipelines.start_stage(run["id"], 0, boom)
     r = pipelines.get(run["id"])
     assert r["status"] == "paused" and r["stages"][0]["state"] == "failed"
+
+
+# -- auto-posted activity trail (stage reports + ship event) -------------------
+
+def _spawn(stage_idx, report):  # returns (session_id, account_id)
+    return (f"sess{stage_idx}", "acct")
+
+
+def test_completing_a_stage_posts_its_report_as_a_task_comment():
+    tid = _setup()
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    pipelines.start_stage(run["id"], 0, _spawn)
+    pipelines.complete_stage(run["id"], 0, report="## Done\nAdded test_hello.py", spawn=_spawn)
+
+    reports = [c for c in tasks.comments(tid) if c["kind"] == "stage_report"]
+    assert len(reports) == 1
+    assert reports[0]["author"] == "developer"
+    assert "Added test_hello.py" in reports[0]["body"]
+
+
+def test_stage_with_no_report_posts_no_stage_report_comment():
+    tid = _setup()
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    pipelines.start_stage(run["id"], 0, _spawn)
+    pipelines.complete_stage(run["id"], 0, report=None, spawn=_spawn)
+    assert [c for c in tasks.comments(tid) if c["kind"] == "stage_report"] == []
+
+
+def test_idempotent_complete_does_not_double_post():
+    tid = _setup()
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    pipelines.start_stage(run["id"], 0, _spawn)
+    pipelines.complete_stage(run["id"], 0, report="r0", spawn=_spawn)
+    pipelines.complete_stage(run["id"], 0, report="r0", spawn=_spawn)  # racing re-entry
+    assert len([c for c in tasks.comments(tid) if c["kind"] == "stage_report"]) == 1
+
+
+def test_shipping_posts_a_system_comment():
+    tid = _setup()
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    pipelines.start_stage(run["id"], 0, _spawn)
+    for i in range(4):
+        pipelines.complete_stage(run["id"], i, report=f"r{i}", spawn=_spawn)
+    system = [c for c in tasks.comments(tid) if c["kind"] == "system"]
+    assert any("shipped" in c["body"].lower() for c in system)

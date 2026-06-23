@@ -50,3 +50,52 @@ def test_grounding_set_and_get():
     assert set(tasks.nodes(t["id"])) == {"n1", "n2"}
     tasks.set_nodes(t["id"], ["n3"])
     assert tasks.nodes(t["id"]) == ["n3"]
+
+
+# -- comments ------------------------------------------------------------------
+
+def test_task_comments_table_exists():
+    from tui_pilot import db
+    rows = db.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='task_comments'"
+    )
+    assert {r["name"] for r in rows} == {"task_comments"}
+
+
+def test_add_and_list_comment():
+    _proj()
+    t = tasks.create(project_id="acme", title="X")
+    c = tasks.add_comment(
+        t["id"], body="developer added test_hello.py", author="developer", kind="stage_report"
+    )
+    assert c["id"] and c["created_at"]
+    assert c["task_id"] == t["id"]
+    assert c["author"] == "developer"
+    assert c["kind"] == "stage_report"
+    assert c["body"] == "developer added test_hello.py"
+    listed = tasks.comments(t["id"])
+    assert len(listed) == 1 and listed[0]["body"] == "developer added test_hello.py"
+
+
+def test_add_comment_defaults_to_note_kind():
+    _proj()
+    t = tasks.create(project_id="acme", title="X")
+    c = tasks.add_comment(t["id"], body="looks good", author="you")
+    assert c["kind"] == "note"
+
+
+def test_comments_ordered_oldest_first():
+    _proj()
+    t = tasks.create(project_id="acme", title="X")
+    tasks.add_comment(t["id"], body="first")
+    tasks.add_comment(t["id"], body="second")
+    tasks.add_comment(t["id"], body="third")
+    assert [c["body"] for c in tasks.comments(t["id"])] == ["first", "second", "third"]
+
+
+def test_comments_cascade_on_task_delete():
+    _proj()
+    t = tasks.create(project_id="acme", title="X")
+    tasks.add_comment(t["id"], body="hi")
+    tasks.delete(t["id"])
+    assert tasks.comments(t["id"]) == []

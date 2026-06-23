@@ -145,11 +145,26 @@ def complete_stage(run_id: str, idx: int, report: str | None, spawn) -> None:
     if rows and rows[0]["state"] in ("done", "failed"):
         return
     _set_stage(run_id, idx, state="done")
+    run = get(run_id)
+    # Record what this stage delivered onto the task's activity trail. The
+    # report is the agent's `finished` handoff; persisting it here means the
+    # ticket keeps a durable history even after the ephemeral agents are gone.
+    # Guarded by the idempotency check above, so a racing re-entry won't
+    # double-post.
+    if run is not None and report:
+        tasks.add_comment(
+            run["task_id"], body=report, author=STAGES[idx], kind="stage_report"
+        )
     if idx < len(STAGES) - 1:
         # Thread the finishing stage's report into the next stage's spawn.
         start_stage(run_id, idx + 1, spawn, report=report)
     else:
-        run = get(run_id)
         _set_run(run_id, status="shipped", current_stage=idx)
         if run is not None:
             tasks.move(run["task_id"], "shipped")
+            tasks.add_comment(
+                run["task_id"],
+                body="Pipeline complete — all 4 stages done; task moved to shipped.",
+                author="system",
+                kind="system",
+            )

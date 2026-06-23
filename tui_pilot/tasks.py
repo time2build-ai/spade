@@ -5,6 +5,7 @@ A "task" (SPD-NNN) is the core backlog unit. Each task belongs to one project.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 
 from tui_pilot import db
@@ -127,3 +128,36 @@ def nodes(task_id: str) -> list[str]:
         (task_id,),
     )
     return [r["node_id"] for r in rows]
+
+
+# -- Comments (activity trail) ------------------------------------------------
+
+def add_comment(
+    task_id: str,
+    body: str,
+    author: str | None = None,
+    kind: str = "note",
+) -> dict:
+    """Append a comment to a task's activity trail and return the created row.
+
+    ``kind`` is free-form but conventionally one of ``note`` (a manual note),
+    ``stage_report`` (an agent's finished handoff report) or ``system`` (an
+    automatic event like "pipeline started" / "shipped").
+    """
+    cid = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO task_comments (id, task_id, author, kind, body, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (cid, task_id, author, kind, body, _now()),
+    )
+    rows = db.query("SELECT * FROM task_comments WHERE id = ?", (cid,))
+    return dict(rows[0])
+
+
+def comments(task_id: str) -> list[dict]:
+    """Return a task's comments, oldest first."""
+    rows = db.query(
+        "SELECT * FROM task_comments WHERE task_id = ? ORDER BY created_at ASC, rowid ASC",
+        (task_id,),
+    )
+    return [dict(r) for r in rows]

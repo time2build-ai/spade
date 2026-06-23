@@ -534,6 +534,28 @@ small { color: var(--muted); font-size: 11px; }
   background: rgba(188,140,255,.12); color: var(--purple); border: 1px solid rgba(188,140,255,.25);
 }
 .tdp-move-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---- task activity trail (comments) ---- */
+.tdp-comments { display: flex; flex-direction: column; gap: 8px; }
+.tdc {
+  border: 1px solid var(--border); border-left: 3px solid var(--border);
+  border-radius: 6px; padding: 7px 9px; background: rgba(255,255,255,.02);
+}
+.tdc-report { border-left-color: var(--purple); }
+.tdc-system { border-left-color: var(--muted); }
+.tdc-note { border-left-color: #3fb950; }
+.tdc-head { display: flex; align-items: center; gap: 6px; font-size: 11.5px; margin-bottom: 3px; }
+.tdc-author { font-weight: 600; }
+.tdc-when { margin-left: auto; font-size: 10.5px; }
+.tdc-body { font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.tdp-comment-add { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.tdp-comment-add textarea {
+  width: 100%; resize: vertical; font: inherit; font-size: 12px;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 8px; box-sizing: border-box;
+}
+.tdp-comment-add button { align-self: flex-end; }
+
 #view-backlog { position: relative; }
 
 /* ---- brain view ---- */

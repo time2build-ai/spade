@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS task_nodes (
   PRIMARY KEY(task_id, node_id),
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
+-- An append-only activity trail per task: agent stage reports, system events
+-- (pipeline started / shipped), and your own manual notes.
+CREATE TABLE IF NOT EXISTS task_comments (
+  id TEXT PRIMARY KEY, task_id TEXT NOT NULL,
+  author TEXT, kind TEXT DEFAULT 'note', body TEXT NOT NULL, created_at TEXT,
+  FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS brain_nodes (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, type TEXT NOT NULL,
   label TEXT NOT NULL, detail TEXT, x REAL, y REAL, created_at TEXT,

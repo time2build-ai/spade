@@ -1664,11 +1664,53 @@ async function openTaskDetail(taskId) {
       };
       moveBtns.appendChild(btn);
     }
+    await renderTaskComments(t.id);
     panel.style.display = "";
   } catch (ex) {
     log(`task detail: ${ex.message}`, "err");
   }
 }
+
+// Icon + label per comment kind, so the trail reads at a glance.
+const COMMENT_KIND = {
+  stage_report: { icon: "🛠", cls: "tdc-report" },
+  system: { icon: "•", cls: "tdc-system" },
+  note: { icon: "💬", cls: "tdc-note" },
+};
+
+async function renderTaskComments(taskId) {
+  const wrap = $("tdpComments");
+  if (!wrap) return;
+  let comments = [];
+  try {
+    comments = (await api("GET", `/tasks/${encodeURIComponent(taskId)}/comments`)).comments || [];
+  } catch (_) {}
+  if (!comments.length) {
+    wrap.innerHTML = `<div class="dim" style="padding:4px 0">No activity yet.</div>`;
+    return;
+  }
+  wrap.innerHTML = comments.map((c) => {
+    const meta = COMMENT_KIND[c.kind] || COMMENT_KIND.note;
+    const when = (c.created_at || "").replace("T", " ").slice(0, 16);
+    return `<div class="tdc ${meta.cls}">
+      <div class="tdc-head">${meta.icon} <span class="tdc-author">${esc(c.author || "—")}</span>
+        <span class="tdc-when dim">${esc(when)}</span></div>
+      <div class="tdc-body">${esc(c.body || "")}</div>
+    </div>`;
+  }).join("");
+}
+
+$("btnAddComment").onclick = async () => {
+  if (!selectedTaskId) return;
+  const input = $("tdpCommentInput");
+  const body = input.value.trim();
+  if (!body) return;
+  try {
+    await api("POST", `/tasks/${encodeURIComponent(selectedTaskId)}/comments`, { body, author: "you" });
+    input.value = "";
+    await renderTaskComments(selectedTaskId);
+  } catch (ex) { log(`comment: ${ex.message}`, "err"); }
+};
 
 $("btnCloseDetail").onclick = () => { $("taskDetailPanel").style.display = "none"; };
 

@@ -14,6 +14,41 @@ def test_task_endpoints():
     assert c.get(f"/tasks/{tid}").json()["status"] == "review"
 
 
+def test_task_comment_endpoints():
+    from tui_pilot.server import app
+    from tui_pilot import projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "X"}).json()["id"]
+
+    # empty trail to start
+    assert c.get(f"/tasks/{tid}/comments").json()["comments"] == []
+
+    # post a manual comment
+    r = c.post(f"/tasks/{tid}/comments", json={"body": "looks good to me", "author": "you"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["body"] == "looks good to me" and body["kind"] == "note" and body["id"]
+
+    listed = c.get(f"/tasks/{tid}/comments").json()["comments"]
+    assert len(listed) == 1 and listed[0]["author"] == "you"
+
+
+def test_post_comment_unknown_task_404():
+    from tui_pilot.server import app
+    c = TestClient(app)
+    assert c.post("/tasks/SPD-999/comments", json={"body": "hi"}).status_code == 404
+
+
+def test_post_comment_requires_nonblank_body():
+    from tui_pilot.server import app
+    from tui_pilot import projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "X"}).json()["id"]
+    assert c.post(f"/tasks/{tid}/comments", json={"body": "  "}).status_code == 400
+
+
 def test_get_unknown_task_404():
     from tui_pilot.server import app
     c = TestClient(app)
