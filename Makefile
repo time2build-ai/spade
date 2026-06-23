@@ -15,10 +15,11 @@ PORT      ?= 8765
 DATA_HOME ?= $(HOME)/spade-qa
 VENV      ?= .venv
 PY        := $(VENV)/bin/python
+PY_DIR    ?= apps/api
 RUN_ENV    = TUI_PILOT_HOME=$(DATA_HOME) TUI_PILOT_API_BASE=http://$(HOST):$(PORT)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev run setup test stop open fresh
+.PHONY: help dev run api setup test stop open fresh
 
 help:
 	@echo "Spade / tui-pilot — make targets"
@@ -39,19 +40,23 @@ $(VENV):
 setup:
 	@command -v uv >/dev/null 2>&1 || { echo "uv not found — install: https://docs.astral.sh/uv/"; exit 1; }
 	@test -d $(VENV) || uv venv $(VENV)
-	@uv pip install --python $(PY) -r requirements.txt
+	@uv pip install --python $(PY) -r $(PY_DIR)/requirements.txt
 	@echo "✓ setup complete — run 'make dev'"
 
 dev: $(VENV) stop
 	@echo "▶ Spade dev server  →  http://$(HOST):$(PORT)/ui/   (data: $(DATA_HOME), auto-reload ON)"
-	@$(RUN_ENV) $(PY) -m uvicorn tui_pilot.server:app --reload --host $(HOST) --port $(PORT)
+	@cd $(PY_DIR) && $(RUN_ENV) ../../$(PY) -m uvicorn tui_pilot.server:app --reload --host $(HOST) --port $(PORT)
 
 run: $(VENV) stop
 	@echo "▶ Spade server  →  http://$(HOST):$(PORT)/ui/   (data: $(DATA_HOME))"
-	@$(RUN_ENV) $(PY) -m uvicorn tui_pilot.server:app --host $(HOST) --port $(PORT)
+	@cd $(PY_DIR) && $(RUN_ENV) ../../$(PY) -m uvicorn tui_pilot.server:app --host $(HOST) --port $(PORT)
+
+api: $(VENV) stop
+	@echo "▶ Spade API  →  http://$(HOST):$(PORT)/ui/   (data: $(DATA_HOME), auto-reload ON)"
+	@cd $(PY_DIR) && $(RUN_ENV) ../../$(PY) -m uvicorn tui_pilot.server:app --reload --host $(HOST) --port $(PORT)
 
 test: $(VENV)
-	@$(PY) -m pytest -q
+	@cd $(PY_DIR) && ../../$(PY) -m pytest -q
 
 stop:
 	@pkill -f "uvicorn tui_pilot.server:app" 2>/dev/null && echo "• stopped running server" || true
