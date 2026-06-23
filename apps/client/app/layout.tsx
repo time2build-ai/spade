@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter_Tight, JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
+import { Topbar } from "@/components/shell/Topbar";
+import { Sidebar } from "@/components/shell/Sidebar";
 
 const sans = Inter_Tight({
   subsets: ["latin"],
@@ -36,7 +38,13 @@ export default function RootLayout({
       lang="en"
       className={`${sans.variable} ${mono.variable} ${serif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body>
+        <div className="app">
+          <Topbar />
+          <Sidebar />
+          <main className="overflow-auto">{children}</main>
+        </div>
+      </body>
     </html>
   );
 }
