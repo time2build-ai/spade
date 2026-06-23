@@ -117,7 +117,24 @@ export function Sidebar() {
         <div key={group.label} className="sb-section">
           <div className="sb-label">{group.label}</div>
           {group.items.map((item) => {
-            const active = item.href !== "#" && pathname === item.href;
+            // A "#" href means the view isn't built yet → mark it "Próximamente",
+            // dim it, and render it as a non-navigating element (no URL jump).
+            const soon = item.href === "#";
+            if (soon) {
+              return (
+                <div
+                  key={item.label}
+                  className="sb-item soon"
+                  aria-disabled="true"
+                  title="Próximamente"
+                >
+                  <Icon name={item.icon} className="ico" />
+                  {item.label}
+                  <span className="badge soon">Próximamente</span>
+                </div>
+              );
+            }
+            const active = pathname === item.href;
             return (
               <Link
                 key={item.label}
