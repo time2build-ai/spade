@@ -7,6 +7,9 @@ lazily (``from . import server``) to avoid a load-time import cycle and to call
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -243,10 +246,18 @@ def list_projects() -> dict:
     return {"projects": projects.list_all()}
 
 
+@router.get("/env")
+def get_env() -> dict:
+    """Host environment hints for the UI (e.g. default project path base)."""
+    return {"home": str(Path.home())}
+
+
 @router.post("/projects")
 def create_project(req: ProjectCreate) -> dict:
+    # Expand a leading ~ (and ~user) so clients can pass "~/code/foo".
+    path = os.path.expanduser(req.path)
     return projects.create(
-        id=req.id, name=req.name, path=req.path,
+        id=req.id, name=req.name, path=path,
         account_strategy=req.account_strategy,
         model_ceiling=req.model_ceiling, autopilot=req.autopilot,
     )

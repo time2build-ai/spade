@@ -400,6 +400,7 @@ body {
 }
 .proj-field input:focus { border-color: var(--accent); }
 .proj-field input::placeholder { color: var(--text-4); }
+.proj-field-hint { font-size: 9.5px; color: var(--text-4); text-transform: none; letter-spacing: 0; }
 .proj-create-id { font-size: 10.5px; color: var(--text-4); padding: 0 2px; }
 .proj-create-err { font-size: 11px; color: var(--red); padding: 0 2px; }
 .proj-create-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }

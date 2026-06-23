@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { Icon } from "@/components/Icon";
 import { api } from "@/lib/api";
 import { useProject } from "@/lib/useProject";
@@ -20,6 +20,7 @@ function slugify(name: string): string {
 export function ProjectSwitcher() {
   const { projects, project, setProject } = useProject();
   const { mutate } = useSWRConfig();
+  const { data: env } = useSWR("env", () => api.env());
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -29,6 +30,14 @@ export function ProjectSwitcher() {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Default the path to the host home dir (e.g. "/Users/you/"); user appends.
+  const homeBase = env?.home ? env.home.replace(/\/+$/, "") + "/" : "";
+
+  // Prefill the path once the form is open and the home dir is known.
+  useEffect(() => {
+    if (creating && !path && homeBase) setPath(homeBase);
+  }, [creating, homeBase, path]);
 
   const resetCreate = () => {
     setCreating(false);
@@ -124,8 +133,9 @@ export function ProjectSwitcher() {
                 <input
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
-                  placeholder="/Users/you/code/my-project"
+                  placeholder={`${homeBase || "/Users/you/"}my-project`}
                 />
+                <span className="proj-field-hint">~ expands to your home directory</span>
               </label>
               {previewId && (
                 <div className="proj-create-id mono">
@@ -179,7 +189,14 @@ export function ProjectSwitcher() {
               <button type="button" className="proj-menu-action" disabled title="Próximamente">
                 <Icon name="graph" size={11} /> All projects
               </button>
-              <button type="button" className="proj-menu-action" onClick={() => setCreating(true)}>
+              <button
+                type="button"
+                className="proj-menu-action"
+                onClick={() => {
+                  setCreating(true);
+                  setPath((p) => p || homeBase);
+                }}
+              >
                 <Icon name="plus" size={11} /> New project
               </button>
             </>
