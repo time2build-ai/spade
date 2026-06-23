@@ -60,3 +60,34 @@ export interface Comment {
   body: string;
   created_at: string;
 }
+
+export const STAGE_ROLES = [
+  "developer",
+  "reviewer",
+  "integrator",
+  "documentor",
+] as const;
+export type StageRole = (typeof STAGE_ROLES)[number];
+export type StageState = "queued" | "running" | "done" | "failed";
+export type RunStatus = "queued" | "running" | "paused" | "shipped";
+
+export type PipelineStage = {
+  id: string;
+  pipeline_run_id: string;
+  role: string;
+  stage_order: number;
+  state: StageState;
+  session_id: string | null;
+  account_id: string | null;
+  created_at: string;
+};
+
+export type PipelineRun = {
+  id: string;
+  project_id: string;
+  task_id: string;
+  status: RunStatus;
+  current_stage: number;
+  created_at: string;
+  stages: PipelineStage[];
+};
