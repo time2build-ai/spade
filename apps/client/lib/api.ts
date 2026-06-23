@@ -29,6 +29,8 @@ export const api = {
     model_ceiling?: string | null;
     autopilot?: number;
   }) => http<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
+  // Host environment hints (e.g. home dir for default project paths).
+  env: () => http<{ home: string }>("/env"),
   // Global fleet (no project param) and the provider account pool.
   sessions: () => http<{ sessions: Session[] }>("/sessions"),
   accounts: () => http<{ accounts: Account[] }>("/accounts"),

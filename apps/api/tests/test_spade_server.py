@@ -223,3 +223,24 @@ def test_pipeline_create_404_for_missing_task():
     c = TestClient(app)
     assert c.post("/pipelines", json={"project_id": "acme", "task_id": "SPD-999"}).status_code == 404
     assert c.post("/pipelines", json={"project_id": "nope", "task_id": "SPD-1"}).status_code == 404
+
+
+def test_env_endpoint_returns_home():
+    import os
+    from pathlib import Path
+    from tui_pilot.server import app
+    c = TestClient(app)
+    r = c.get("/env")
+    assert r.status_code == 200
+    assert r.json()["home"] == str(Path.home())
+
+
+def test_create_project_expands_tilde():
+    import os
+    from tui_pilot.server import app
+    c = TestClient(app)
+    r = c.post("/projects", json={"id": "tld", "name": "Tilde", "path": "~/code/tld"})
+    assert r.status_code == 200
+    stored = r.json()["path"]
+    assert "~" not in stored
+    assert stored == os.path.expanduser("~/code/tld")
