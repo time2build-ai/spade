@@ -49,7 +49,7 @@ from .controller import Controller
 from .harness import HarnessPoller
 from .identity import new_agent_id
 from .models import model_id
-from .screen import State, parse_menu
+from .screen import State, parse_menu, strip_ghost_suggestion
 from .session import (
     SessionError,
     TmuxSession,
@@ -893,7 +893,10 @@ def get_state(id: str) -> dict:
 def get_screen(id: str, history: bool = False) -> str:
     ctrl = _get(id)
     try:
-        return ctrl.session.capture(history=history)
+        # Capture with colour preserved so we can drop Claude's dim ghost-text
+        # autosuggestion (which otherwise looks like real typed input once tmux
+        # strips colour) while keeping every other on-screen detail.
+        return strip_ghost_suggestion(ctrl.session.capture(history=history, ansi=True))
     except SessionError as exc:
         raise HTTPException(status_code=410, detail=str(exc)) from exc
 
@@ -1074,9 +1077,25 @@ def delete_session(id: str) -> dict:
 
 # ---- static test UI -------------------------------------------------------
 
+class _RevalidatingStatic(StaticFiles):
+    """StaticFiles that tags every asset ``Cache-Control: no-cache``.
+
+    Plain StaticFiles sends only ETag/Last-Modified, so a browser is free to
+    serve a *stale* app.js/style.css from its heuristic cache after we change
+    it — the UI then looks broken (new markup, old behaviour). ``no-cache``
+    forces revalidation on every load: a 304 when unchanged (cheap), the fresh
+    file the moment it changes. Not ``no-store`` — we still want the 304s.
+    """
+
+    async def get_response(self, path: str, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers.setdefault("Cache-Control", "no-cache")
+        return resp
+
+
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 if _STATIC_DIR.is_dir():
-    app.mount("/ui", StaticFiles(directory=str(_STATIC_DIR), html=True), name="ui")
+    app.mount("/ui", _RevalidatingStatic(directory=str(_STATIC_DIR), html=True), name="ui")
 
 
 @app.get("/", response_class=HTMLResponse)

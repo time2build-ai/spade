@@ -162,8 +162,8 @@ class TmuxSession:
 
     # -- output ------------------------------------------------------------
 
-    def capture(self, history: bool = False) -> str:
-        """Return the rendered pane as plain text.
+    def capture(self, history: bool = False, ansi: bool = False) -> str:
+        """Return the rendered pane.
 
         tmux is itself a terminal emulator, so escape sequences and cursor
         moves are already resolved into a 2D character grid — we get the
@@ -174,9 +174,16 @@ class TmuxSession:
         history:
             When True, include the full scrollback (``-S -``), not just the
             visible viewport.
+        ansi:
+            When True, preserve SGR colour/attribute escapes (``-e``) instead of
+            the default plain de-ANSI'd text. Used by the UI screen endpoint to
+            tell Claude's dim ghost-text suggestion apart from real input — see
+            :func:`tui_pilot.screen.strip_ghost_suggestion`.
         """
         self._require_alive()
         args = ["capture-pane", "-p", "-t", self.name]
+        if ansi:
+            args += ["-e"]
         if history:
             args += ["-S", "-"]
         proc = self._run(*args)

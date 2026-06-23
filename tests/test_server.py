@@ -38,6 +38,15 @@ def client():
     return TestClient(server.app)
 
 
+def test_static_assets_revalidate_so_ui_is_never_stale(client):
+    # The bundled UI assets must carry Cache-Control: no-cache so a browser
+    # always revalidates (and picks up new app.js/style.css after a change)
+    # rather than silently serving a stale cached copy.
+    r = client.get("/ui/app.js")
+    assert r.status_code == 200
+    assert "no-cache" in r.headers.get("cache-control", "").lower()
+
+
 def test_full_lifecycle(client):
     # spawn
     r = client.post("/sessions", json={"name": "srv", "cmd": "cat", "cols": 80, "rows": 24})

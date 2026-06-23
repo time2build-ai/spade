@@ -100,6 +100,40 @@ def normalize(screen: str) -> str:
     return "\n".join(collapsed)
 
 
+# --- composer ghost-text autosuggestion --------------------------------------
+# Claude Code's composer renders a dim (SGR 2 "faint") ghost-text suggestion in
+# its input line, predicting your likely next prompt. `capture-pane -p` strips
+# colour, so the suggestion would render identically to text you actually typed.
+# Given a colour-preserving capture (`capture-pane -e`), we drop the faint run
+# that sits on the composer's ❯ prompt line — and ONLY there, since the same
+# faint attribute is used for legitimate content elsewhere (the "+N lines
+# (ctrl+o to expand)" hint, welcome-box borders, …) — then de-ANSI the rest so
+# the result matches the plain screen the UI expects.
+_PROMPT_MARKER = "❯"
+_SGR_RE = re.compile(r"\x1b\[[0-9;]*m")
+# A faint run = the SGR-2 code plus the (non-escape) text it styles, up to the
+# next escape sequence. On the composer line that text is exactly the ghost
+# suggestion; real input on that line is bright, so it is left intact.
+_FAINT_RUN_RE = re.compile(r"\x1b\[2m[^\x1b]*")
+
+
+def strip_ghost_suggestion(raw_ansi: str) -> str:
+    """Render a colour-preserving pane capture to plain text, dropping Claude's
+    composer ghost-text autosuggestion.
+
+    Input is a ``tmux capture-pane -e`` string (ANSI escapes preserved). The
+    faint run on the ❯ composer line is removed; every other faint span is kept.
+    All remaining ANSI is then stripped, yielding the same plain screen as
+    ``capture-pane -p`` minus the suggestion.
+    """
+    out_lines: list[str] = []
+    for line in raw_ansi.splitlines():
+        if _PROMPT_MARKER in line:
+            line = _FAINT_RUN_RE.sub("", line)
+        out_lines.append(_SGR_RE.sub("", line))
+    return "\n".join(out_lines)
+
+
 def _search(patterns: dict, key: str, text: str) -> bool:
     """Return True if the named regex from ``patterns`` matches ``text``.
 
