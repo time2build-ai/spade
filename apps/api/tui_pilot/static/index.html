@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>tui-pilot · agents</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- Top bar -->
+<header id="topBar">
+  <h1>tui-pilot</h1>
+  <div id="projectBar" class="project-bar">
+    <button id="projectChip" class="project-chip">
+      <span id="projectChipIcon">📦</span>
+      <span id="projectChipName" class="dim">No project</span>
+      <span id="projectChipDots" class="acct-dots"></span>
+      <span class="chip-arrow">▾</span>
+    </button>
+    <div id="projectDropdown" class="project-dropdown" style="display:none">
+      <div id="projectDropdownList"></div>
+      <div class="pd-footer">
+        <button id="btnNewProjectQuick" class="tiny">+ New project</button>
+      </div>
+    </div>
+  </div>
+  <span class="grow"></span>
+  <span id="summary" class="dim">0 agents</span>
+  <a href="/docs" target="_blank">API docs ↗</a>
+</header>
+
+<!-- App body: rail + view -->
+<div id="appBody">
+
+  <!-- Nav rail -->
+  <nav id="rail">
+    <button class="rail-btn active" data-view="home" title="Home">🏠</button>
+    <button class="rail-btn" data-view="backlog" title="Backlog">📋</button>
+    <button class="rail-btn" data-view="brain" title="Brain">🧠</button>
+    <button class="rail-btn" data-view="pipelines" title="Pipelines">🛠️</button>
+    <button class="rail-btn" data-view="fleet" title="Fleet">🚀</button>
+    <button class="rail-btn" data-view="projects" title="Projects">📦</button>
+    <button class="rail-btn" data-view="accounts" title="Accounts">🔑</button>
+    <button class="rail-btn" data-view="agents" title="Agents">🤖</button>
+    <button class="rail-btn rail-bottom" data-view="settings" title="Settings">⚙️</button>
+  </nav>
+
+  <!-- Views container -->
+  <div id="views">
+
+    <!-- HOME VIEW -->
+    <div id="view-home" class="view active">
+      <div class="home-page">
+        <div class="home-header">
+          <h2 id="homeProjectName" class="home-title">Home</h2>
+          <span id="homeProjectHint" class="home-hint dim"></span>
+        </div>
+        <!-- KPI band -->
+        <div class="home-kpi-band" id="homeKpiBand"></div>
+        <!-- Two-column body -->
+        <div class="home-body">
+          <!-- Active pipelines -->
+          <div class="home-section">
+            <div class="home-section-head">Active Pipelines</div>
+            <div id="homeActivePipelines" class="home-section-body"></div>
+          </div>
+          <!-- Recent brain nodes -->
+          <div class="home-section">
+            <div class="home-section-head">Recent Brain Nodes</div>
+            <div id="homeRecentNodes" class="home-section-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FLEET VIEW (existing workspace) -->
+    <div id="view-fleet" class="view">
+      <main>
+        <!-- LEFT: orchestrator + new agent + session list -->
+        <aside class="sidebar">
+          <button id="btnOrch" class="orch-btn">🧠 Orchestrator <span class="dim">· chat</span></button>
+
+          <details class="new-agent advanced">
+            <summary>⚙ Advanced — manual spawn</summary>
+            <fieldset>
+            <legend>New agent</legend>
+            <div class="field">
+              <label for="role">Role</label>
+              <select id="role"></select>
+              <p id="roleDesc" class="hint"></p>
+            </div>
+            <div class="field">
+              <label for="name">Name</label>
+              <input type="text" id="name" placeholder="e.g. planner-1" />
+            </div>
+            <div class="field">
+              <label for="cwd">Working dir <span class="dim">(optional)</span></label>
+              <input type="text" id="cwd" placeholder="/path/to/project" />
+            </div>
+            <div class="field">
+              <label for="task">Initial task / mission <span class="dim">(optional)</span></label>
+              <textarea id="task" rows="3" placeholder="What should this agent do right away?
+e.g. Plan a new integration with Salesforce
+e.g. Implement plan.md"></textarea>
+            </div>
+            <div class="field">
+              <label for="mode">Autonomy / mode</label>
+              <select id="mode">
+                <option value="normal">normal — asks every time</option>
+                <option value="accept-edits">accept-edits — auto-accept file edits</option>
+                <option value="auto">auto — runs commands too</option>
+                <option value="plan">plan — read-only planning</option>
+                <option value="bypass">⚠ bypass — skip ALL permissions (dangerous)</option>
+              </select>
+              <p id="modeWarn" class="hint" style="display:none;color:var(--red)">
+                ⚠ Bypass launches with <code>--dangerously-skip-permissions</code>: the agent runs
+                every action with no prompts. Use only in a trusted/sandboxed dir. Set at spawn only.
+              </p>
+            </div>
+            <details class="field">
+              <summary>Instructions (priming)</summary>
+              <textarea id="instructions" rows="6" placeholder="Typed in as the first message to prime the agent…"></textarea>
+            </details>
+            <button id="btnSpawn" class="primary wide">＋ Spawn agent</button>
+            </fieldset>
+          </details>
+
+          <div class="agents-head">
+            <div class="tabs">
+              <button id="tabAgents" class="tab active">Agents</button>
+              <button id="tabInbox" class="tab">Inbox<span id="inboxBadge" class="ibadge" style="display:none"></span></button>
+            </div>
+            <button id="btnKillAll" class="tiny red" title="kill all sessions">kill all</button>
+          </div>
+          <div id="agents" class="agents"></div>
+          <div id="inbox" class="inbox" style="display:none"></div>
+        </aside>
+
+        <!-- CENTER: focused session screen + composer -->
+        <section class="stage">
+          <div class="stage-head">
+            <span id="focusTitle" class="dim">No agent selected</span>
+            <span class="grow"></span>
+            <span id="focusPill" class="pill s-EXITED"><span class="dot"></span><span id="focusState">—</span></span>
+          </div>
+          <div id="brakesStrip" class="brakes-strip" style="display:none"></div>
+          <div id="answerCard" class="answer-mount" style="display:none"></div>
+          <div id="menuCard" class="menu-mount" style="display:none"></div>
+          <div id="missionActivity" class="mission-activity" style="display:none"></div>
+          <div id="reportCard" class="report-mount" style="display:none"></div>
+          <pre id="screen">Pick a role on the left and spawn an agent.
+
+Every agent is a real interactive `claude` running in its own tmux session.
+This panel drives them purely through tmux keystrokes + screen capture —
+no headless mode, no SDK. Roles customise an agent by (1) cycling its
+permission mode via Shift-Tab and (2) typing its instructions as the first
+message.</pre>
+          <div class="composer">
+            <input type="text" id="prompt" placeholder="Message the focused agent and press Enter…" disabled />
+            <button id="btnSend" class="primary" disabled>Send</button>
+          </div>
+        </section>
+
+        <!-- RIGHT: controls -->
+        <aside class="controls">
+          <fieldset>
+            <legend>Permission dialog</legend>
+            <small>When state is <b>AWAITING_PERMISSION</b>:</small>
+            <div class="row" style="margin-top:8px">
+              <button id="btnApprove" class="green" disabled>Approve</button>
+              <button id="btnDeny" class="red" disabled>Deny</button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Controls</legend>
+            <div class="keys">
+              <button data-key="Up">↑ Up</button>
+              <button data-key="Down">↓ Down</button>
+              <button data-key="Enter">⏎ Enter</button>
+              <button data-key="Escape">Esc</button>
+              <button data-key="BTab">⇧Tab</button>
+              <button data-key="C-c">Ctrl-C</button>
+            </div>
+            <div class="row" style="margin-top:10px">
+              <input type="text" id="customKey" placeholder="custom key e.g. C-r" />
+              <button id="btnKey" style="flex:0 0 auto">Send</button>
+            </div>
+            <button id="btnInterrupt" class="wide" style="margin-top:8px">Interrupt (Esc)</button>
+          </fieldset>
+
+          <fieldset>
+            <legend>View</legend>
+            <label><input type="checkbox" id="histChk" /> scrollback history</label>
+            <label style="margin-top:6px"><input type="checkbox" id="pollChk" checked /> auto-refresh (700ms)</label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Output (JSON)</legend>
+            <pre id="json">{ }</pre>
+            <button id="btnCopyJson" class="wide" style="margin-top:6px">Copy JSON</button>
+          </fieldset>
+
+          <fieldset class="logbox">
+            <legend>Activity log</legend>
+            <div id="log"></div>
+          </fieldset>
+        </aside>
+      </main>
+    </div>
+
+    <!-- PROJECTS VIEW -->
+    <div id="view-projects" class="view" style="display:none">
+      <div class="page-layout">
+        <div class="page-sidebar">
+          <div class="page-sidebar-head">
+            <span class="page-sidebar-title">Projects</span>
+            <button id="btnNewProject" class="tiny">+ New</button>
+          </div>
+          <div id="projectList" class="page-list"></div>
+        </div>
+        <div class="page-main" id="projectEditor">
+          <div class="page-empty">Select a project or create a new one.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNTS VIEW -->
+    <div id="view-accounts" class="view" style="display:none">
+      <div class="page-layout">
+        <div class="page-main full-width" id="accountsPage">
+          <div class="accounts-toolbar">
+            <span class="page-title">Accounts</span>
+            <button id="btnScanAccounts" class="tiny">↻ Scan</button>
+            <button id="btnNewAccount" class="tiny primary-outline">+ New account</button>
+          </div>
+          <div id="accountsList" class="accounts-list"></div>
+          <!-- New/import form -->
+          <div id="accountForm" class="account-form" style="display:none"></div>
+          <!-- Scan results -->
+          <div id="scanResults" class="scan-results" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AGENTS VIEW -->
+    <div id="view-agents" class="view" style="display:none">
+      <div class="page-layout">
+        <div class="page-sidebar">
+          <div class="page-sidebar-head">
+            <span class="page-sidebar-title">Agent Roles</span>
+            <button id="btnNewRole" class="tiny">+ New</button>
+          </div>
+          <div id="roleList" class="page-list"></div>
+        </div>
+        <div class="page-main" id="roleEditor">
+          <div class="page-empty">Select a role or create a new one.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BACKLOG VIEW -->
+    <div id="view-backlog" class="view" style="display:none">
+      <div class="backlog-page">
+        <div class="backlog-header">
+          <span class="backlog-title">Backlog</span>
+          <button id="btnAddTask" class="tiny primary-outline">+ Task</button>
+        </div>
+        <div id="addTaskForm" class="add-task-form" style="display:none">
+          <input type="text" id="taskTitle" placeholder="Title" />
+          <input type="text" id="taskFeature" placeholder="Feature (optional)" />
+          <select id="taskPriority">
+            <option value="0">P0 · Critical</option>
+            <option value="1">P1 · High</option>
+            <option value="2" selected>P2 · Medium</option>
+            <option value="3">P3 · Low</option>
+          </select>
+          <button id="btnTaskSubmit" class="tiny primary">Add</button>
+          <button id="btnTaskCancel" class="tiny">Cancel</button>
+        </div>
+        <div class="backlog-kanban" id="backlogKanban"></div>
+        <!-- Task detail panel -->
+        <div id="taskDetailPanel" class="task-detail-panel" style="display:none">
+          <div class="tdp-head">
+            <span id="tdpId" class="tdp-id"></span>
+            <button id="btnCloseDetail" class="tiny">✕</button>
+          </div>
+          <h3 id="tdpTitle"></h3>
+          <div class="tdp-meta">
+            <span id="tdpFeature"></span>
+            <span id="tdpStatus"></span>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Origin</div>
+            <div id="tdpOrigin" class="tdp-origin"></div>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Description</div>
+            <div id="tdpDescription" class="tdp-text"></div>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Grounded nodes</div>
+            <div id="tdpNodes" class="tdp-chips"></div>
+          </div>
+          <div class="tdp-section" id="tdpGroundSection" style="display:none">
+            <div class="tdp-label">Ground to brain nodes</div>
+            <div id="tdpGroundList" class="tdp-ground-list"></div>
+            <button id="btnSaveGrounding" class="tiny primary" style="margin-top:6px">Save grounding</button>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Move to</div>
+            <div id="tdpMoveButtons" class="tdp-move-btns"></div>
+          </div>
+          <div class="tdp-section">
+            <button id="btnRunPipeline" class="tiny primary">▶ Run pipeline</button>
+          </div>
+          <div class="tdp-section">
+            <div class="tdp-label">Activity</div>
+            <div id="tdpComments" class="tdp-comments"></div>
+            <div class="tdp-comment-add">
+              <textarea id="tdpCommentInput" rows="2" placeholder="Add a comment…"></textarea>
+              <button id="btnAddComment" class="tiny primary">Comment</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIPELINES (ORCHESTRATOR) VIEW -->
+    <div id="view-pipelines" class="view" style="display:none">
+      <div class="pl-page">
+        <div class="pl-header">
+          <span class="pl-title">Pipelines</span>
+          <button id="btnRefreshPipelines" class="tiny">Refresh</button>
+        </div>
+        <div id="pipelinesList" class="pl-list"></div>
+      </div>
+    </div>
+
+    <!-- BRAIN VIEW -->
+    <div id="view-brain" class="view" style="display:none">
+      <div class="brain-page">
+        <div class="brain-header">
+          <span class="brain-title">Product Brain</span>
+          <div class="brain-header-actions">
+            <button id="btnAddNode" class="tiny primary-outline">+ Node</button>
+            <button id="btnAddEdge" class="tiny">+ Edge</button>
+          </div>
+        </div>
+        <!-- Add node form -->
+        <div id="addNodeForm" class="add-node-form" style="display:none">
+          <select id="nodeType">
+            <option value="feature">Feature</option>
+            <option value="decision">Decision</option>
+            <option value="convention">Convention</option>
+            <option value="feedback">Feedback</option>
+            <option value="bug">Bug</option>
+            <option value="metric">Metric</option>
+          </select>
+          <input type="text" id="nodeLabel" placeholder="Label" />
+          <input type="text" id="nodeDetail" placeholder="Detail (optional)" />
+          <button id="btnNodeSubmit" class="tiny primary">Add</button>
+          <button id="btnNodeCancel" class="tiny">Cancel</button>
+        </div>
+        <!-- Add edge form -->
+        <div id="addEdgeForm" class="add-edge-form" style="display:none">
+          <select id="edgeFrom"><option value="">— From node —</option></select>
+          <select id="edgeTo"><option value="">— To node —</option></select>
+          <input type="text" id="edgeRel" placeholder="Relation (optional)" />
+          <button id="btnEdgeSubmit" class="tiny primary">Add Edge</button>
+          <button id="btnEdgeCancel" class="tiny">Cancel</button>
+        </div>
+        <div class="brain-main">
+          <!-- SVG canvas for graph -->
+          <div class="brain-canvas-wrap">
+            <svg id="brainSvg" class="brain-svg"></svg>
+          </div>
+          <!-- Node detail panel -->
+          <div id="brainDetailPanel" class="brain-detail-panel" style="display:none">
+            <div class="bdp-head">
+              <span id="bdpType" class="bdp-type-chip"></span>
+              <button id="btnCloseBrainDetail" class="tiny">✕</button>
+            </div>
+            <h3 id="bdpLabel"></h3>
+            <div id="bdpDetail" class="bdp-detail"></div>
+            <div class="bdp-actions">
+              <button id="btnEditNode" class="tiny">Edit</button>
+              <button id="btnDeleteNode" class="tiny red">Delete</button>
+            </div>
+            <!-- Edit form inline -->
+            <div id="bdpEditForm" style="display:none">
+              <select id="bdpEditType">
+                <option value="feature">Feature</option>
+                <option value="decision">Decision</option>
+                <option value="convention">Convention</option>
+                <option value="feedback">Feedback</option>
+                <option value="bug">Bug</option>
+                <option value="metric">Metric</option>
+              </select>
+              <input type="text" id="bdpEditLabel" placeholder="Label" />
+              <input type="text" id="bdpEditDetail" placeholder="Detail (optional)" />
+              <button id="btnSaveNode" class="tiny primary">Save</button>
+              <button id="btnCancelEditNode" class="tiny">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div id="view-settings" class="view" style="display:none">
+      <div class="page-layout">
+        <div class="page-main full-width">
+          <div class="page-title">Settings</div>
+          <div id="settingsBody" style="padding:16px;max-width:620px"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /views -->
+</div><!-- /appBody -->
+
+<script src="app.js"></script>
+</body>
+</html>

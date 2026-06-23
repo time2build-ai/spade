@@ -15,19 +15,21 @@ PORT      ?= 8765
 DATA_HOME ?= $(HOME)/spade-qa
 VENV      ?= .venv
 PY        := $(VENV)/bin/python
+PY_DIR    ?= apps/api
 RUN_ENV    = TUI_PILOT_HOME=$(DATA_HOME) TUI_PILOT_API_BASE=http://$(HOST):$(PORT)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev run setup test stop open fresh
+.PHONY: help dev run api setup test stop open fresh
 
 help:
 	@echo "Spade / tui-pilot — make targets"
-	@echo "  make dev      start the server with auto-reload  → http://$(HOST):$(PORT)/ui/"
-	@echo "  make run      start the server (no reload)"
-	@echo "  make setup    create the venv (uv) + install deps"
+	@echo "  make dev      start API + client (auto-reload)  → UI http://127.0.0.1:3000  (API http://$(HOST):$(PORT))"
+	@echo "  make run      start the API only (no reload)"
+	@echo "  make api      start the API only (auto-reload)"
+	@echo "  make setup    create the venv (uv) + install Python & client deps"
 	@echo "  make test     run the test suite"
-	@echo "  make stop     stop a running server"
-	@echo "  make open     open the UI in your browser"
+	@echo "  make stop     stop the API + client"
+	@echo "  make open     open the new UI in your browser (http://127.0.0.1:3000)"
 	@echo "  make fresh    wipe the data dir (asks to confirm)"
 	@echo ""
 	@echo "  data home: $(DATA_HOME)   (override: make dev DATA_HOME=~/other PORT=9000)"
@@ -39,25 +41,35 @@ $(VENV):
 setup:
 	@command -v uv >/dev/null 2>&1 || { echo "uv not found — install: https://docs.astral.sh/uv/"; exit 1; }
 	@test -d $(VENV) || uv venv $(VENV)
-	@uv pip install --python $(PY) -r requirements.txt
+	@uv pip install --python $(PY) -r $(PY_DIR)/requirements.txt
+	@echo "→ installing client deps (apps/client)…"
+	@cd apps/client && npm install
 	@echo "✓ setup complete — run 'make dev'"
 
 dev: $(VENV) stop
-	@echo "▶ Spade dev server  →  http://$(HOST):$(PORT)/ui/   (data: $(DATA_HOME), auto-reload ON)"
-	@$(RUN_ENV) $(PY) -m uvicorn tui_pilot.server:app --reload --host $(HOST) --port $(PORT)
+	@echo "▶ API → http://$(HOST):$(PORT)   UI → http://127.0.0.1:3000   (data: $(DATA_HOME), auto-reload ON)"
+	@bash -c 'trap "kill 0" INT TERM; \
+	  ( cd $(PY_DIR) && $(RUN_ENV) ../../$(PY) -m uvicorn tui_pilot.server:app --reload --host $(HOST) --port $(PORT) ) & \
+	  ( cd apps/client && npm run dev ) & \
+	  wait'
 
 run: $(VENV) stop
 	@echo "▶ Spade server  →  http://$(HOST):$(PORT)/ui/   (data: $(DATA_HOME))"
-	@$(RUN_ENV) $(PY) -m uvicorn tui_pilot.server:app --host $(HOST) --port $(PORT)
+	@cd $(PY_DIR) && $(RUN_ENV) ../../$(PY) -m uvicorn tui_pilot.server:app --host $(HOST) --port $(PORT)
+
+api: $(VENV) stop
+	@echo "▶ Spade API  →  http://$(HOST):$(PORT)/ui/   (data: $(DATA_HOME), auto-reload ON)"
+	@cd $(PY_DIR) && $(RUN_ENV) ../../$(PY) -m uvicorn tui_pilot.server:app --reload --host $(HOST) --port $(PORT)
 
 test: $(VENV)
-	@$(PY) -m pytest -q
+	@cd $(PY_DIR) && ../../$(PY) -m pytest -q
 
 stop:
-	@pkill -f "uvicorn tui_pilot.server:app" 2>/dev/null && echo "• stopped running server" || true
+	@pkill -f "uvicorn tui_pilot.server:app" 2>/dev/null && echo "• stopped api" || true
+	@pkill -f "next dev" 2>/dev/null && echo "• stopped client" || true
 
 open:
-	@open "http://$(HOST):$(PORT)/ui/" 2>/dev/null || echo "open http://$(HOST):$(PORT)/ui/"
+	@open "http://127.0.0.1:3000" 2>/dev/null || echo "open http://127.0.0.1:3000"
 
 fresh:
 	@echo "⚠ This deletes $(DATA_HOME) — all projects, accounts, tasks, brain, pipelines."
