@@ -91,6 +91,101 @@ export function tasksByStatus(tasks: Task[]): Record<Status, Task[]> {
   return buckets;
 }
 
+// -- brain (Product Brain graph) adapters -------------------------------------
+
+/** Count nodes per type. All 6 type keys are always present (0 if none). */
+export function nodeTypeCounts(
+  nodes: BrainNode[],
+): Record<BrainNodeType, number> {
+  const counts = {} as Record<BrainNodeType, number>;
+  for (const t of BRAIN_NODE_TYPES) counts[t] = 0;
+  for (const node of nodes) {
+    if (node.type in counts) counts[node.type] += 1;
+  }
+  return counts;
+}
+
+/** Token color var for a brain node type (drives node + legend colors). */
+export function nodeColor(type: BrainNodeType): string {
+  switch (type) {
+    case "feature":
+      return "var(--accent)";
+    case "decision":
+      return "var(--amber)";
+    case "feedback":
+      return "var(--blue)";
+    case "bug":
+      return "var(--red)";
+    case "metric":
+      return "var(--teal)";
+    case "convention":
+      return "var(--pink)";
+  }
+}
+
+export type LaidOutNode = BrainNode & { px: number; py: number };
+
+/**
+ * Map each node's x/y into pixel coords within [pad, size-pad]. Present coords
+ * are normalized against the min..max of all present coords (a single value or
+ * a zero range maps to the center). Nodes missing x or y fall back to a
+ * deterministic circle layout by index. Pure + deterministic.
+ */
+export function layoutNodes(
+  nodes: BrainNode[],
+  width: number,
+  height: number,
+  pad = 40,
+): LaidOutNode[] {
+  const xs = nodes
+    .map((n) => n.x)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const ys = nodes
+    .map((n) => n.y)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+
+  const minX = xs.length ? Math.min(...xs) : 0;
+  const maxX = xs.length ? Math.max(...xs) : 1;
+  const minY = ys.length ? Math.min(...ys) : 0;
+  const maxY = ys.length ? Math.max(...ys) : 1;
+
+  const innerW = Math.max(0, width - pad * 2);
+  const innerH = Math.max(0, height - pad * 2);
+
+  const scale = (v: number, min: number, max: number, inner: number) => {
+    const range = max - min;
+    const t = range === 0 ? 0.5 : (v - min) / range;
+    return pad + t * inner;
+  };
+
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(innerW, innerH) / 2;
+  const count = nodes.length || 1;
+
+  return nodes.map((node, i) => {
+    const hasCoords =
+      typeof node.x === "number" &&
+      Number.isFinite(node.x) &&
+      typeof node.y === "number" &&
+      Number.isFinite(node.y);
+    if (hasCoords) {
+      return {
+        ...node,
+        px: scale(node.x as number, minX, maxX, innerW),
+        py: scale(node.y as number, minY, maxY, innerH),
+      };
+    }
+    // Deterministic radial fallback for null coords.
+    const angle = (i / count) * Math.PI * 2;
+    return {
+      ...node,
+      px: cx + Math.cos(angle) * radius,
+      py: cy + Math.sin(angle) * radius,
+    };
+  });
+}
+
 // -- pipeline (Orchestrator) adapters -----------------------------------------
 
 /**

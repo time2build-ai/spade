@@ -35,7 +35,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Sprints", icon: "cal", href: "#", badge: "26" },
       { label: "Backlog", icon: "tasks", href: "/backlog", badge: "23" },
-      { label: "Product brain", icon: "brain", href: "#", badge: "847" },
+      { label: "Product brain", icon: "brain", href: "/brain", badge: "847" },
       { label: "Graph & Issues", icon: "graph", href: "#", badge: "7" },
     ],
   },
@@ -44,7 +44,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Orchestrator", icon: "orch", href: "/orchestrator", badge: "7", badgeKind: "live" },
       { label: "Agent pool", icon: "board", href: "#", badge: "10" },
-      { label: "Human gates", icon: "gate", href: "#", badge: "2", badgeKind: "amber" },
+      { label: "Human gates", icon: "gate", href: "/gate", badge: "2", badgeKind: "amber" },
     ],
   },
   {
@@ -52,7 +52,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Meetings", icon: "mic", href: "#", badge: "42" },
       { label: "Feedback", icon: "link", href: "#", badge: "312" },
-      { label: "Decisions", icon: "doc", href: "#", badge: "94" },
+      { label: "Decisions", icon: "doc", href: "/decisions", badge: "94" },
     ],
   },
   {

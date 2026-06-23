@@ -37,6 +37,14 @@ export interface BrainNode {
   y: number | null;
 }
 
+export type BrainEdge = {
+  id: string;
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  rel: string | null;
+};
+
 export interface Task {
   id: string;
   project_id: string;
@@ -52,6 +60,14 @@ export interface Task {
   // node list (see resolveNodes / api.brainNodes) to get full BrainNode objects.
   nodes: string[];
 }
+
+export type Brake = {
+  id: string;
+  mission: string;
+  brake: string;
+  detail: string;
+  worker: string | null;
+};
 
 export interface Comment {
   id: string;
