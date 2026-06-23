@@ -431,6 +431,45 @@ body {
   color: var(--text-4); background: transparent; border-color: var(--line);
 }
 
+/* === BACKLOG === (lifted from handoff Spade.html; height/overflow adapted to
+   our PageHead + scrollable <main> so columns size to content) */
+.backlog-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 14px; padding: 16px 22px 22px; align-items: start;
+}
+.col {
+  display: flex; flex-direction: column;
+  background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden;
+}
+.col-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--text-2); background: var(--bg-1);
+}
+.col-head .count { margin-left: auto; color: var(--text-4); font-family: var(--mono); font-size: 11px; }
+.col-head .col-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.col-body { padding: 8px; gap: 8px; display: flex; flex-direction: column; min-height: 48px; }
+.task-card {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 7px;
+  padding: 10px 11px; cursor: pointer; position: relative; text-decoration: none;
+  display: block; color: inherit;
+  transition: border-color .15s, transform .15s;
+}
+.task-card:hover { border-color: var(--line-strong); }
+.task-card.selected {
+  border-color: var(--accent); background: linear-gradient(180deg, rgba(201,184,255,.06), var(--bg-2));
+}
+.task-card .tc-head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-4); margin-bottom: 6px; font-family: var(--mono); }
+.task-card .tc-head .priority { margin-right: 2px; }
+.task-card h4 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: -0.005em; line-height: 1.35; }
+.task-card .tc-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.task-card .tc-foot { display: flex; align-items: center; gap: 8px; color: var(--text-4); font-size: 11px; font-family: var(--mono); }
+.task-card .tc-foot .left { display: flex; gap: 9px; align-items: center; }
+.task-card .tc-foot .agent-running { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 11px; }
+.intel-bar { display: flex; gap: 2px; height: 3px; border-radius: 2px; overflow: hidden; margin: 0 0 7px; }
+.intel-bar span { flex: 1; }
+
 /* Sidebar project / workspace header card */
 .sb-proj-head {
   display: flex; align-items: center; gap: 10px;

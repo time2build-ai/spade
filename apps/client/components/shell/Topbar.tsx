@@ -4,9 +4,15 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { IconBtn, Kbd, Avatar } from "@/components/ui";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { useProject } from "@/lib/useProject";
+import { useShellData } from "@/lib/useShell";
 
-/** App topbar: brand, project switcher, command pill, and live status pills. */
+/** App topbar: brand, project switcher, command pill, and LIVE status pills. */
 export function Topbar() {
+  const { project } = useProject();
+  const { aliveSessions, defaultAccount } = useShellData(project?.id ?? null);
+  const sessionsLabel = aliveSessions === undefined ? "daemon" : `daemon · ${aliveSessions} sessions`;
+
   return (
     <header className="topbar">
       <Link href="/" className="brand">
@@ -24,26 +30,20 @@ export function Topbar() {
       </div>
 
       <div className="topbar-right">
-        {/* static M1 */}
-        <span className="topbar-pill">
-          <span className="pulse-dot" /> daemon · 7 sessions
+        {/* live: count of alive agent sessions (GET /sessions) */}
+        <span className="topbar-pill" title="Live agent sessions">
+          <span className="pulse-dot" /> {sessionsLabel}
         </span>
-        {/* static M1 */}
-        <span className="topbar-pill mono">sprint 26 · day 2/10</span>
-        {/* static M1 */}
-        <span className="topbar-pill" title="Active Claude account">
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "var(--green)",
-            }}
-          />
-          acct: rmurphy@acme · 62%
-        </span>
+        {/* live: active default account (GET /accounts) — only when one exists */}
+        {defaultAccount && (
+          <span className="topbar-pill mono" title="Active account">
+            <span
+              style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }}
+            />
+            {defaultAccount.label}
+          </span>
+        )}
         <IconBtn icon="spark" title="Toggle tweaks panel" />
-        {/* static M1 */}
         <Avatar>RM</Avatar>
       </div>
     </header>
