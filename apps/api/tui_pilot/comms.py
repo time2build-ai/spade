@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 
-DEFAULT_ROOT = Path.home() / ".tui-pilot" / "comms"
+DEFAULT_ROOT = Path.home() / ".spade" / "comms"
 _SUBDIRS = ("outbox", "inbox", "handoffs", "processed")
 
 class Hub:

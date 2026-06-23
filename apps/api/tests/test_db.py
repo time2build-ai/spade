@@ -5,9 +5,9 @@ import pytest
 
 from tui_pilot import db
 
-def test_home_defaults_to_dot_tui_pilot(monkeypatch):
+def test_home_defaults_to_dot_spade(monkeypatch):
     monkeypatch.delenv("TUI_PILOT_HOME", raising=False)
-    assert db.home() == Path.home() / ".tui-pilot"
+    assert db.home() == Path.home() / ".spade"
 
 def test_home_honors_env(monkeypatch, tmp_path):
     monkeypatch.setenv("TUI_PILOT_HOME", str(tmp_path))

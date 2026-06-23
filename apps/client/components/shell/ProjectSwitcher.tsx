@@ -30,14 +30,23 @@ export function ProjectSwitcher() {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Track whether the user has hand-edited the path (stop auto-syncing if so).
+  const [pathDirty, setPathDirty] = useState(false);
 
-  // Default the path to the host home dir (e.g. "/Users/you/"); user appends.
-  const homeBase = env?.home ? env.home.replace(/\/+$/, "") + "/" : "";
+  // Default project workspace path: {home}/.spade/projects/{slug} (id from name).
+  // Falls back to a literal "~" path if the host home isn't known yet (the API
+  // expands ~ on create either way).
+  const pathTemplate = (slug: string) => {
+    const base = env?.home ? env.home.replace(/\/+$/, "") + "/.spade" : "~/.spade";
+    return `${base}/projects/${slug}`;
+  };
+  const previewId = slugify(name);
 
-  // Prefill the path once the form is open and the home dir is known.
+  // Keep the path in sync with the name until the user edits it by hand.
   useEffect(() => {
-    if (creating && !path && homeBase) setPath(homeBase);
-  }, [creating, homeBase, path]);
+    if (creating && !pathDirty) setPath(pathTemplate(previewId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creating, pathDirty, previewId, env?.home]);
 
   const resetCreate = () => {
     setCreating(false);
@@ -45,6 +54,7 @@ export function ProjectSwitcher() {
     setPath("");
     setErr(null);
     setBusy(false);
+    setPathDirty(false);
   };
 
   async function onCreate(e: React.FormEvent) {
@@ -82,7 +92,6 @@ export function ProjectSwitcher() {
 
   const isPlaceholder = !project;
   const color = project ? projectColor(project) : null;
-  const previewId = slugify(name);
 
   return (
     <div
@@ -132,8 +141,11 @@ export function ProjectSwitcher() {
                 <span>Path</span>
                 <input
                   value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder={`${homeBase || "/Users/you/"}my-project`}
+                  onChange={(e) => {
+                    setPath(e.target.value);
+                    setPathDirty(true);
+                  }}
+                  placeholder={pathTemplate("my-project")}
                 />
                 <span className="proj-field-hint">~ expands to your home directory</span>
               </label>
@@ -192,10 +204,7 @@ export function ProjectSwitcher() {
               <button
                 type="button"
                 className="proj-menu-action"
-                onClick={() => {
-                  setCreating(true);
-                  setPath((p) => p || homeBase);
-                }}
+                onClick={() => setCreating(true)}
               >
                 <Icon name="plus" size={11} /> New project
               </button>
