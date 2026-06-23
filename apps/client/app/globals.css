@@ -423,6 +423,13 @@ body {
 .sb-item.active .badge { background: var(--bg-4); color: var(--text-2); }
 .sb-item.live .badge { color: var(--green); border-color: rgba(122,209,154,.25); background: rgba(122,209,154,.08); }
 .sb-item .badge.amber { color: var(--amber); border-color: rgba(230,184,106,.25); background: rgba(230,184,106,.06); }
+/* Not-yet-built nav items: dimmed, non-navigating, "Próximamente" badge */
+.sb-item.soon { opacity: .45; cursor: default; }
+.sb-item.soon:hover { background: transparent; color: var(--text-2); }
+.sb-item .badge.soon {
+  text-transform: uppercase; letter-spacing: .04em; font-size: 8.5px;
+  color: var(--text-4); background: transparent; border-color: var(--line);
+}
 
 /* Sidebar project / workspace header card */
 .sb-proj-head {
