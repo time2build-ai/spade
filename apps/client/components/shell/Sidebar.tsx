@@ -52,7 +52,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Meetings", icon: "mic", href: "#", badge: "42" },
       { label: "Feedback", icon: "link", href: "#", badge: "312" },
-      { label: "Decisions", icon: "doc", href: "#", badge: "94" },
+      { label: "Decisions", icon: "doc", href: "/decisions", badge: "94" },
     ],
   },
   {
