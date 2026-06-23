@@ -97,6 +97,12 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(122, 182, 230, 0); }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+.fade-in { animation: fadeIn .25s ease both; }
+
 /* ============================================================
    Shared UI component classes (lifted from Spade.html)
    ============================================================ */
@@ -223,6 +229,75 @@ body {
 }
 .page-head h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .page-head-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.breadcrumb { color: var(--text-4); font-size: 12.5px; }
+.breadcrumb b { color: var(--text-2); font-weight: 500; }
+.breadcrumb a { color: var(--text-4); text-decoration: none; }
+.breadcrumb a:hover { color: var(--text-2); }
+
+/* shared text utilities (lifted from Spade.html) */
+.muted { color: var(--text-3); }
+.mono { font-family: var(--mono); }
+.serif { font-family: var(--serif); font-style: italic; }
+
+/* ============================================================
+   Task detail view — lifted from Spade.html
+   ============================================================ */
+.task-detail {
+  display: grid; grid-template-columns: minmax(0,1fr) 320px;
+  flex: 1; min-height: 0;
+}
+.td-main { padding: 22px 28px 32px; overflow-y: auto; }
+.td-side { border-left: 1px solid var(--line); padding: 22px 20px; overflow-y: auto; background: var(--bg); }
+.td-title { font-size: 22px; font-weight: 600; letter-spacing: -0.015em; margin: 8px 0 12px; line-height: 1.25; }
+.td-meta-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+
+.origin {
+  background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 18px; position: relative;
+}
+.origin h5 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-4); font-weight: 600; }
+.origin blockquote {
+  font-family: var(--serif); font-style: italic; font-size: 19px; line-height: 1.45;
+  color: var(--text); margin: 4px 0; letter-spacing: -0.005em;
+}
+.origin .src { font-size: 12px; color: var(--text-3); margin-top: 6px; display: flex; gap: 10px; align-items: center; }
+
+.section-h {
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-4); font-weight: 600;
+  margin: 22px 0 10px; display: flex; align-items: center; gap: 8px;
+}
+.section-h .count { font-family: var(--mono); color: var(--text-4); font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+.link-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--bg-1); margin-bottom: 6px;
+}
+.link-row .lr-icon { width: 22px; height: 22px; border-radius: 5px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.link-row .lr-title { font-size: 13px; color: var(--text); font-weight: 500; }
+.link-row .lr-sub { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.link-row .lr-meta { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-4); }
+
+.section-empty {
+  font-size: 12px; color: var(--text-4);
+  padding: 10px 12px; border: 1px dashed var(--line); border-radius: 7px;
+  background: var(--bg-1);
+}
+
+/* task-detail sidebar */
+.td-side h6 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-4); font-weight: 600; }
+.meta-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; font-size: 12.5px; color: var(--text-2); border-bottom: 1px solid var(--line); }
+.meta-row:last-child { border-bottom: none; }
+.meta-row .k { color: var(--text-4); }
+
+.timeline { position: relative; padding-left: 16px; margin-top: 6px; }
+.timeline::before { content: ""; position: absolute; left: 5px; top: 4px; bottom: 4px; width: 1px; background: var(--line); }
+.tl-item { position: relative; padding: 4px 0 12px; font-size: 12px; color: var(--text-2); }
+.tl-item::before { content: ""; position: absolute; left: -14px; top: 7px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--line-strong); }
+.tl-item.now::before { background: var(--green); border-color: var(--green); box-shadow: 0 0 0 3px rgba(122,209,154,.18); }
+.tl-item .when { color: var(--text-4); font-size: 11px; font-family: var(--mono); margin-top: 2px; }
+.tl-empty { font-size: 12px; color: var(--text-4); }
 
 /* ============================================================
    App shell (topbar + sidebar grid) — lifted from Spade.html
