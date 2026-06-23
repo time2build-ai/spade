@@ -3,16 +3,32 @@
 ## Quick start
 
 ```bash
-make setup     # one-time: create the venv (uv) + install dependencies
-make dev       # start the server with auto-reload → http://127.0.0.1:8765/ui/
+make setup     # one-time: venv (uv) + Python deps + client npm install
+make dev       # start API + new UI with hot-reload → http://127.0.0.1:3000
+make stop      # stop both servers
 ```
 
-`make dev` runs the API + web UI in one process with hot-reload (Python changes
-apply automatically — no manual restart). Data (the SQLite DB + managed account
-dirs) lives in `~/spade-qa` by default; override with
-`make dev DATA_HOME=~/other PORT=9000`. Other targets: `make test`, `make stop`,
-`make open`, `make fresh` (wipe the data dir). Requires `tmux` and the `claude`
-CLI on PATH. Run `make` with no args to list everything.
+`make dev` starts **both** servers together (Ctrl-C tears down both): the
+FastAPI API on `:8765` and the Next.js UI on **http://127.0.0.1:3000** (the Next
+app proxies `/api/*` to the API). Python and TypeScript changes both hot-reload —
+no manual restart. Data (the SQLite DB + managed account dirs) lives in
+`~/spade-qa` by default; override with `make dev DATA_HOME=~/other PORT=9000`.
+Other targets: `make api` (API only), `make test`, `make open`, `make fresh`
+(wipe the data dir). Requires `tmux` and the `claude` CLI on PATH. Run `make`
+with no args to list everything.
+
+### Monorepo layout
+
+This repo is a monorepo with two apps:
+
+- **`apps/api`** — the Python/FastAPI backend (the source of truth). Runs
+  `uvicorn tui_pilot.server:app` on `:8765`.
+- **`apps/client`** — the new Next.js UI (App Router + TypeScript + Tailwind v4).
+  Dev server on `:3000`, proxies `/api/*` to the API.
+
+**Legacy UI:** the original vanilla-JS UI is still served by FastAPI at
+**http://127.0.0.1:8765/ui/** as a fallback during the migration, until the Next
+app reaches parity.
 
 ---
 
