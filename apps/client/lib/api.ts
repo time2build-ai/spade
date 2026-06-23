@@ -1,10 +1,12 @@
 import type {
+  Account,
   Brake,
   BrainEdge,
   BrainNode,
   Comment,
   PipelineRun,
   Project,
+  Session,
   Task,
 } from "./types";
 
@@ -19,6 +21,9 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   projects: () => http<{ projects: Project[] }>("/projects"),
+  // Global fleet (no project param) and the provider account pool.
+  sessions: () => http<{ sessions: Session[] }>("/sessions"),
+  accounts: () => http<{ accounts: Account[] }>("/accounts"),
   brainNodes: (projectId: string) =>
     http<{ nodes: BrainNode[] }>(
       `/brain/nodes?project_id=${encodeURIComponent(projectId)}`,

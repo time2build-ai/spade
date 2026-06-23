@@ -1,0 +1,102 @@
+"use client";
+
+import useSWR from "swr";
+import { PageHead } from "@/components/ui";
+import { AgentCard } from "@/components/agentpool/AgentCard";
+import { AccountCard } from "@/components/agentpool/AccountCard";
+import { api } from "@/lib/api";
+import type { Account, Session } from "@/lib/types";
+
+function StateMessage({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ padding: "32px 22px", color: "var(--text-3)", fontSize: 13 }}>
+      {children}
+    </div>
+  );
+}
+
+export default function AgentPoolPage() {
+  // Global fleet — no project param. Poll for liveness.
+  const sessions = useSWR("sessions", () => api.sessions(), {
+    refreshInterval: 3000,
+  });
+  const accounts = useSWR("accounts", () => api.accounts());
+
+  const fleet: Session[] = sessions.data?.sessions ?? [];
+  const pool: Account[] = accounts.data?.accounts ?? [];
+
+  const loading =
+    (sessions.isLoading && !sessions.data) ||
+    (accounts.isLoading && !accounts.data);
+  const error = sessions.error ?? accounts.error;
+
+  let body: React.ReactNode;
+  if (error) {
+    body = (
+      <StateMessage>
+        <span style={{ color: "var(--red)" }}>
+          Couldn’t load the agent pool: {String(error.message ?? error)}
+        </span>
+      </StateMessage>
+    );
+  } else if (loading) {
+    body = <StateMessage>Loading…</StateMessage>;
+  } else {
+    body = (
+      <div className="ap-wrap">
+        <section className="ap-pool">
+          <div className="ap-section-h">
+            <div className="ap-section-title">Live agent fleet</div>
+            <div className="ap-section-sub muted">
+              every running session across the workspace
+            </div>
+          </div>
+          {fleet.length === 0 ? (
+            <StateMessage>No agents running.</StateMessage>
+          ) : (
+            <div className="ap-grid">
+              {fleet.map((s) => (
+                <AgentCard key={s.id} session={s} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="ap-accounts">
+          <div className="ap-section-h">
+            <div className="ap-section-title">Provider accounts</div>
+            <div className="ap-section-sub muted">
+              the account pool agents draw from
+            </div>
+          </div>
+          {pool.length === 0 ? (
+            <StateMessage>No accounts configured.</StateMessage>
+          ) : (
+            <div className="acct-list">
+              {pool.map((a) => (
+                <AccountCard key={a.id} account={a} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <PageHead
+        title={
+          <span className="breadcrumb">
+            <b>Agent pool</b>
+            <span className="muted">
+              {" · "}
+              {fleet.length} agents · {pool.length} accounts
+            </span>
+          </span>
+        }
+      />
+      {body}
+    </div>
+  );
+}

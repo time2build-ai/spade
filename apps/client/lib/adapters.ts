@@ -4,6 +4,7 @@ import type {
   BrainNodeType,
   PipelineRun,
   Project,
+  Session,
   StageState,
   Status,
   Task,
@@ -270,5 +271,34 @@ export function filterRuns(
     case "all":
     default:
       return runs;
+  }
+}
+
+// -- agent pool (live fleet) adapters -----------------------------------------
+
+/**
+ * Derive a display status for a live session from its real fields. A dead
+ * session (alive=false) is always muted. Otherwise the prep lifecycle drives it:
+ * error→red, working→blue, ready→green, booting/priming→amber. When prep is
+ * null we fall back to the raw `state` string in a muted color.
+ */
+export function sessionStatusVisual(s: Session): {
+  label: string;
+  color: string;
+} {
+  if (!s.alive) return { label: "dead", color: "var(--text-4)" };
+  switch (s.prep) {
+    case "error":
+      return { label: "error", color: "var(--red)" };
+    case "working":
+      return { label: "working", color: "var(--blue)" };
+    case "ready":
+      return { label: "ready", color: "var(--green)" };
+    case "booting":
+      return { label: "booting", color: "var(--amber)" };
+    case "priming":
+      return { label: "priming", color: "var(--amber)" };
+    default:
+      return { label: s.state || "unknown", color: "var(--text-3)" };
   }
 }
