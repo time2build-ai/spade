@@ -4,13 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/Icon";
 import { useProject } from "@/lib/useProject";
+import { useShellData } from "@/lib/useShell";
 import { projectColor, projectGlyph, projectSlug } from "@/lib/adapters";
+
+type CountKey = "backlog" | "brain" | "decisions" | "orchestrator" | "agentPool" | "gates";
 
 interface NavItem {
   label: string;
   icon: IconName;
   href: string;
-  badge?: string;
+  // Built views show a LIVE count from the API (countKey); "#" items are unbuilt
+  // and render a "Próximamente" badge instead. No static/fake counts.
+  countKey?: CountKey;
   badgeKind?: "live" | "amber";
 }
 
@@ -19,40 +24,37 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Only "Backlog" routes to a real page; everything else is a styled placeholder
-// (href "#") so the shell looks complete without 404s. Badge counts are static
-// design values. /* static M1 */
 const GROUPS: NavGroup[] = [
   {
     label: "Project",
     items: [
       { label: "Overview", icon: "board", href: "#" },
-      { label: "Ask", icon: "brain", href: "#", badge: "⌘K" },
+      { label: "Ask", icon: "brain", href: "#" },
     ],
   },
   {
     label: "Plan",
     items: [
-      { label: "Sprints", icon: "cal", href: "#", badge: "26" },
-      { label: "Backlog", icon: "tasks", href: "/backlog", badge: "23" },
-      { label: "Product brain", icon: "brain", href: "/brain", badge: "847" },
-      { label: "Graph & Issues", icon: "graph", href: "#", badge: "7" },
+      { label: "Sprints", icon: "cal", href: "#" },
+      { label: "Backlog", icon: "tasks", href: "/backlog", countKey: "backlog" },
+      { label: "Product brain", icon: "brain", href: "/brain", countKey: "brain" },
+      { label: "Graph & Issues", icon: "graph", href: "#" },
     ],
   },
   {
     label: "Execution",
     items: [
-      { label: "Orchestrator", icon: "orch", href: "/orchestrator", badge: "7", badgeKind: "live" },
-      { label: "Agent pool", icon: "board", href: "/agent-pool", badge: "10" },
-      { label: "Human gates", icon: "gate", href: "/gate", badge: "2", badgeKind: "amber" },
+      { label: "Orchestrator", icon: "orch", href: "/orchestrator", countKey: "orchestrator", badgeKind: "live" },
+      { label: "Agent pool", icon: "board", href: "/agent-pool", countKey: "agentPool" },
+      { label: "Human gates", icon: "gate", href: "/gate", countKey: "gates", badgeKind: "amber" },
     ],
   },
   {
     label: "Inputs",
     items: [
-      { label: "Meetings", icon: "mic", href: "#", badge: "42" },
-      { label: "Feedback", icon: "link", href: "#", badge: "312" },
-      { label: "Decisions", icon: "doc", href: "/decisions", badge: "94" },
+      { label: "Meetings", icon: "mic", href: "#" },
+      { label: "Feedback", icon: "link", href: "#" },
+      { label: "Decisions", icon: "doc", href: "/decisions", countKey: "decisions" },
     ],
   },
   {
@@ -68,6 +70,7 @@ const GROUPS: NavGroup[] = [
 export function Sidebar() {
   const { project } = useProject();
   const pathname = usePathname();
+  const { counts } = useShellData(project?.id ?? null);
   const color = project ? projectColor(project) : null;
 
   return (
@@ -135,24 +138,24 @@ export function Sidebar() {
               );
             }
             const active = pathname === item.href;
+            const count = item.countKey ? counts[item.countKey] : undefined;
+            // Only "live" green styling when there's actually something running.
+            const live = item.badgeKind === "live" && (count ?? 0) > 0;
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                className={["sb-item", item.badgeKind === "live" && "live", active && "active"]
-                  .filter(Boolean)
-                  .join(" ")}
+                className={["sb-item", live && "live", active && "active"].filter(Boolean).join(" ")}
               >
                 <Icon name={item.icon} className="ico" />
                 {item.label}
-                {item.badge && (
+                {count !== undefined && (
                   <span
-                    className={["badge", item.badgeKind === "amber" && "amber"]
+                    className={["badge", item.badgeKind === "amber" && count > 0 && "amber"]
                       .filter(Boolean)
                       .join(" ")}
-                    style={item.badge === "⌘K" ? { fontSize: "9.5px" } : undefined}
                   >
-                    {item.badge}
+                    {count}
                   </span>
                 )}
               </Link>

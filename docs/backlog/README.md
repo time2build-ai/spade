@@ -43,10 +43,10 @@ work first.
 | Ask / chat | `/ask` | [blocked/ask-chat.md](blocked/ask-chat.md) | chat threads + grounded "ask the brain" LLM endpoint |
 
 ## 🟡 Polish / tech debt (cross-cutting, not a view)
-- [ ] Sidebar badge counts (847/94/2/10…) are static M1 labels next to now-live links — wire to real counts or drop.
+- [x] Sidebar badge counts now show LIVE numbers for built views (`useShellData`); unbuilt items show "Próximamente" instead of fake counts.
 - [ ] Workspace-level shell tint + the workspace-scoped nav groups (`body.workspace-level`) — deferred from M1.
 - [ ] Backlog drag-to-move — `api.moveTask` is scaffolded but unwired; `POST /tasks/{id}/move` exists.
-- [ ] Topbar pills (daemon · sessions / sprint / account) are static design labels — wire daemon+account to `GET /sessions`/`/accounts`.
+- [x] Topbar daemon pill (live session count) + account pill (default account) wired to `GET /sessions`/`/accounts`; the fake "sprint 26 · day 2/10" pill was removed (Sprints has no backend).
 - [ ] Project switcher "All projects" / "New project" actions are no-ops; command pill ⌘K / "Ask the brain" is non-functional (depends on Ask view).
 - [ ] Remove the legacy vanilla UI (`apps/api/tui_pilot/static`, served at :8765/ui/) once parity is reached.
 - [ ] Remove the `app/dev-tokens` preview route before any production build ships.
