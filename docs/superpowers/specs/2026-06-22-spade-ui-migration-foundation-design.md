@@ -45,33 +45,55 @@ data) in the first view.
 ```
 tui-pilot/
   apps/
-    api/      ← git mv of tui_pilot/, tests/, requirements.txt, schema.sql, etc.
+    api/      ← Python: tui_pilot/, tests/, requirements.txt, schema.sql,
+              ←         roles.yaml, patterns.yaml, fixtures/, plan.md
     client/   ← NEW Next.js app
   Makefile    ← updated: `make dev` runs BOTH api + client
   README.md
 ```
 The Python move is a `git mv` only — package name stays `tui_pilot`, imports unchanged
-(`tui_pilot.*`). Tests move with it and must still pass. Uvicorn target becomes
-`tui_pilot.server:app` run from `apps/api`.
+(`tui_pilot.*`). **Critical:** several modules resolve sibling data files via
+`Path(__file__).resolve().parent.parent / "<file>"` — they expect these files next to the
+package dir:
+- `server.py` & `roles_seed.py` → `roles.yaml`
+- `controller.py` → `patterns.yaml`
+- `cli.py` → `fixtures/`
+
+Therefore `roles.yaml`, `patterns.yaml`, and `fixtures/` **must move into `apps/api/`
+alongside `tui_pilot/`** so `parent.parent` still resolves (→ `apps/api/`). No code edits
+to those paths are needed *if and only if* the sibling files move together. The plan must
+`git mv` whichever of these siblings actually exist at move time (grep the `parent.parent`
+references first to confirm the full set), move them in the same step, and then run the
+test suite to confirm. Uvicorn target stays
+`tui_pilot.server:app`, launched with cwd `apps/api` (so `make stop`'s grep string is
+unchanged). `DATA_HOME`/`TUI_PILOT_HOME` env handling is unaffected (it's an absolute
+path, default `~/.tui-pilot`).
 
 ### 2. Next.js app (`apps/client`)
 - Next.js **App Router** + **TypeScript** + **Tailwind v4**. File-based routes map 1:1
   onto handoff views (`/backlog`, `/task/[id]`, …).
-- **API access via Next rewrites proxy:** `next.config` rewrites `/api/*` →
-  `http://127.0.0.1:8765/*` (FastAPI base URL from env, default localhost:8765). Browser
-  sees same-origin — no CORS. Client calls `fetch('/api/tasks?project_id=…')`.
+- **API access via Next rewrites proxy:** `next.config` rewrites `source: '/api/:path*'`
+  → `destination: '${API_BASE}/:path*'` where `API_BASE` defaults to
+  `http://127.0.0.1:8765`. The `/api` prefix is **stripped** by the rewrite, so
+  `/api/tasks` reaches FastAPI as `/tasks` (the router is mounted at root). Browser sees
+  same-origin — no CORS. Client calls `fetch('/api/tasks?project_id=…')`.
 - **Data fetching:** thin typed `lib/api.ts` wrapper + **SWR** in client components.
   Backlog/Task are interactive, so client-side fetching is the honest fit; SWR provides
   caching/revalidation and sets up the polling the Orchestrator view will later need.
 
 ### 3. Design system (the reusable core)
 - `globals.css`: handoff `:root` tokens lifted verbatim (colors, lines, text, accents,
-  radii, shadows, custom scrollbars, pulse keyframes). Fonts via `next/font`
-  (Inter Tight, JetBrains Mono, Instrument Serif).
+  radii, shadows, custom scrollbars, pulse keyframes). **Source:** the `:root` block at the
+  top of `~/Downloads/design_handoff_spade 2/Spade.html`.
+- **Fonts** via `next/font/google` — all three (Inter Tight, JetBrains Mono, Instrument
+  Serif) are Google Fonts, loaded with the weights/italics the handoff lists
+  (Inter Tight 400/500/600/700 + `ss01`/`cv11`; JetBrains Mono 400/500/600; Instrument
+  Serif italic).
 - `@theme` maps tokens → Tailwind utilities (`bg-bg-1`, `text-text-2`, `border-line`,
   `text-accent`, …).
-- **Icon set:** the inline SVG sprite (`i-brain`, `i-tasks`, `i-orch`, …) recreated as a
-  typed `<Icon name="…" />` component; stroke-width 1.6, round caps/joins, 14×14 default.
+- **Icon set:** the inline SVG sprite (`<symbol id="i-…">` elements) lifted from
+  `Spade.html`, recreated as a typed `<Icon name="…" />` component; stroke-width 1.6,
+  round caps/joins, 14×14 default.
 - **Shared components** (`components/ui/`), built once and reused across all later views:
   `Btn` (+ `primary`/`ghost`/`xs`), `IconBtn`, `Chip` (typed: feature/decision/feedback/
   bug/metric/convention/meeting), `Priority` (p0–p3), `Avatar` (+ `ai`), `Card`, `Kbd`,
@@ -86,6 +108,8 @@ The Python move is a `git mv` only — package name stays `tui_pilot`, imports u
   mono badge counts; footer "Local-first · v1.0.0" + `~/.spade · 84 MB`.
 - `home-mode` / `workspace-level` preserved as layout variants. Nav uses real Next
   `<Link>` routing, replacing the prototype's `data-nav` + CustomEvent mechanism.
+- The sidebar footer `~/.spade · 84 MB` is a **static design label** for M1 (the real data
+  home is `~/.tui-pilot` / `$TUI_PILOT_HOME`); wiring it to a live value is out of scope.
 
 ### 5. Anchor views
 - **Backlog** (`app/backlog/page.tsx`): 4-column board of `TaskCard`s from
@@ -96,6 +120,31 @@ The Python move is a `git mv` only — package name stays `tui_pilot`, imports u
   main (serif italic origin quote w/ speaker+source; evidence sections decisions/bugs/
   feedback/metric) + 320px side rail (metadata rows + vertical lifecycle timeline, current
   step green).
+
+### 5a. Data contracts, project selection & states
+
+**Project selection (blocker if unhandled).** `GET /tasks` requires a `project_id` query
+param (no default). Flow:
+1. On load, fetch the project list (existing projects endpoint in `server.py`/`projects.py`).
+2. Pick the active/first project; persist the selection (localStorage) and reflect it in
+   the topbar project switcher.
+3. Backlog/Task queries use that id.
+4. **Empty states:** if zero projects exist → shell renders with a "Select / create a
+   project" placeholder (matches handoff `workspace-level` placeholder) and Backlog shows
+   an empty state, not an error. If a project has zero tasks → empty board columns.
+
+**Task data shape (real, from `tasks.py` / `schema.sql`).** A task row is flat:
+`id` (SPD-NNN), `project_id`, `title`, `feature`, `priority` (0–3), `status`
+(ready/in_progress/review/shipped/blocked), `origin_quote`, `origin_source`,
+`description`, `created_at`. `GET /tasks/{id}` is additionally `_enrich`-ed with grounded
+**brain nodes** (the task's linked evidence) + comments.
+
+**Consequence for fidelity:** the handoff's Task-detail evidence sections
+(decisions/bugs/feedback/metric) and the intel bar are driven by **grounded brain nodes**,
+not by dedicated task columns. Backlog cards and Task-detail render the fields that exist;
+any handoff sub-section with no backing data shows a tasteful empty state — **we do not
+invent data**. This keeps the "matches handoff" success criterion honest: layout/tokens
+match pixel-for-pixel, content is whatever the live API actually returns.
 
 ### 6. Dev workflow
 - `make dev` starts FastAPI (`apps/api`, uvicorn `--reload`, port 8765) **and** the Next
@@ -111,8 +160,9 @@ UI; production deploy config. Each later view is its own pass reusing this found
 ## Risks / trade-offs
 - **Two dev servers** is the cost of the monorepo split; `make dev` hides it but it exists.
 - **Two coexisting UIs** during migration is intentional (incremental, not big-bang).
-- Relocating the Python package risks breaking import/test paths — mitigated by keeping
-  the package name and running the suite immediately after the `git mv`.
+- Relocating the Python package risks breaking the `parent.parent` sibling-file lookups
+  (`roles.yaml`, `patterns.yaml`, `fixtures/`) — mitigated by moving those files into
+  `apps/api/` in the same step (see §1) and running the suite immediately after the move.
 
 ## Success criteria
 - `apps/api` tests pass unchanged after the move.
