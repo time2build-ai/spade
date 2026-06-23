@@ -44,7 +44,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { label: "Orchestrator", icon: "orch", href: "/orchestrator", badge: "7", badgeKind: "live" },
       { label: "Agent pool", icon: "board", href: "#", badge: "10" },
-      { label: "Human gates", icon: "gate", href: "#", badge: "2", badgeKind: "amber" },
+      { label: "Human gates", icon: "gate", href: "/gate", badge: "2", badgeKind: "amber" },
     ],
   },
   {

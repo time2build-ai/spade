@@ -61,6 +61,14 @@ export interface Task {
   nodes: string[];
 }
 
+export type Brake = {
+  id: string;
+  mission: string;
+  brake: string;
+  detail: string;
+  worker: string | null;
+};
+
 export interface Comment {
   id: string;
   author: string | null;

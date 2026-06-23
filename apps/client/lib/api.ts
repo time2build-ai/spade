@@ -1,4 +1,5 @@
 import type {
+  Brake,
   BrainEdge,
   BrainNode,
   Comment,
@@ -50,6 +51,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ report: report ?? null }),
     }),
+  // Human gates — brakes are global orchestrator state (no project_id).
+  brakes: () => http<{ brakes: Brake[] }>("/brakes"),
+  allowBrake: (id: string) =>
+    http<unknown>(`/brakes/${id}/allow`, { method: "POST" }),
+  skipBrake: (id: string) =>
+    http<unknown>(`/brakes/${id}/skip`, { method: "POST" }),
   // Plain-text endpoint (the live agent terminal screen) — kept out of the
   // JSON `http<T>` wrapper so it returns text, not parsed JSON.
   sessionScreen: async (sessionId: string): Promise<string> => {
