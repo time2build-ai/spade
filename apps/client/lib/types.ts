@@ -98,6 +98,41 @@ export type PipelineStage = {
   created_at: string;
 };
 
+export type Account = {
+  id: string;
+  label: string;
+  color: string | null;
+  provider: string;
+  config_dir: string;
+  is_default: number;
+  created_at: string;
+};
+
+export type Session = {
+  id: string;
+  name: string;
+  alive: boolean;
+  cmd: string;
+  cwd: string;
+  role: string | null;
+  label: string | null;
+  emoji: string | null;
+  mode: string | null;
+  prep: string | null;
+  prep_detail: string | null;
+  task: string | null;
+  order: number | null;
+  model: string | null;
+  mission: string | null;
+  parent: string | null;
+  reason: string | null;
+  state: string;
+  harness_state: string | null;
+  has_menu: boolean;
+  account_id: string | null;
+  project_id: string | null;
+};
+
 export type PipelineRun = {
   id: string;
   project_id: string;
