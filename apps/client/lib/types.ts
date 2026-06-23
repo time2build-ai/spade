@@ -37,6 +37,14 @@ export interface BrainNode {
   y: number | null;
 }
 
+export type BrainEdge = {
+  id: string;
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  rel: string | null;
+};
+
 export interface Task {
   id: string;
   project_id: string;

@@ -1,4 +1,5 @@
 import type {
+  BrainEdge,
   BrainNode,
   Comment,
   PipelineRun,
@@ -20,6 +21,10 @@ export const api = {
   brainNodes: (projectId: string) =>
     http<{ nodes: BrainNode[] }>(
       `/brain/nodes?project_id=${encodeURIComponent(projectId)}`,
+    ),
+  brainEdges: (projectId: string) =>
+    http<{ edges: BrainEdge[] }>(
+      `/brain/edges?project_id=${encodeURIComponent(projectId)}`,
     ),
   tasks: (projectId: string) =>
     http<{ tasks: Task[] }>(
