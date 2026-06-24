@@ -26,14 +26,14 @@ const apiSessions = vi.fn();
 const apiPromptSession = vi.fn();
 const apiSpawnOrchestrator = vi.fn();
 const apiSession = vi.fn();
-const apiProject = vi.fn();
+const apiAccounts = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     sessions: () => apiSessions(),
     promptSession: (id: string, text: string) => apiPromptSession(id, text),
     spawnOrchestrator: (p: string, c: string) => apiSpawnOrchestrator(p, c),
     session: (id: string) => apiSession(id),
-    project: (id: string) => apiProject(id),
+    accounts: () => apiAccounts(),
   },
 }));
 
@@ -121,8 +121,8 @@ describe("useAskDock (shared store)", () => {
 describe("AskDock", () => {
   beforeEach(() => {
     mockUseProject = projectResult(acme);
-    // Default: the project has a connected account so the composer renders.
-    apiProject.mockResolvedValue({ ...acme, pool: ["t2b"] });
+    // Default: at least one provider account exists, so the composer renders.
+    apiAccounts.mockResolvedValue({ accounts: [{ id: "t2b" }] });
   });
 
   test("renders nothing when closed", () => {
@@ -153,8 +153,8 @@ describe("AskDock", () => {
     ).toBeInTheDocument();
   });
 
-  test("project with NO account shows the empty-account state, no composer", async () => {
-    apiProject.mockResolvedValue({ ...acme, pool: [] });
+  test("no provider accounts at all shows the empty-account state, no composer", async () => {
+    apiAccounts.mockResolvedValue({ accounts: [] });
 
     const { result } = renderHook(() => useAskDock());
     act(() => result.current.setOpen(true));
@@ -162,7 +162,7 @@ describe("AskDock", () => {
     render(<AskDock />);
 
     expect(
-      await screen.findByText(/No account connected to/i),
+      await screen.findByText(/No provider accounts/i),
     ).toBeInTheDocument();
     // The active composer / send control must NOT be present.
     expect(screen.queryByLabelText("Send")).not.toBeInTheDocument();

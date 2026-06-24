@@ -50,15 +50,11 @@ export function AskDock() {
   const { open, setOpen } = useAskDock();
   const { project } = useProject();
 
-  // Fetch the project's connected account pool (only while open + a project is
-  // selected). An empty pool means we must NOT spawn/prompt — show an honest
-  // empty-account state instead.
-  const { data: projectDetail } = useSWR(
-    open && project ? ["ask-project", project.id] : null,
-    () => api.project(project!.id),
-  );
-  const pool = projectDetail?.pool;
-  const noAccount = pool != null && pool.length === 0;
+  // Gate on whether ANY provider account exists (global). When the project's
+  // own pool is empty the orchestrator falls back to the default account, so we
+  // only block when there are no accounts at all — otherwise asking works.
+  const { data: accountsData } = useSWR(open ? "accounts" : null, () => api.accounts());
+  const noAccount = accountsData != null && accountsData.accounts.length === 0;
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -201,8 +197,8 @@ export function AskDock() {
               <Icon name="brain" size={22} />
             </div>
             <div className="ask-no-account-text">
-              No account connected to <strong>{project.name}</strong> yet.
-              Connect one in Agent pool to ask the brain.
+              No provider accounts configured yet. Add one in Agent pool so the
+              orchestrator has an account to run on.
             </div>
             <Link href="/agent-pool" className="btn primary sm">
               Go to Agent pool
