@@ -77,6 +77,13 @@ export function ProjectSwitcher() {
     }
   }
 
+  // Keep the SERVER's "current project" in sync with the UI selection, so
+  // agents (orchestrator / spade-data) reason about the project you're viewing.
+  useEffect(() => {
+    if (!project) return;
+    api.setCurrentProject(project.id).catch(() => {});
+  }, [project?.id]);
+
   // Close on outside click.
   useEffect(() => {
     if (!open) return;

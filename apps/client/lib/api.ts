@@ -34,6 +34,13 @@ export const api = {
   }) => http<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
   // Host environment hints (e.g. home dir for default project paths).
   env: () => http<{ home: string }>("/env"),
+  // The server's "current project" — what agents (orchestrator / spade-data
+  // skill) treat as active. Keep it in sync with the UI's selected project.
+  setCurrentProject: (projectId: string) =>
+    http<{ project_id: string | null }>("/current-project", {
+      method: "PUT",
+      body: JSON.stringify({ project_id: projectId }),
+    }),
   // Global fleet (no project param) and the provider account pool.
   sessions: () => http<{ sessions: Session[] }>("/sessions"),
   // One session (used to poll an orchestrator's `prep` while it boots).

@@ -27,6 +27,7 @@ const apiPromptSession = vi.fn();
 const apiSpawnOrchestrator = vi.fn();
 const apiSession = vi.fn();
 const apiAccounts = vi.fn();
+const apiSetCurrentProject = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     sessions: () => apiSessions(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/api", () => ({
     spawnOrchestrator: (p: string, c: string) => apiSpawnOrchestrator(p, c),
     session: (id: string) => apiSession(id),
     accounts: () => apiAccounts(),
+    setCurrentProject: (id: string) => apiSetCurrentProject(id),
   },
 }));
 
@@ -123,6 +125,7 @@ describe("AskDock", () => {
     mockUseProject = projectResult(acme);
     // Default: at least one provider account exists, so the composer renders.
     apiAccounts.mockResolvedValue({ accounts: [{ id: "t2b" }] });
+    apiSetCurrentProject.mockResolvedValue({ project_id: "p1" });
   });
 
   test("renders nothing when closed", () => {
@@ -198,7 +201,17 @@ describe("AskDock", () => {
 
     // existing orchestrator was reused — no spawn path
     expect(apiSpawnOrchestrator).not.toHaveBeenCalled();
-    expect(apiPromptSession).toHaveBeenCalledWith("orch-1", "How are we doing?");
+    // the server's current project is synced before asking
+    expect(apiSetCurrentProject).toHaveBeenCalledWith("p1");
+    // the prompt is framed with the project context + carries the user's question
+    expect(apiPromptSession).toHaveBeenCalledWith(
+      "orch-1",
+      expect.stringContaining("How are we doing?"),
+    );
+    expect(apiPromptSession).toHaveBeenCalledWith(
+      "orch-1",
+      expect.stringContaining("Acme"),
+    );
   });
 
   test("renders a friendly error (not the raw 500) when the prompt fails", async () => {
