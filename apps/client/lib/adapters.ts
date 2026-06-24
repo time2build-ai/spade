@@ -8,6 +8,7 @@ import type {
   StageState,
   Status,
   Task,
+  TaskLink,
 } from "./types";
 
 const BRAIN_NODE_TYPES: BrainNodeType[] = [
@@ -90,6 +91,54 @@ export function tasksByStatus(tasks: Task[]): Record<Status, Task[]> {
     if (bucket) bucket.push(task);
   }
   return buckets;
+}
+
+// -- task dependencies (links) adapters ---------------------------------------
+
+export type TaskRelations = {
+  blockedBy: string[];
+  blocks: string[];
+  related: string[];
+  parent: string[];
+  subtasks: string[];
+};
+
+/**
+ * Bucket a task's links into derived dependency relations, returning the OTHER
+ * task id for each. Semantics:
+ *  - blocks ("A blocks B", from→to): from==T → `blocks` (T blocks them);
+ *    to==T → `blockedBy` (they block T).
+ *  - subtask ("A is parent of B", from→to): from==T → `subtasks` (T's children);
+ *    to==T → `parent` (T's parent).
+ *  - related (symmetric): the other end, from either direction.
+ */
+export function taskRelations(taskId: string, links: TaskLink[]): TaskRelations {
+  const out: TaskRelations = {
+    blockedBy: [],
+    blocks: [],
+    related: [],
+    parent: [],
+    subtasks: [],
+  };
+  for (const link of links) {
+    const isFrom = link.from_task === taskId;
+    const isTo = link.to_task === taskId;
+    if (!isFrom && !isTo) continue;
+    switch (link.rel) {
+      case "blocks":
+        if (isFrom) out.blocks.push(link.to_task);
+        else out.blockedBy.push(link.from_task);
+        break;
+      case "subtask":
+        if (isFrom) out.subtasks.push(link.to_task);
+        else out.parent.push(link.from_task);
+        break;
+      case "related":
+        out.related.push(isFrom ? link.to_task : link.from_task);
+        break;
+    }
+  }
+  return out;
 }
 
 // -- brain (Product Brain graph) adapters -------------------------------------

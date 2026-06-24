@@ -3,7 +3,8 @@ import { describe, expect, test } from "vitest";
 import { OriginCard } from "../OriginCard";
 import { EvidenceSection } from "../EvidenceSection";
 import { TimelineRail } from "../TimelineRail";
-import type { BrainNode, Comment } from "@/lib/types";
+import { Relations } from "../Relations";
+import type { BrainNode, Comment, LinkRel, TaskLink } from "@/lib/types";
 
 function node(over: Partial<BrainNode>): BrainNode {
   return {
@@ -75,6 +76,46 @@ describe("OriginCard", () => {
       <OriginCard task={{ origin_quote: null, origin_source: null }} />,
     );
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("Relations", () => {
+  let seq = 0;
+  function link(from: string, to: string, rel: LinkRel): TaskLink {
+    return { id: `l${seq++}`, from_task: from, to_task: to, rel, created_at: "2026-01-01" };
+  }
+
+  test("renders the right buckets + linked task ids for a mixed set", () => {
+    render(
+      <Relations
+        taskId="SPD-005"
+        links={[
+          link("SPD-001", "SPD-005", "blocks"), // SPD-005 blocked by SPD-001
+          link("SPD-005", "SPD-009", "blocks"), // SPD-005 blocks SPD-009
+          link("SPD-002", "SPD-005", "subtask"), // parent SPD-002
+          link("SPD-005", "SPD-007", "subtask"), // child SPD-007
+          link("SPD-005", "SPD-008", "related"),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Blocked by")).toBeInTheDocument();
+    expect(screen.getByText("Blocks")).toBeInTheDocument();
+    expect(screen.getByText("Parent")).toBeInTheDocument();
+    expect(screen.getByText("Subtasks")).toBeInTheDocument();
+    expect(screen.getByText("Related")).toBeInTheDocument();
+
+    const upstream = screen.getByText("SPD-001");
+    expect(upstream).toBeInTheDocument();
+    expect(upstream.closest("a")).toHaveAttribute("href", "/task/SPD-001");
+    expect(screen.getByText("SPD-009").closest("a")).toHaveAttribute("href", "/task/SPD-009");
+    expect(screen.getByText("SPD-002")).toBeInTheDocument();
+    expect(screen.getByText("SPD-007")).toBeInTheDocument();
+    expect(screen.getByText("SPD-008")).toBeInTheDocument();
+  });
+
+  test("renders an honest empty state with no links", () => {
+    render(<Relations taskId="SPD-005" links={[]} />);
+    expect(screen.getByText("No dependencies")).toBeInTheDocument();
   });
 });
 

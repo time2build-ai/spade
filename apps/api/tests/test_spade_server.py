@@ -254,3 +254,40 @@ def test_create_project_creates_the_path(tmp_path):
     r = c.post("/projects", json={"id": "mk", "name": "Mk", "path": str(target)})
     assert r.status_code == 200
     assert target.is_dir()
+
+
+def test_task_link_endpoints():
+    from tui_pilot.server import app
+    from tui_pilot import projects
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+    a = c.post("/tasks", json={"project_id": "acme", "title": "A"}).json()["id"]
+    b = c.post("/tasks", json={"project_id": "acme", "title": "B"}).json()["id"]
+
+    # A blocks B: response is the enriched FROM task carrying the link.
+    r = c.post(f"/tasks/{a}/links", json={"to_task": b, "rel": "blocks"})
+    assert r.status_code == 200
+    a_links = r.json()["links"]
+    assert len(a_links) == 1
+    link = a_links[0]
+    assert link["from_task"] == a and link["to_task"] == b and link["rel"] == "blocks"
+
+    # The TO task carries the same link (it is blocked by A).
+    b_links = c.get(f"/tasks/{b}").json()["links"]
+    assert any(l["id"] == link["id"] for l in b_links)
+
+    # Bad rel -> 400.
+    assert c.post(f"/tasks/{a}/links", json={"to_task": b, "rel": "nope"}).status_code == 400
+    # Self-link -> 400.
+    assert c.post(f"/tasks/{a}/links", json={"to_task": a, "rel": "blocks"}).status_code == 400
+    # Missing to_task -> 404.
+    assert c.post(f"/tasks/{a}/links", json={"to_task": "SPD-999", "rel": "blocks"}).status_code == 404
+    # Missing from task -> 404.
+    assert c.post("/tasks/SPD-999/links", json={"to_task": b, "rel": "blocks"}).status_code == 404
+
+    # DELETE removes it.
+    d = c.delete(f"/tasks/{a}/links/{link['id']}")
+    assert d.status_code == 200 and d.json()["status"] == "deleted"
+    assert c.get(f"/tasks/{a}").json()["links"] == []
+    # Deleting an unknown link -> 404.
+    assert c.delete(f"/tasks/{a}/links/{link['id']}").status_code == 404

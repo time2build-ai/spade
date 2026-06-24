@@ -4,6 +4,7 @@ import type {
   BrainEdge,
   BrainNode,
   Comment,
+  LinkRel,
   PipelineRun,
   Project,
   Session,
@@ -92,6 +93,16 @@ export const api = {
     http<Task>(`/tasks/${id}/move`, {
       method: "POST",
       body: JSON.stringify({ status }),
+    }),
+  // Link two tasks (blocks | related | subtask). Returns the enriched FROM task.
+  addTaskLink: (taskId: string, toTask: string, rel: LinkRel) =>
+    http<Task>(`/tasks/${taskId}/links`, {
+      method: "POST",
+      body: JSON.stringify({ to_task: toTask, rel }),
+    }),
+  removeTaskLink: (taskId: string, linkId: string) =>
+    http<{ id: string; status: string }>(`/tasks/${taskId}/links/${linkId}`, {
+      method: "DELETE",
     }),
   pipelines: (projectId: string) =>
     http<{ pipelines: PipelineRun[] }>(

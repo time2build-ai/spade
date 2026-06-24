@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS tasks (
   origin_quote TEXT, origin_source TEXT, description TEXT, created_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+-- Directional/symmetric links between tasks: blocks | related | subtask.
+-- "A blocks B" => B is blocked by A. "A subtask B" => A is the parent of B.
+-- "related" is symmetric. CASCADE so links vanish when either task is deleted.
+CREATE TABLE IF NOT EXISTS task_links (
+  id TEXT PRIMARY KEY, from_task TEXT NOT NULL, to_task TEXT NOT NULL,
+  rel TEXT NOT NULL, created_at TEXT,
+  FOREIGN KEY(from_task) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY(to_task) REFERENCES tasks(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS task_nodes (
   task_id TEXT NOT NULL, node_id TEXT NOT NULL,
   PRIMARY KEY(task_id, node_id),

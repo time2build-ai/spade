@@ -47,6 +47,11 @@ class CommentCreate(BaseModel):
     kind: str = "note"
 
 
+class LinkCreate(BaseModel):
+    to_task: str
+    rel: str
+
+
 # ---- helpers ----------------------------------------------------------------
 
 def _task_or_404(task_id: str) -> dict:
@@ -57,9 +62,10 @@ def _task_or_404(task_id: str) -> dict:
 
 
 def _enrich(task: dict) -> dict:
-    """Add grounded nodes list to a task dict."""
+    """Add grounded nodes + task links to a task dict."""
     task = dict(task)
     task["nodes"] = tasks.nodes(task["id"])
+    task["links"] = tasks.links(task["id"])
     return task
 
 
@@ -138,6 +144,26 @@ def add_task_comment(task_id: str, req: CommentCreate) -> dict:
     if not body:
         raise HTTPException(400, "comment body must not be empty")
     return tasks.add_comment(task_id, body=body, author=req.author, kind=req.kind)
+
+
+@router.post("/tasks/{task_id}/links")
+def add_task_link(task_id: str, req: LinkCreate) -> dict:
+    _task_or_404(task_id)
+    _task_or_404(req.to_task)
+    if req.rel not in tasks.LINK_RELS:
+        raise HTTPException(400, f"invalid rel {req.rel!r}; must be one of {tasks.LINK_RELS}")
+    if req.to_task == task_id:
+        raise HTTPException(400, "a task cannot link to itself")
+    tasks.add_link(task_id, req.to_task, req.rel)
+    return _enrich(tasks.get(task_id))
+
+
+@router.delete("/tasks/{task_id}/links/{link_id}")
+def delete_task_link(task_id: str, link_id: str) -> dict:
+    if tasks.link_get(link_id) is None:
+        raise HTTPException(404, f"no link {link_id!r}")
+    tasks.remove_link(link_id)
+    return {"id": link_id, "status": "deleted"}
 
 
 # ---- brain request models ---------------------------------------------------
