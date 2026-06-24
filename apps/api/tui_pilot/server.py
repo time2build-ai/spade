@@ -56,6 +56,7 @@ from .session import (
     build_cmd,
     install_comms_skill,
     install_orchestrator_skill,
+    install_planning_skill,
     install_spade_data_skill,
 )
 
@@ -676,6 +677,9 @@ def _spawn_agent(
         # backlog, brain, pipelines) over the local HTTP API instead of guessing
         # from the filesystem.
         install_spade_data_skill(eff_cwd, api_base=_api_base())
+        # …and the planning skill: brainstorm → propose → (approve) → create
+        # dependency-linked backlog tasks when the human describes a goal.
+        install_planning_skill(eff_cwd, api_base=_api_base())
 
     # Registry mutation must be atomic (FIX 2). The auto-handoff path reaches
     # here while holding the PREDECESSOR's session lock, then takes

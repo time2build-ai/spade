@@ -230,6 +230,14 @@ def install_spade_data_skill(cwd: str | Path, api_base: str) -> None:
     _render_skill("spade-data", "spade-data", cwd, None, None, api_base=api_base)
 
 
+def install_planning_skill(cwd: str | Path, api_base: str) -> None:
+    """Install the planning skill into <cwd>/.claude/skills/ so the orchestrator
+    runs a brainstorm → propose → (approve) → create-tasks workflow when the human
+    describes a goal, ending in real dependency-linked backlog tasks. The API base
+    URL is rendered in (the skill drives the task/link endpoints). Idempotent."""
+    _render_skill("planning", "planning", cwd, None, None, api_base=api_base)
+
+
 def _render_skill(
     asset_dir: str, skill_name: str, cwd: str | Path,
     outbox_path: str | None, agent_id: str | None, api_base: str | None = None,
