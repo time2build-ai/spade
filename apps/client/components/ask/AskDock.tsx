@@ -8,6 +8,8 @@ import { IconBtn } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAskDock } from "@/lib/useAskDock";
 import { useProject } from "@/lib/useProject";
+import { Markdown } from "./Markdown";
+import { ThinkingIndicator } from "./ThinkingIndicator";
 
 type Msg = { role: "you" | "brain"; text: string; error?: boolean; detail?: string };
 
@@ -27,10 +29,17 @@ function MessageBubble({ msg }: { msg: Msg }) {
   ]
     .filter(Boolean)
     .join(" ");
+  // Successful brain replies render as Markdown (the orchestrator emits
+  // structured output). User messages and the short friendly-error prose stay
+  // plain text so the text sits directly on `.ask-msg-text` (preserves the
+  // class hook used by tests + avoids markdown wrapping short error copy).
+  const asMarkdown = msg.role === "brain" && !msg.error;
   return (
     <div className={cls} title={msg.detail ?? undefined}>
       <div className="ask-msg-role">{msg.role === "you" ? "You" : "Brain"}</div>
-      <div className="ask-msg-text">{msg.text}</div>
+      <div className="ask-msg-text">
+        {asMarkdown ? <Markdown>{msg.text}</Markdown> : msg.text}
+      </div>
       {msg.detail && <div className="ask-msg-detail">{msg.detail}</div>}
     </div>
   );
@@ -149,7 +158,10 @@ export function AskDock() {
       // orchestrator's spade-data tools answer about THIS project, then frame
       // the question with explicit project context (belt and suspenders).
       await api.setCurrentProject(project.id);
-      setStatus("thinking…");
+      // Clear the spawn label and enter the "thinking" phase — the dock renders
+      // the animated <ThinkingIndicator/> while `busy` is true and there's no
+      // spawn status line.
+      setStatus(null);
       const framed =
         `[Spade context] Answer as the orchestrator for the project "${project.name}" ` +
         `(id: ${project.id}, path: ${project.path}). Treat THIS as the current project, ` +
@@ -216,13 +228,19 @@ export function AskDock() {
         ) : (
           <>
             <div className="ask-body" ref={scrollRef}>
-              {messages.length === 0 && !status && (
+              {messages.length === 0 && !status && !busy && (
                 <div className="ask-hint">Ask the orchestrator about this project…</div>
               )}
               {messages.map((m, i) => (
                 <MessageBubble key={i} msg={m} />
               ))}
-              {status && <div className="ask-status">{status}</div>}
+              {/* Spawning shows a plain status line; the thinking phase (busy with
+                  no spawn label) shows the animated indicator. */}
+              {status ? (
+                <div className="ask-status">{status}</div>
+              ) : busy ? (
+                <ThinkingIndicator />
+              ) : null}
             </div>
 
             <div className="ask-composer-wrap">

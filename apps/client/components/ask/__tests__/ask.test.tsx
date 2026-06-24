@@ -45,6 +45,7 @@ vi.mock("@/lib/useProject", () => ({
 }));
 
 import { AskDock } from "../AskDock";
+import { ThinkingIndicator } from "../ThinkingIndicator";
 import { useAskDock } from "@/lib/useAskDock";
 
 const acme: Project = {
@@ -117,6 +118,37 @@ describe("useAskDock (shared store)", () => {
     act(() => two.result.current.toggle());
     expect(one.result.current.open).toBe(false);
     expect(two.result.current.open).toBe(false);
+  });
+});
+
+describe("ThinkingIndicator", () => {
+  test("renders a polite live region with one of the cycling phrases", () => {
+    const { container } = render(<ThinkingIndicator />);
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region).toBeInTheDocument();
+    // The current phrase text is non-empty (sequential, deterministic first frame).
+    expect(region?.textContent?.trim().length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        /Consulting the brain|Reading the project|Gathering context|Connecting the dots|Grounding the answer|Synthesizing|Thinking/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("cycles to the next phrase on the timer", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<ThinkingIndicator />);
+      const region = () =>
+        container.querySelector(".ask-thinking-text")?.textContent;
+      const first = region();
+      act(() => {
+        vi.advanceTimersByTime(2200);
+      });
+      expect(region()).not.toBe(first);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
