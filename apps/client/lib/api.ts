@@ -21,6 +21,9 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   projects: () => http<{ projects: Project[] }>("/projects"),
+  // One project plus its connected account pool (`pool: string[]` of account
+  // ids). Used to gate the Ask dock when a project has no connected account.
+  project: (id: string) => http<Project & { pool: string[] }>(`/projects/${id}`),
   createProject: (body: {
     id: string;
     name: string;
