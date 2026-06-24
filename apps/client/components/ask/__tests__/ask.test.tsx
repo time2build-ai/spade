@@ -1,26 +1,39 @@
 import {
   act,
   fireEvent,
-  render,
+  render as rtlRender,
   renderHook,
   screen,
-  waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Project, Session } from "@/lib/types";
 import type { UseProjectResult } from "@/lib/useProject";
+
+// Render with a fresh SWR cache per call so `api.project` mocks don't leak
+// across tests via SWR's module-level cache.
+function render(ui: ReactElement) {
+  return rtlRender(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      {ui}
+    </SWRConfig>,
+  );
+}
 
 // --- mocks ------------------------------------------------------------------
 const apiSessions = vi.fn();
 const apiPromptSession = vi.fn();
 const apiSpawnOrchestrator = vi.fn();
 const apiSession = vi.fn();
+const apiProject = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     sessions: () => apiSessions(),
     promptSession: (id: string, text: string) => apiPromptSession(id, text),
     spawnOrchestrator: (p: string, c: string) => apiSpawnOrchestrator(p, c),
     session: (id: string) => apiSession(id),
+    project: (id: string) => apiProject(id),
   },
 }));
 
@@ -108,6 +121,8 @@ describe("useAskDock (shared store)", () => {
 describe("AskDock", () => {
   beforeEach(() => {
     mockUseProject = projectResult(acme);
+    // Default: the project has a connected account so the composer renders.
+    apiProject.mockResolvedValue({ ...acme, pool: ["t2b"] });
   });
 
   test("renders nothing when closed", () => {
@@ -125,15 +140,38 @@ describe("AskDock", () => {
     expect(screen.queryByText("Send")).not.toBeInTheDocument();
   });
 
-  test("open + project shows the composer", () => {
+  test("open + project (with account) shows the composer", async () => {
     const { result } = renderHook(() => useAskDock());
     act(() => result.current.setOpen(true));
 
     render(<AskDock />);
-    expect(screen.getByText("Send")).toBeInTheDocument();
+    // The send button renders immediately; the composer is gated only on an
+    // EMPTY pool, so a project with an account keeps the active composer.
+    expect(await screen.findByLabelText("Send")).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("Ask the brain…"),
     ).toBeInTheDocument();
+  });
+
+  test("project with NO account shows the empty-account state, no composer", async () => {
+    apiProject.mockResolvedValue({ ...acme, pool: [] });
+
+    const { result } = renderHook(() => useAskDock());
+    act(() => result.current.setOpen(true));
+
+    render(<AskDock />);
+
+    expect(
+      await screen.findByText(/No account connected to/i),
+    ).toBeInTheDocument();
+    // The active composer / send control must NOT be present.
+    expect(screen.queryByLabelText("Send")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Ask the brain…"),
+    ).not.toBeInTheDocument();
+    // We must not have tried to spawn/prompt an orchestrator.
+    expect(apiSpawnOrchestrator).not.toHaveBeenCalled();
+    expect(apiPromptSession).not.toHaveBeenCalled();
   });
 
   test("sends a user message and renders the mocked brain reply", async () => {
@@ -147,11 +185,11 @@ describe("AskDock", () => {
     act(() => result.current.setOpen(true));
 
     render(<AskDock />);
-    const input = screen.getByPlaceholderText(
+    const input = (await screen.findByPlaceholderText(
       "Ask the brain…",
-    ) as HTMLTextAreaElement;
+    )) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "How are we doing?" } });
-    fireEvent.click(screen.getByText("Send"));
+    fireEvent.click(screen.getByLabelText("Send"));
 
     // user message renders immediately
     expect(await screen.findByText("How are we doing?")).toBeInTheDocument();
@@ -161,5 +199,29 @@ describe("AskDock", () => {
     // existing orchestrator was reused — no spawn path
     expect(apiSpawnOrchestrator).not.toHaveBeenCalled();
     expect(apiPromptSession).toHaveBeenCalledWith("orch-1", "How are we doing?");
+  });
+
+  test("renders a friendly error (not the raw 500) when the prompt fails", async () => {
+    apiSessions.mockResolvedValue({ sessions: [orchestratorSession()] });
+    apiPromptSession.mockRejectedValue(new Error("500 Internal Server Error"));
+
+    const { result } = renderHook(() => useAskDock());
+    act(() => result.current.setOpen(true));
+
+    render(<AskDock />);
+    const input = (await screen.findByPlaceholderText(
+      "Ask the brain…",
+    )) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "How are we doing?" } });
+    fireEvent.click(screen.getByLabelText("Send"));
+
+    // Friendly primary text shows as the main bubble text...
+    const primary = await screen.findByText(/the orchestrator hit an error/i);
+    expect(primary).toHaveClass("ask-msg-text");
+    // ...and the raw "500 …" is only kept as a muted detail line, never the
+    // primary bubble text.
+    const raw = screen.getByText("500 Internal Server Error");
+    expect(raw).toHaveClass("ask-msg-detail");
+    expect(raw).not.toHaveClass("ask-msg-text");
   });
 });

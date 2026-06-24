@@ -1,12 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import useSWR from "swr";
+import { Icon } from "@/components/Icon";
 import { IconBtn } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAskDock } from "@/lib/useAskDock";
 import { useProject } from "@/lib/useProject";
 
-type Msg = { role: "you" | "brain"; text: string; error?: boolean };
+type Msg = { role: "you" | "brain"; text: string; error?: boolean; detail?: string };
+
+// Friendly copy for a failed prompt/spawn. The raw error is kept as `detail`
+// (a muted line + tooltip) so the bubble is human-readable but still honest.
+const ERROR_PRIMARY =
+  "Sorry — the orchestrator hit an error and couldn't answer. Try again in a moment.";
 
 const SPAWN_POLL_MS = 1500;
 const SPAWN_TIMEOUT_MS = 60_000;
@@ -20,18 +28,37 @@ function MessageBubble({ msg }: { msg: Msg }) {
     .filter(Boolean)
     .join(" ");
   return (
-    <div className={cls}>
+    <div className={cls} title={msg.detail ?? undefined}>
       <div className="ask-msg-role">{msg.role === "you" ? "You" : "Brain"}</div>
       <div className="ask-msg-text">{msg.text}</div>
+      {msg.detail && <div className="ask-msg-detail">{msg.detail}</div>}
     </div>
   );
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Thrown when the orchestrator can't be prepped (spawn timeout or prep error).
+// Its message is already human-friendly, so the catch path surfaces it as-is
+// rather than swapping in the generic error copy.
+class OrchestratorPrepError extends Error {}
+
+const PREP_FAILED_MSG =
+  "Couldn't start the orchestrator — the project may need a connected account";
+
 export function AskDock() {
   const { open, setOpen } = useAskDock();
   const { project } = useProject();
+
+  // Fetch the project's connected account pool (only while open + a project is
+  // selected). An empty pool means we must NOT spawn/prompt — show an honest
+  // empty-account state instead.
+  const { data: projectDetail } = useSWR(
+    open && project ? ["ask-project", project.id] : null,
+    () => api.project(project!.id),
+  );
+  const pool = projectDetail?.pool;
+  const noAccount = pool != null && pool.length === 0;
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -41,6 +68,16 @@ export function AskDock() {
   // Cached orchestrator session id (per resolved project) so repeat sends reuse it.
   const sessionIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Auto-grow the composer textarea (min ~1 row, capped by max-height in CSS,
+  // then it scrolls).
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [input]);
 
   // Global ⌘K / Ctrl+K toggle + Escape to close.
   useEffect(() => {
@@ -94,20 +131,16 @@ export function AskDock() {
         return id;
       }
       if (s.prep === "error") {
-        throw new Error(
-          "Couldn't start the orchestrator — the project may need a connected account",
-        );
+        throw new OrchestratorPrepError(PREP_FAILED_MSG);
       }
       await sleep(SPAWN_POLL_MS);
     }
-    throw new Error(
-      "Couldn't start the orchestrator — the project may need a connected account",
-    );
+    throw new OrchestratorPrepError(PREP_FAILED_MSG);
   }, [project]);
 
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || busy || !project) return;
+    if (!text || busy || !project || noAccount) return;
 
     setMessages((m) => [...m, { role: "you", text }]);
     setInput("");
@@ -120,14 +153,24 @@ export function AskDock() {
       const { response } = await api.promptSession(id, text);
       setMessages((m) => [...m, { role: "brain", text: response }]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const raw = err instanceof Error ? err.message : String(err);
       sessionIdRef.current = null; // force a fresh lookup next send
-      setMessages((m) => [...m, { role: "brain", text: message, error: true }]);
+      // resolveOrchestrator throws an already-friendly message for the
+      // spawn-timeout / prep==="error" case; surface that as-is. Everything
+      // else (e.g. a raw "500 Internal Server Error") gets the generic
+      // human-readable copy, with the raw text kept as a muted detail line.
+      const friendly = err instanceof OrchestratorPrepError;
+      setMessages((m) => [
+        ...m,
+        friendly
+          ? { role: "brain", text: raw, error: true }
+          : { role: "brain", text: ERROR_PRIMARY, error: true, detail: raw },
+      ]);
     } finally {
       setBusy(false);
       setStatus(null);
     }
-  }, [input, busy, project, resolveOrchestrator]);
+  }, [input, busy, project, noAccount, resolveOrchestrator]);
 
   function onComposerKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -152,6 +195,19 @@ export function AskDock() {
 
         {!project ? (
           <div className="ask-body ask-empty">Select a project to ask.</div>
+        ) : noAccount ? (
+          <div className="ask-body ask-no-account">
+            <div className="ask-no-account-icon" aria-hidden="true">
+              <Icon name="brain" size={22} />
+            </div>
+            <div className="ask-no-account-text">
+              No account connected to <strong>{project.name}</strong> yet.
+              Connect one in Agent pool to ask the brain.
+            </div>
+            <Link href="/agent-pool" className="btn primary sm">
+              Go to Agent pool
+            </Link>
+          </div>
         ) : (
           <>
             <div className="ask-body" ref={scrollRef}>
@@ -164,24 +220,32 @@ export function AskDock() {
               {status && <div className="ask-status">{status}</div>}
             </div>
 
-            <div className="ask-composer">
-              <textarea
-                className="ask-input"
-                placeholder="Ask the brain…"
-                value={input}
-                disabled={busy}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onComposerKey}
-                rows={2}
-              />
-              <button
-                type="button"
-                className="btn ask-send"
-                disabled={busy || !input.trim()}
-                onClick={() => void send()}
-              >
-                Send
-              </button>
+            <div className="ask-composer-wrap">
+              <div className="ask-composer">
+                <textarea
+                  ref={textareaRef}
+                  className="ask-input"
+                  placeholder="Ask the brain…"
+                  value={input}
+                  disabled={busy}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onComposerKey}
+                  rows={1}
+                />
+                <div className="ask-composer-row">
+                  <span className="ask-composer-hint">⇧↵ for newline</span>
+                  <button
+                    type="button"
+                    className="ask-send"
+                    aria-label="Send"
+                    title="Send"
+                    disabled={busy || !input.trim()}
+                    onClick={() => void send()}
+                  >
+                    <Icon name="arrow" size={15} className="ask-send-icon" />
+                  </button>
+                </div>
+              </div>
             </div>
           </>
         )}
