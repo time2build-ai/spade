@@ -85,4 +85,22 @@ describe("useProject (hook)", () => {
     expect(result.current.project?.id).toBe("c");
     expect(localStorage.getItem("spade.projectId")).toBe("c");
   });
+
+  it("setProject propagates across SEPARATE consumers (shared store)", async () => {
+    vi.doMock("@/lib/api", () => ({
+      api: { projects: vi.fn().mockResolvedValue({ projects: [A, B, C] }) },
+    }));
+    const { renderHook, waitFor, act } = await import("@testing-library/react");
+    const { useProject } = await import("@/lib/useProject");
+
+    const one = renderHook(() => useProject()); // e.g. the topbar switcher
+    const two = renderHook(() => useProject()); // e.g. the sidebar
+    await waitFor(() => expect(one.result.current.loading).toBe(false));
+    await waitFor(() => expect(two.result.current.loading).toBe(false));
+
+    act(() => one.result.current.setProject("c"));
+    expect(one.result.current.project?.id).toBe("c");
+    // The other consumer must reflect the change too (the bug we fixed).
+    expect(two.result.current.project?.id).toBe("c");
+  });
 });
