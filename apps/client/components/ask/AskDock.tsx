@@ -145,8 +145,17 @@ export function AskDock() {
 
     try {
       const id = await resolveOrchestrator();
+      // Point the server's "current project" at the selected one so the
+      // orchestrator's spade-data tools answer about THIS project, then frame
+      // the question with explicit project context (belt and suspenders).
+      await api.setCurrentProject(project.id);
       setStatus("thinking…");
-      const { response } = await api.promptSession(id, text);
+      const framed =
+        `[Spade context] Answer as the orchestrator for the project "${project.name}" ` +
+        `(id: ${project.id}, path: ${project.path}). Treat THIS as the current project, ` +
+        `ignoring any other default. If it has no data yet, say so plainly.\n\n` +
+        `Question: ${text}`;
+      const { response } = await api.promptSession(id, framed);
       setMessages((m) => [...m, { role: "brain", text: response }]);
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err);
