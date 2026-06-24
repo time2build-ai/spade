@@ -786,10 +786,44 @@ body {
   text-align: center; padding: 24px 8px;
 }
 .ask-status { color: var(--text-3); font-size: 12.5px; font-style: italic; }
+
+/* Animated "thinking" indicator (Claude-Code style): a cycling phrase with a
+   subtle opacity shimmer + three bouncing dots. */
+.ask-thinking {
+  display: flex; align-items: center; gap: 7px;
+  color: var(--text-3); font-size: 12.5px; font-style: italic;
+}
+.ask-thinking-text {
+  color: var(--accent);
+  animation: ask-thinking-shimmer 1.8s ease-in-out infinite;
+}
+.ask-thinking-dots { display: inline-flex; gap: 3px; align-items: flex-end; }
+.ask-thinking-dot {
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--accent); opacity: 0.5;
+  animation: ask-thinking-bounce 1.2s ease-in-out infinite;
+}
+.ask-thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.ask-thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ask-thinking-shimmer {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes ask-thinking-bounce {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ask-thinking-text, .ask-thinking-dot { animation: none; }
+}
+
 .ask-msg {
   max-width: 86%; padding: 9px 12px; border-radius: 10px;
-  font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  font-size: 13px; line-height: 1.5; word-break: break-word;
 }
+/* User bubbles keep terminal-style whitespace; brain bubbles render Markdown
+   (which manages its own block spacing) so they must NOT preserve raw newlines. */
+.ask-msg-you .ask-msg-text { white-space: pre-wrap; }
 .ask-msg-role {
   font-size: 10px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--text-3); margin-bottom: 3px;
@@ -814,6 +848,52 @@ body {
   margin-top: 5px; font-size: 11px; color: var(--text-3);
   opacity: .8; word-break: break-word;
 }
+
+/* Markdown rendering for brain replies — dense, dark, on-theme. */
+.ask-md { font-size: 13px; line-height: 1.5; color: var(--text); }
+.ask-md > :first-child { margin-top: 0; }
+.ask-md > :last-child { margin-bottom: 0; }
+.ask-md p { margin: 0 0 8px; line-height: 1.5; }
+.ask-md ul, .ask-md ol { margin: 0 0 8px; padding-left: 18px; }
+.ask-md ul { list-style: disc; }
+.ask-md ol { list-style: decimal; }
+.ask-md li { margin: 2px 0; }
+.ask-md li::marker { color: var(--text-3); }
+.ask-md strong { font-weight: 600; color: var(--text); }
+.ask-md em { font-style: italic; }
+.ask-md a { color: var(--accent); text-decoration: underline; }
+.ask-md code {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--bg-3); padding: 1px 5px; border-radius: 4px;
+  word-break: break-word;
+}
+.ask-md pre {
+  margin: 0 0 8px; background: var(--bg-3); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 8px 10px; overflow-x: auto;
+}
+.ask-md pre code {
+  display: block; background: none; padding: 0; border-radius: 0;
+  font-size: 12px; line-height: 1.45; white-space: pre; word-break: normal;
+}
+.ask-md h1, .ask-md h2, .ask-md h3, .ask-md h4 {
+  font-weight: 600; color: var(--text); margin: 10px 0 5px; line-height: 1.3;
+}
+.ask-md h1 { font-size: 15px; }
+.ask-md h2 { font-size: 14px; }
+.ask-md h3 { font-size: 13px; }
+.ask-md h4 { font-size: 13px; color: var(--text-2); }
+.ask-md blockquote {
+  margin: 0 0 8px; padding-left: 10px;
+  border-left: 2px solid var(--line-2); color: var(--text-2);
+}
+.ask-md table {
+  border-collapse: collapse; margin: 0 0 8px; font-size: 12.5px;
+}
+.ask-md th, .ask-md td {
+  border: 1px solid var(--line-2); padding: 4px 8px; text-align: left;
+}
+.ask-md th { background: var(--bg-3); font-weight: 600; }
+.ask-md hr { border: none; border-top: 1px solid var(--line-2); margin: 10px 0; }
 
 /* No-account empty state (project has an empty account pool). */
 .ask-no-account {
