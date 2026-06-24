@@ -6,10 +6,12 @@ import { IconBtn, Kbd, Avatar } from "@/components/ui";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "@/lib/useProject";
 import { useShellData } from "@/lib/useShell";
+import { useAskDock } from "@/lib/useAskDock";
 
 /** App topbar: brand, project switcher, command pill, and LIVE status pills. */
 export function Topbar() {
   const { project } = useProject();
+  const { setOpen } = useAskDock();
   const { aliveSessions, defaultAccount } = useShellData(project?.id ?? null);
   const sessionsLabel = aliveSessions === undefined ? "daemon" : `daemon · ${aliveSessions} sessions`;
 
@@ -22,12 +24,17 @@ export function Topbar() {
 
       <ProjectSwitcher />
 
-      {/* Command pill — non-functional for M1, styled only. */}
-      <div className="topbar-pill" style={{ marginLeft: 4 }}>
+      {/* Command pill — opens the "Ask the brain" chat dock. */}
+      <button
+        type="button"
+        className="topbar-pill"
+        style={{ marginLeft: 4 }}
+        onClick={() => setOpen(true)}
+      >
         <Icon name="search" size={12} />
         <span className="muted">Ask the brain…</span>
         <Kbd>⌘K</Kbd>
-      </div>
+      </button>
 
       <div className="topbar-right">
         {/* live: count of alive agent sessions (GET /sessions) */}

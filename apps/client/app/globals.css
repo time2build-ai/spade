@@ -754,3 +754,72 @@ body {
   padding: 2px 8px; border-radius: 4px;
   border: 1px solid var(--line); background: var(--bg-2);
 }
+
+/* Ask the brain — right-side chat dock */
+.ask-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, 0.5);
+  animation: ask-fade 0.15s ease;
+}
+.ask-dock {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 61;
+  width: 460px; max-width: 92vw;
+  display: flex; flex-direction: column;
+  background: var(--bg-1);
+  border-left: 1px solid var(--line);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  animation: ask-slide 0.18s ease;
+}
+.ask-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+}
+.ask-head-titles { display: flex; align-items: baseline; gap: 8px; }
+.ask-head-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.ask-head-proj { font-size: 12px; color: var(--text-3); }
+.ask-body {
+  flex: 1; overflow-y: auto;
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+}
+.ask-empty, .ask-hint {
+  color: var(--text-3); font-size: 13px; margin: auto 0;
+  text-align: center; padding: 24px 8px;
+}
+.ask-status { color: var(--text-3); font-size: 12.5px; font-style: italic; }
+.ask-msg {
+  max-width: 86%; padding: 9px 12px; border-radius: 10px;
+  font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+.ask-msg-role {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-3); margin-bottom: 3px;
+}
+.ask-msg-you {
+  align-self: flex-end;
+  background: var(--bg-3); border: 1px solid var(--line-2); color: var(--text);
+}
+.ask-msg-brain {
+  align-self: flex-start;
+  background: rgba(201, 184, 255, 0.08);
+  border: 1px solid rgba(201, 184, 255, 0.28);
+  color: var(--text);
+}
+.ask-msg-brain .ask-msg-role { color: var(--accent); }
+.ask-msg-error {
+  background: rgba(232, 125, 125, 0.08);
+  border-color: rgba(232, 125, 125, 0.4);
+}
+.ask-msg-error .ask-msg-role { color: var(--red); }
+.ask-composer {
+  display: flex; gap: 8px; align-items: flex-end;
+  padding: 12px 14px; border-top: 1px solid var(--line); background: var(--bg-1);
+}
+.ask-input {
+  flex: 1; resize: none; font-family: var(--sans); font-size: 13px;
+  padding: 8px 10px; border-radius: 8px; color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--line);
+}
+.ask-input:focus { outline: none; border-color: var(--line-strong); }
+.ask-send { flex: none; }
+@keyframes ask-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ask-slide { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
