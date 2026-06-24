@@ -33,6 +33,35 @@ export const api = {
   env: () => http<{ home: string }>("/env"),
   // Global fleet (no project param) and the provider account pool.
   sessions: () => http<{ sessions: Session[] }>("/sessions"),
+  // One session (used to poll an orchestrator's `prep` while it boots).
+  session: (id: string) => http<Session>(`/sessions/${id}`),
+  // Spawn a project-scoped orchestrator. Returns immediately; priming runs in
+  // the background (poll `session(id)` for prep booting -> priming -> ready).
+  spawnOrchestrator: (projectId: string, cwd: string) =>
+    http<Session>("/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        // SpawnRequest requires a unique session `name` (label). Scope it to the
+        // project so the spawned orchestrator is easy to identify.
+        name: `orchestrator-${projectId}`,
+        // `role` must be set explicitly: /sessions does not expose
+        // is_orchestrator, so resolveOrchestrator re-finds this session by
+        // `role === "orchestrator"`. Without it the role persists as null and a
+        // fresh ask would spawn a duplicate orchestrator.
+        role: "orchestrator",
+        is_orchestrator: true,
+        project_id: projectId,
+        cwd,
+        mode: "bypass",
+      }),
+    }),
+  // Send a prompt to a session; `response` is the agent's reply text.
+  // Default timeout here is 120s (the backend's own default is 180s).
+  promptSession: (id: string, text: string, timeout = 120) =>
+    http<{ response: string; state: string }>(`/sessions/${id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text, timeout }),
+    }),
   accounts: () => http<{ accounts: Account[] }>("/accounts"),
   brainNodes: (projectId: string) =>
     http<{ nodes: BrainNode[] }>(

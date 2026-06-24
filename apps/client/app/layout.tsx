@@ -3,6 +3,7 @@ import { Inter_Tight, JetBrains_Mono, Instrument_Serif } from "next/font/google"
 import "./globals.css";
 import { Topbar } from "@/components/shell/Topbar";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { AskDock } from "@/components/ask/AskDock";
 
 const sans = Inter_Tight({
   subsets: ["latin"],
@@ -44,6 +45,7 @@ export default function RootLayout({
           <Sidebar />
           <main className="overflow-auto">{children}</main>
         </div>
+        <AskDock />
       </body>
     </html>
   );
