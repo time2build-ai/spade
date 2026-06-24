@@ -365,6 +365,25 @@ def test_orchestrator_gets_spade_data_skill(tmp_path):
     assert "__API_BASE__" not in text  # placeholder fully rendered
 
 
+def test_orchestrator_gets_planning_skill(tmp_path):
+    """Spawning an orchestrator installs the planning skill so it runs a
+    brainstorm → propose → create-tasks workflow that ends in dependency-linked
+    backlog tasks (using the link endpoint)."""
+    from tui_pilot import session
+    cwd = tmp_path / "orch"
+    cwd.mkdir()
+    session.install_planning_skill(str(cwd), api_base="http://127.0.0.1:8765")
+    skill = cwd / ".claude" / "skills" / "planning" / "SKILL.md"
+    assert skill.exists()
+    text = skill.read_text()
+    assert "http://127.0.0.1:8765" in text
+    assert "__API_BASE__" not in text  # placeholder fully rendered
+    # it must teach the approval gate + the link endpoint with all three rels
+    assert "/links" in text
+    for rel in ("blocks", "related", "subtask"):
+        assert rel in text
+
+
 def test_settings_endpoint_roundtrip():
     from tui_pilot.server import app
     from fastapi.testclient import TestClient
