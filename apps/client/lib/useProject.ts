@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { api } from "./api";
 import type { Project } from "./types";
@@ -28,6 +28,30 @@ function readStoredId(): string | null {
   return window.localStorage.getItem(STORAGE_KEY);
 }
 
+// --- shared active-project store -------------------------------------------
+// The active project id is module-level (not per-component useState) so EVERY
+// `useProject()` consumer — topbar switcher, sidebar, the current page — stays
+// in sync when one of them calls setProject. Subscribers are notified via
+// useSyncExternalStore.
+let activeId: string | null = readStoredId();
+const listeners = new Set<() => void>();
+
+function setActiveId(id: string | null) {
+  activeId = id;
+  if (typeof window !== "undefined" && id) {
+    window.localStorage.setItem(STORAGE_KEY, id);
+  }
+  listeners.forEach((l) => l());
+}
+
+function subscribe(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+const getSnapshot = () => activeId;
+const getServerSnapshot = () => null;
+
 export interface UseProjectResult {
   projects: Project[];
   project: Project | null;
@@ -40,16 +64,10 @@ export function useProject(): UseProjectResult {
   const { data, error, isLoading } = useSWR("projects", () => api.projects());
   const projects = data?.projects ?? [];
 
-  const [activeId, setActiveId] = useState<string | null>(() => readStoredId());
+  const storedId = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const project = resolveActiveProject(projects, storedId);
 
-  const project = resolveActiveProject(projects, activeId);
-
-  const setProject = useCallback((id: string) => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, id);
-    }
-    setActiveId(id);
-  }, []);
+  const setProject = useCallback((id: string) => setActiveId(id), []);
 
   return {
     projects,
