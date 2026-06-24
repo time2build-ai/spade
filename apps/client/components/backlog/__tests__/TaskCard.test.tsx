@@ -32,6 +32,7 @@ function makeTask(over: Partial<Task> = {}): Task {
     description: null,
     created_at: "2026-01-01",
     nodes: [],
+    links: [],
     ...over,
   };
 }

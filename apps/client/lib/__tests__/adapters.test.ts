@@ -52,6 +52,7 @@ function makeTask(id: string, status: string): Task {
     description: null,
     created_at: "2026-01-01",
     nodes: [],
+    links: [],
   };
 }
 

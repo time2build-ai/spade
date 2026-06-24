@@ -45,6 +45,16 @@ export type BrainEdge = {
   rel: string | null;
 };
 
+export type LinkRel = "blocks" | "related" | "subtask";
+
+export type TaskLink = {
+  id: string;
+  from_task: string;
+  to_task: string;
+  rel: LinkRel;
+  created_at: string;
+};
+
 export interface Task {
   id: string;
   project_id: string;
@@ -59,6 +69,8 @@ export interface Task {
   // Brain-node IDs grounded to this task; resolve against the project's brain
   // node list (see resolveNodes / api.brainNodes) to get full BrainNode objects.
   nodes: string[];
+  // Task→task dependency links where this task is either end (see taskRelations).
+  links: TaskLink[];
 }
 
 export type Brake = {

@@ -12,6 +12,10 @@ from tui_pilot import db
 
 STATUSES = ["ready", "in_progress", "review", "shipped", "blocked"]
 
+# Task→task link relationships. "blocks"/"subtask" are directional (from→to),
+# "related" is symmetric. See add_link / links for semantics.
+LINK_RELS = ["blocks", "related", "subtask"]
+
 _WRITABLE_COLS = {"title", "feature", "priority", "description", "origin_quote", "origin_source"}
 
 
@@ -128,6 +132,48 @@ def nodes(task_id: str) -> list[str]:
         (task_id,),
     )
     return [r["node_id"] for r in rows]
+
+
+# -- Links (task dependencies) ------------------------------------------------
+
+def add_link(from_task: str, to_task: str, rel: str) -> dict:
+    """Create a task→task link and return the created row.
+
+    ``rel`` must be one of ``LINK_RELS``. Self-links are rejected. The caller is
+    responsible for 404ing on missing tasks (the FK CASCADE protects integrity).
+    """
+    if rel not in LINK_RELS:
+        raise ValueError(f"invalid rel {rel!r}; must be one of {LINK_RELS}")
+    if from_task == to_task:
+        raise ValueError("a task cannot link to itself")
+    lid = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO task_links (id, from_task, to_task, rel, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (lid, from_task, to_task, rel, _now()),
+    )
+    return link_get(lid)
+
+
+def link_get(link_id: str) -> dict | None:
+    """Return one link by id, or None if not found."""
+    rows = db.query("SELECT * FROM task_links WHERE id = ?", (link_id,))
+    return _row_to_dict(rows[0]) if rows else None
+
+
+def remove_link(link_id: str) -> None:
+    """Delete a link by id."""
+    db.execute("DELETE FROM task_links WHERE id = ?", (link_id,))
+
+
+def links(task_id: str) -> list[dict]:
+    """Return all links where this task is the from_task OR the to_task."""
+    rows = db.query(
+        "SELECT * FROM task_links WHERE from_task = ? OR to_task = ? "
+        "ORDER BY created_at ASC, rowid ASC",
+        (task_id, task_id),
+    )
+    return [dict(r) for r in rows]
 
 
 # -- Comments (activity trail) ------------------------------------------------

@@ -9,6 +9,7 @@ import { OriginCard } from "@/components/task/OriginCard";
 import { EvidenceSection } from "@/components/task/EvidenceSection";
 import { MetaRow } from "@/components/task/MetaRow";
 import { TimelineRail } from "@/components/task/TimelineRail";
+import { Relations } from "@/components/task/Relations";
 import { api } from "@/lib/api";
 import { groupNodesByType, indexNodesById, resolveNodes } from "@/lib/adapters";
 
@@ -113,6 +114,8 @@ export default function TaskPage() {
             type="feature"
             nodes={grouped.feature}
           />
+
+          <Relations taskId={task.id} links={task.links ?? []} />
         </div>
 
         <aside className="td-side">

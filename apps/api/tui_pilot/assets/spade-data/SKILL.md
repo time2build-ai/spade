@@ -55,6 +55,10 @@ curl -s -X POST $B/tasks -H 'content-type: application/json' \
 curl -s -X POST $B/tasks/<task_id>/move -H 'content-type: application/json' -d '{"status":"in_progress"}'
 # ground a task in the brain (link it to nodes for context)
 curl -s -X PUT $B/tasks/<task_id>/nodes -H 'content-type: application/json' -d '{"node_ids":["<n1>","<n2>"]}'
+# link tasks (rel: blocks | related | subtask). "A blocks B" = A must finish before B.
+# "A subtask B" = A is the parent/epic of child B. "related" is symmetric.
+curl -s -X POST $B/tasks/<A>/links -H 'content-type: application/json' -d '{"to_task":"<B>","rel":"blocks"}'
+curl -s -X DELETE $B/tasks/<A>/links/<link_id>   # remove a link (each task carries its links[])
 # add a brain node / edge
 curl -s -X POST $B/brain/nodes -H 'content-type: application/json' -d '{"project_id":"<id>","type":"decision","label":"ADR-1 ...","detail":"..."}'
 curl -s -X POST $B/brain/edges -H 'content-type: application/json' -d '{"project_id":"<id>","from_id":"<a>","to_id":"<b>","rel":"decided_by"}'
