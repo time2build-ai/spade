@@ -913,6 +913,18 @@ def post_prompt(id: str, req: PromptRequest) -> dict:
             result = ctrl.prompt(req.text, timeout=req.timeout)
         except SessionError as exc:
             raise HTTPException(status_code=410, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # The prompt path drives a live tmux/agent; an unexpected failure here
+            # used to surface as an opaque 500 ("Internal Server Error") with no
+            # trace. Log the full traceback (so intermittent failures are
+            # diagnosable) and return the real exception type/message so the UI
+            # can show something actionable instead of a blank 500.
+            logger.exception("prompt failed for session %s", id)
+            raise HTTPException(
+                status_code=500, detail=f"prompt failed: {type(exc).__name__}: {exc}"
+            ) from exc
     return {"response": result["response"], "state": result["state"].value}
 
 

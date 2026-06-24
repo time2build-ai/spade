@@ -405,3 +405,28 @@ def test_force_bypass_adds_danger_flag_to_command():
         eff_cmd = f"{eff_cmd} --dangerously-skip-permissions"
     eff_cmd = build_cmd(eff_cmd, None)
     assert "--dangerously-skip-permissions" in eff_cmd
+
+
+def test_prompt_unexpected_error_returns_descriptive_500():
+    """A non-SessionError thrown while driving the agent is caught: the endpoint
+    returns a 500 whose detail names the real exception (not opaque 'Internal
+    Server Error'), and the traceback is logged for diagnosis."""
+    import threading
+    from tui_pilot import server
+    from tui_pilot.server import app
+
+    class _BoomCtrl:
+        def prompt(self, text, timeout=180):
+            raise RuntimeError("kaboom while driving tmux")
+
+    server._sessions["boom"] = _BoomCtrl()
+    server._locks["boom"] = threading.Lock()
+    try:
+        c = TestClient(app)
+        r = c.post("/sessions/boom/prompt", json={"text": "hi"})
+        assert r.status_code == 500
+        detail = r.json()["detail"]
+        assert "RuntimeError" in detail and "kaboom" in detail
+    finally:
+        server._sessions.pop("boom", None)
+        server._locks.pop("boom", None)
