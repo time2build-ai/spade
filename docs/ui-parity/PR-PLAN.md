@@ -49,71 +49,78 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 
 ## Phase 2 — Restyle existing screens to match
 
-### PR-04 · Brain: color fix + node glyphs + edge style *(quick win)*
-**Scope (from [§03](./sections/03-brain-graphissues.md)):** fix the **swapped feedback/metric colors**; introduce a shared `typeMeta` (color + glyph per node type); render nodes as **circles with F/D/C/U/B/M glyphs** and **straight edges with relation labels** (reference style).
-**Files:** `components/brain/GraphCanvas.tsx`, `components/brain/BrainLegend.tsx`, new `lib/brainTypeMeta.ts`.
-- 🤖 **Automated:** `brain-style.spec.ts` — feedback node uses teal token / metric uses blue (assert computed fill); node glyph letters present; legend colors match `typeMeta`.
+### PR-04 · Brain: color fix + node glyphs + shared typeMeta *(quick win — DONE)*
+**Scope (from [§03](./sections/03-brain-graphissues.md)):** fix the **swapped feedback/metric colors**; introduce a shared `NODE_TYPE_META` (color + F/D/C/U/B/M glyph + label) in `lib/adapters.ts`; render the glyph inside each node's dot and in the legend swatches.
+**Deferred to PR-05:** changing node shape pill→**circle** and edges bezier→**straight with relation labels** — those are part of the Explorer rebuild and would otherwise be rewritten twice / risk regressing the current focus-highlight logic.
+**Files:** `lib/adapters.ts` (`NODE_TYPE_META`, `nodeColor`, `nodeGlyph`), `components/brain/GraphCanvas.tsx`, `components/brain/BrainLegend.tsx`, `lib/__tests__/brainAdapters.test.ts` (corrected to reference colors).
+- 🤖 **Automated:** `brain-style.spec.ts` — legend + node glyphs (F/D/C/U/B/M); feedback=teal `rgb(122,220,199)`, metric=blue `rgb(122,182,230)` (computed); regression guard for the swap. **8 green** (mocks the brain API).
 - 🧑 **Manual:** open Brain; confirm node colors/glyphs and edge labels match the reference legend.
 
-### PR-05 · Brain: rebuild as 3-column Explorer *(large; depends on PR-04)*
-**Scope:** restructure Brain from free node-link canvas to the reference **detail-first Explorer** — subtabs row, brain-search + `⌘K`, Find-gaps / Export-to-MCP buttons, namespace feature tree (left), rich center record (keys grid, summary, description, code surface, activity), radial `.bx-anchor` relations map (right), MCP-server status block. Keep the graph canvas reachable as a secondary view (don't delete PR-04's work).
-**Files:** `app/brain/page.tsx`, new `components/brain/Explorer*.tsx`, `components/brain/NodeInfo.tsx`.
-- 🤖 **Automated:** `brain-explorer.spec.ts` — 3 columns render; selecting a tree node updates the center record (title + keys grid + sections); relations map shows anchor + neighbors; search box focuses on `⌘K`.
-- 🧑 **Manual:** click through the feature tree; confirm the center record and relations map update and match the reference layout.
+### PR-05 · Brain: rebuild as 3-column Explorer *(large; DONE)*
+**Scope:** restructured Brain into the reference **detail-first Explorer** — Explorer/Graph **subtabs**, namespace **feature tree** (left, with per-feature D/B/U counts + a type Index), **record detail** (center: type-glyph header + id + title + keys grid + Description), and a **relations map** (right: `.bx-anchor` radial diagram + neighbor groups, clickable). The graph canvas is preserved behind the **Graph** subtab (keeps PR-04's glyph/color work).
+**No-fabrication trims:** the reference's invented content is **omitted** — owner / confidence / coverage / source rows, the summary prose, the code-surface file list, the activity feed, and the MCP-server block (all need backend data we don't have). The keys grid shows the 3 honest fields (Type / Created / Edges); Description renders `node.detail` or an empty state. Brain-search input + Find-gaps / Export-to-MCP buttons deferred (search needs the Ask wiring; the buttons need real actions).
+**Files:** `components/brain/BrainExplorer.tsx` (new), `app/brain/page.tsx`, `app/globals.css` (bx-* scoped under `.brain-explorer` to avoid colliding with NodeInfo), `e2e/brain-explorer.spec.ts`, `e2e/brain-style.spec.ts` (switches to Graph subtab).
+- 🤖 **Automated:** `brain-explorer.spec.ts` — 3 columns; default-first-feature record; tree selection; relations navigation; anchor glyph; Explorer↔Graph switch. **6 green** (mocks the brain API). Full suite: e2e 34✓ / vitest 140✓.
+- 🧑 **Manual:** open Brain → Explorer; click features in the left tree and neighbors in the right map; confirm the center record + anchor update; toggle the Graph subtab.
 
-### PR-06 · Backlog parity
-**Scope (from [§04](./sections/04-backlog-task-sprints.md)):** 4 columns (Ready / In progress / Review / Done) with **blocked routed to an amber banner** (not a 5th column); add head actions (Filter, Suggest priority, Run sprint); align card anatomy (priority dot, feature tag, status, assignee).
-**Files:** `app/backlog/page.tsx`, `components/backlog/Board.tsx`, `components/backlog/TaskCard.tsx`.
-- 🤖 **Automated:** `backlog.spec.ts` — exactly 4 columns with reference labels/colors/order; an amber blocked banner appears when a blocked task exists; head action buttons present; card shows priority+feature+assignee.
-- 🧑 **Manual:** compare board columns and a card vs reference; confirm blocked banner styling.
+### PR-06 · Backlog parity *(DONE)*
+**Scope (from [§04](./sections/04-backlog-task-sprints.md)):** 4 columns (Ready / In progress / Review / Shipped) with **blocked routed to an amber banner** (not a 5th column); "Run sprint" head action → orchestrator. The card anatomy (priority dot, id, feature, real brain-node intel bar + chips, "unassigned" footer) was already honest from prior work.
+**No-fabrication trims:** the banner shows only the real blocked task id + title (+ "Open gate →"); the reference's "reviewer flagged conflict with ADR-014" narrative is omitted. **Filter** and **Suggest priority** head buttons deferred (no real filtering / AI action yet). No assignee avatars (API has no assignee).
+**Files:** `components/backlog/Board.tsx` (5→4 cols), `components/backlog/BlockedBanner.tsx` (new), `app/backlog/page.tsx`, `app/globals.css` (`.backlog-grid` → 4 cols), `components/backlog/__tests__/TaskCard.test.tsx` (4-col).
+- 🤖 **Automated:** `backlog.spec.ts` — exactly 4 columns, no Blocked column, blocked banner with gate link, blocked task absent from columns, "Run sprint"→/orchestrator, per-column counts. **5 green** (mocks the API). Suite: e2e 39✓ / vitest 140✓.
+- 🧑 **Manual:** open Backlog; confirm 4 columns, that a blocked task shows the amber banner (with "Open gate →") instead of a column, and "Run sprint" goes to the orchestrator.
 
-### PR-07 · Task detail: evidence + rail + head actions
-**Scope:** add the `.feedback-strip` 4-stat tiles, `.quote-card` verbatim quotes, `.lr-meta` right column, tracked-metric + sparkline card, "Will write back" prose, head actions; rail meta rows (Assignee/Sprint/Estimate/Branch).
-**Files:** `app/task/[id]/page.tsx`, `components/task/*` (+ new `FeedbackStrip.tsx`, `QuoteCard.tsx`, `Sparkline.tsx`).
-- 🤖 **Automated:** `task-detail.spec.ts` — feedback strip renders 4 stat tiles; ≥1 quote card; right rail shows Assignee/Sprint/Estimate/Branch; sparkline svg present.
-- 🧑 **Manual:** open task SPD-142; compare evidence block, rail, and head actions vs reference.
+### PR-07 · Task detail: head actions *(honest subset — DONE)*
+**Scope:** our task detail already had the honest scaffold (breadcrumb, priority+feature chips, title, Origin from real quote/source, per-type evidence sections from real brain nodes, Properties rail, Activity from comments). The legitimate delta was the **page-head actions**: a real **status chip** + **"View in graph"** (→ /brain) + **"Resume pipeline"** (→ /orchestrator).
+**No-fabrication trims (the bulk of the reference TaskView):** the `.feedback-strip` 4-stat tiles, `.quote-card` verbatim quotes, tracked-metric + sparkline card, "Will write back" prose, and the Assignee/Sprint/Estimate/Branch rail rows are **all invented demo data** — omitted until the backend exposes them.
+**Files:** `app/task/[id]/page.tsx`.
+- 🤖 **Automated:** `task-detail.spec.ts` — status chip = real status, "View in graph"→/brain, "Resume pipeline"→/orchestrator, breadcrumb→/backlog. **4 green** (mocks the API). Suite: e2e 43✓ / vitest 140✓.
+- 🧑 **Manual:** open a task; confirm the status chip + the two head-action buttons navigate to the brain / orchestrator.
 
-### PR-08 · Orchestrator: table rewrite + expanding detail + live log *(large)*
-**Scope (from [§05](./sections/05-orchestrator.md)):** replace card-list + side terminal with the reference **full-width sortable table** (priority dot / title / cost / ETA), **inline-expanding detail** (progress bar, Context + Files-touched cards, animated streaming Live-log terminal with colored `lvl-*` lines + blinking cursor), and a **6-cell KPI strip with sub-lines**. Reuse the already-matching `orch-d-stage` and `stages-mini` markup.
-**Files:** `app/orchestrator/page.tsx`, `components/orchestrator/*` (+ new `PipelineTable.tsx`, `LiveLog.tsx`, expand KPI strip).
-- 🤖 **Automated:** `orchestrator.spec.ts` — KPI strip has 6 cells with sub-lines; table rows sortable; clicking a row expands inline detail with progress bar + live-log lines; log lines carry `lvl-*` color classes.
-- 🧑 **Manual:** sort the table; expand a pipeline; watch the live log animate; compare to reference.
+### PR-08 · Orchestrator: table rewrite + expanding detail *(DONE)*
+**Scope (from [§05](./sections/05-orchestrator.md)):** replaced the card-list + side terminal with the reference **inline-expanding table** (chevron · Task · Title · Pipeline stages-mini+step · Account · Status). Clicking a row expands the **real-stage detail** (`orch-d-stages` from real roles/states) and embeds our **real session Terminal** for that run. The KPI strip + filter segmented control already existed.
+**No-fabrication trims:** the reference's **Cost / ETA** columns and the fabricated **files-touched / tokens / context / animated fake live-log** cards are omitted (no real data). Title is joined from the real tasks list; Account from the real accounts list. Real Start/Advance actions are preserved inside the expanded detail.
+**Files:** `components/orchestrator/PipelineTable.tsx` (new), `app/orchestrator/page.tsx`, `app/globals.css` (`.orch-table`). `PipelineCard` retired from the page (kept for its unit test).
+- 🤖 **Automated:** `orchestrator.spec.ts` — row shows joined title/account/status + `step n/4`; row click expands the 4 real stages; filter narrows rows. **3 green** (mocks the API). Suite: e2e 46✓ / vitest 140✓.
+- 🧑 **Manual:** open Orchestrator; confirm the table; click a row to expand the stage detail + live terminal; use the filter.
 
-### PR-09 · Active Tasks view *(depends on PR-08 components)*
-**Scope:** add `/active` route (ActiveCard, progress-rail/shimmer) for live pipelines.
-**Files:** `app/active/page.tsx`, `components/orchestrator/ActiveCard.tsx`.
-- 🤖 **Automated:** `active-tasks.spec.ts` — route renders only non-shipped pipelines; each card shows an animated progress rail.
-- 🧑 **Manual:** open Active Tasks; confirm only live work shows with progress rails.
+### PR-09 · Active Tasks view *(DONE)*
+**Scope:** new `/active` route — live (non-shipped) pipelines as `ActiveCard`s with a progress rail + shimmer, expandable real-stage detail, and Open→task. Reachable via an "Active tasks →" link in the orchestrator head (the reference sidebar doesn't surface it either).
+**No-fabrication:** progress is derived from **completed/total stages** (not a fake %); status label = real run status; title/feature/account joined from real data; the summary strip shows only **Running / Live** (the reference's Avg-ETA / Tokens / $ cells are omitted).
+**Files:** `app/active/page.tsx` (new), `components/orchestrator/ActiveCard.tsx` (new), `app/globals.css` (`.active-*`, `shimmer`), `app/orchestrator/page.tsx` (reachability link).
+- 🤖 **Automated:** `active-tasks.spec.ts` — only non-shipped pipelines listed; progress rail = 25% for 1/4 done; expand shows 4 real stage roles; Open→/task/T-1. **4 green** (mocks the API). Suite: e2e 50✓ / vitest 140✓.
+- 🧑 **Manual:** open Orchestrator → "Active tasks →"; confirm only live pipelines show with progress rails; expand a card for stages; Open jumps to the task.
 
-### PR-10 · Agent Pool: account-centric grid + executions table
-**Scope (from [§06](./sections/06-agentpool-accounts.md)):** rebuild pool as **account-centric** (provider glyph avatars, role pills, usage meters, current-issue bodies) + add the **"Executions in progress"** filterable table with graph-node chips. Seed fixtures for `Account` fields (model/plan/limit/used/today/role/strengths/sessions).
-**Files:** `app/agent-pool/page.tsx`, `components/agentpool/*` (+ `ProviderAvatar.tsx`, `UsageMeter.tsx`, `ExecutionsTable.tsx`), fixtures.
-- 🤖 **Automated:** `agent-pool.spec.ts` — account cards show provider glyph + usage meter + role pill; executions table filters; node chips render.
-- 🧑 **Manual:** compare account cards and executions table vs reference.
+### PR-10 · Agent Pool: provider glyph avatars + in-use state *(honest subset — DONE)*
+**Scope:** account cards gain the reference's **provider glyph avatars** (✦ Claude / ◇ Codex / ❮❯ Cursor / ✺ Gemini / ⌘ Aider), colored per the real `account.provider`, plus an **in-use / idle state** derived from real sessions (an alive `session.account_id`).
+**No-fabrication (most of the reference Agent Pool):** role pills, **usage meters / %**, model/plan/limit, "current issue" bodies, and the entire **"Executions in progress"** table with AI-ISS ids + brain-node chips are all invented (our `Account` exposes none of those fields) — **omitted**. Our existing honest "Live agent fleet" (from real sessions) + "Provider accounts" list remain.
+**Files:** `components/agentpool/AccountCard.tsx` (provider glyph + state), `app/agent-pool/page.tsx` (in-use derivation), `app/globals.css` (`.acct-glyph`, `.acct-state`), `agentpool.test.tsx`.
+- 🤖 **Automated:** `agent-pool.spec.ts` — provider glyphs (✦/◇); account with an alive session shows "in use", others "idle". **2 green** (mocks the API). Suite: e2e 52✓ / vitest 142✓.
+- 🧑 **Manual:** open Agent Pool; confirm provider-glyph avatars + that an account with a running session shows "in use".
 
-### PR-11 · Decisions list parity
-**Scope (from [§07](./sections/07-decisions-gate.md)):** add the All/Active/Proposed/Superseded segmented filter, status pills (incl. superseded-strike), real amber ADR ids, owner, feature + conflict chips, head actions. Add a `status` field to the decisions adapter.
-**Files:** `app/decisions/page.tsx`, `components/decisions/DecisionCard.tsx`, `lib/adapters.ts`.
-- 🤖 **Automated:** `decisions-list.spec.ts` — filter control switches visible rows; status pills render with correct classes; ADR id is `ADR-NNN` amber; chips present.
-- 🧑 **Manual:** toggle filters; compare a row vs reference.
+### PR-11 · Decisions list parity *(DEFERRED — fabrication-blocked)*
+**Why deferred:** the reference's All/Active/Proposed/Superseded **filter tabs** + **status pills** (incl. superseded-strike), owner, and conflict chips all require a **`status`/owner field** on decisions. Decisions are `type=decision` brain nodes whose API exposes only `id/type/label/detail/created_at` — none of those fields exist. Under no-fabrication there is no honest list-filter to build yet. Revisit once the backend adds decision status/owner. (The amber ADR id is already derived from list order in `DecisionCard`.)
 
-### PR-12 · ADR detail: re-dock + structured sections *(depends on PR-11)*
-**Scope:** move ADR detail from centered modal to **right-docked aside** with TOC scroll-spy + meta grid + the ~13 structured sections (Summary KV, metrics, drivers, 3-col Consequences, Alternatives, Validation, Discussion, Provenance, Changelog, Lineage, footer). Sections render from seeded narrative fixtures.
-**Files:** `components/decisions/DecisionDetail.tsx`.
-- 🤖 **Automated:** `adr-detail.spec.ts` — opening an ADR docks an aside (not a modal overlay); TOC links scroll to sections; Consequences renders 3 columns.
-- 🧑 **Manual:** open an ADR; confirm docked aside, TOC scroll-spy, and section layout vs reference.
+### PR-12 · ADR detail: re-dock to a right-side aside *(DONE)*
+**Scope:** moved the ADR detail from a **centered modal** to a **right-docked aside** (reference layout) — slide-in from the right, full height, left border, dim overlay. Content is unchanged real data: ADR code, recorded date, the markdown `detail`, **Linked work** (real tasks), and **Connections** (real edges).
+**No-fabrication:** the reference's ~13 structured sections (Summary KV, metrics, drivers, 3-col Consequences, Alternatives, Validation, Discussion, Provenance, Changelog, Lineage) + TOC scroll-spy are invented narrative — **omitted**; we keep our honest markdown + real links.
+**Files:** `app/globals.css` (`.dec-modal*` re-dock), `components/decisions/DecisionDetail.tsx` (test hook + comment).
+- 🤖 **Automated:** `decisions-detail.spec.ts` — opening a decision shows a right-docked aside (bounding box on the right edge) with the real label + markdown; Escape closes. **2 green** (mocks the API). Suite: e2e 54✓ / vitest 142✓.
+- 🧑 **Manual:** open a decision; confirm the detail slides in as a right-side aside (not centered) with the markdown + linked work/connections; Escape closes.
 
-### PR-13 · Ask: shared ChatPanel + message anatomy *(foundation for Ask)*
-**Scope (from [§08](./sections/08-ask-chat.md)):** extract a single `ChatPanel(mode='page'|'dock'|'bubble')` from `AskDock`; rich message anatomy (avatars, who+timestamp header, right-aligned user vs left assistant, citation pills); keep our thinking indicator + Markdown.
-**Files:** new `components/ask/ChatPanel.tsx`, `components/ask/Message.tsx`; refactor `AskDock.tsx`, `lib/useAskDock.ts`.
-- 🤖 **Automated:** `chat-panel.spec.ts` — user vs assistant messages align opposite sides; avatars + timestamps render; citation pill renders when present.
-- 🧑 **Manual:** open the dock, send a message; confirm bubble alignment/avatars match reference.
+### PR-13 · Ask: message anatomy (avatars + alignment) *(DONE)*
+**Scope (from [§08](./sections/08-ask-chat.md)):** added the reference Message anatomy to the dock's bubbles — **avatar + who-header + opposite-side alignment** (assistant avatar left, user avatar right). Our alignment + role label already existed; this adds the avatars and the avatar/bubble row.
+**No-fabrication:** **timestamps** (our messages have none), **citation pills**, and **plan/diff/action cards** are omitted — the orchestrator doesn't emit that structure (those are PR-16, data-blocked). The full `ChatPanel(mode=…)` **extraction** is an internal refactor with no UI delta — deferred to when the bubble/side-dock (PR-14) actually need a shared panel.
+**Files:** `components/ask/AskDock.tsx` (MessageBubble → avatar+bubble row), `app/globals.css` (`.ask-msg-row`, `.ask-msg-avatar`).
+- 🤖 **Automated:** `ask-messages.spec.ts` — a real send round-trips (mocked orchestrator); user + assistant rows render avatars; user row is right of the assistant row. **2 green**. Suite: e2e 56✓ / vitest 142✓.
+- 🧑 **Manual:** open the dock (⌘K / topbar), send a message; confirm the assistant bubble (left, brain avatar) vs your bubble (right, "you" avatar).
 
-### PR-14 · Ask: bubble + side-dock relocation + ⌘K *(depends on PR-13)*
-**Scope:** replace top-center glass float with the reference **bottom-right accent trigger pill → 440×620 bubble**, plus the separate **⌘K right-edge side dock (480px) with overlay**.
-**Files:** `components/ask/ChatBubble.tsx` (new), `components/ask/AskDock.tsx`, `lib/useAskDock.ts`.
-- 🤖 **Automated:** `chat-bubble.spec.ts` — trigger pill bottom-right; click expands bubble to ~440×620; `⌘K` opens a 480px side dock with overlay; Esc closes.
-- 🧑 **Manual:** click the pill (bottom-right), then `⌘K`; confirm bubble vs side-dock behaviors match reference.
+### PR-14 · Ask: bottom-right trigger pill + dock relocation *(DONE)*
+**Scope:** replaced the top-center glass float with the reference's **bottom-right accent trigger pill** (persistent launcher when closed) and docked the open panel **bottom-right** (440px). `⌘K` still toggles; dragging still overrides position.
+**Deferred:** the reference's *separate* **⌘K right-edge side-dock (480px) with overlay**, distinct from the bubble, is not split out — we keep a single bottom-right float + trigger (the dual bubble-vs-side-dock mode is a larger refactor with little honest-data benefit).
+**Files:** `components/ask/AskDock.tsx` (closed → trigger pill), `app/globals.css` (`.ask-float` bottom-right, `.ask-trigger`), `ask.test.tsx`.
+- 🤖 **Automated:** `ask-dock.spec.ts` — trigger pill bottom-right when closed; clicking opens the dock bottom-right (trigger gone); `⌘K` toggles. **3 green**. Suite: e2e 59✓ / vitest 142✓.
+- 🧑 **Manual:** confirm the bottom-right "Ask the brain" pill; click it (or ⌘K) → dock opens bottom-right; ⌘K again closes back to the pill.
 
 ### PR-15 · Ask: full page + multi-thread *(depends on PR-13)*
 **Scope:** add `/ask` route — 3-column page (thread list w/ search + pin/recent groups · ChatPanel `mode=page` · project-context/model rail). Seed `chatThreads` fixtures.

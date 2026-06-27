@@ -25,6 +25,11 @@ export default function AgentPoolPage() {
   const fleet: Session[] = sessions.data?.sessions ?? [];
   const pool: Account[] = accounts.data?.accounts ?? [];
 
+  // Accounts currently in use = those with an alive session (real data).
+  const inUseAccounts = new Set(
+    fleet.filter((s) => s.alive && s.account_id).map((s) => s.account_id as string),
+  );
+
   const loading =
     (sessions.isLoading && !sessions.data) ||
     (accounts.isLoading && !accounts.data);
@@ -74,7 +79,7 @@ export default function AgentPoolPage() {
           ) : (
             <div className="acct-list">
               {pool.map((a) => (
-                <AccountCard key={a.id} account={a} />
+                <AccountCard key={a.id} account={a} inUse={inUseAccounts.has(a.id)} />
               ))}
             </div>
           )}

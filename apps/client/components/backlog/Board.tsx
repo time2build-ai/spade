@@ -3,13 +3,15 @@ import { TaskCard } from "./TaskCard";
 import { tasksByStatus } from "@/lib/adapters";
 import type { BrainNode, Status, Task } from "@/lib/types";
 
-/** Column display order + label + dot color, lifted from views/backlog.jsx. */
+/**
+ * Column display order + label + dot color (reference BacklogView). Blocked is
+ * NOT a column — blocked tasks surface in the amber banner above the board.
+ */
 const COLUMNS: { status: Status; label: string; color: string }[] = [
   { status: "ready", label: "Ready", color: "var(--text-4)" },
   { status: "in_progress", label: "In progress", color: "var(--blue)" },
   { status: "review", label: "Review", color: "var(--accent)" },
   { status: "shipped", label: "Shipped", color: "var(--green)" },
-  { status: "blocked", label: "Blocked", color: "var(--amber)" },
 ];
 
 export interface BoardProps {
@@ -17,12 +19,12 @@ export interface BoardProps {
   nodesById: Record<string, BrainNode>;
 }
 
-/** 5-column backlog board. Buckets tasks by status into ordered columns. */
+/** 4-column backlog board. Buckets tasks by status into ordered columns. */
 export function Board({ tasks, nodesById }: BoardProps) {
   const buckets = tasksByStatus(tasks);
 
   return (
-    <div className="backlog-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+    <div className="backlog-grid">
       {COLUMNS.map((col) => {
         const items = buckets[col.status];
         return (

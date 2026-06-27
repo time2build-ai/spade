@@ -46,11 +46,21 @@ function session(over: Partial<Session> = {}): Session {
 }
 
 describe("AccountCard", () => {
-  test("renders label, provider, and config_dir", () => {
-    render(<AccountCard account={account()} />);
+  test("renders label, provider glyph avatar, and config_dir", () => {
+    const { container } = render(<AccountCard account={account()} />);
     expect(screen.getByText("Primary")).toBeTruthy();
-    expect(screen.getByText("claude-code")).toBeTruthy();
+    expect(container.querySelector('[data-testid="acct-glyph"]')).toBeTruthy();
     expect(screen.getByText("/home/u/.claude/primary")).toBeTruthy();
+  });
+
+  test("defaults to the idle state when not in use", () => {
+    const { container } = render(<AccountCard account={account()} />);
+    expect(container.querySelector('.acct-state[data-state="idle"]')).toBeTruthy();
+  });
+
+  test("shows the in-use state when inUse", () => {
+    const { container } = render(<AccountCard account={account()} inUse />);
+    expect(container.querySelector('.acct-state[data-state="running"]')).toBeTruthy();
   });
 
   test("shows the default badge when is_default === 1", () => {

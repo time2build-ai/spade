@@ -160,9 +160,12 @@ describe("AskDock", () => {
     apiSetCurrentProject.mockResolvedValue({ project_id: "p1" });
   });
 
-  test("renders nothing when closed", () => {
+  test("shows only the trigger pill when closed (no dialog/composer)", () => {
     const { container } = render(<AskDock />);
-    expect(container).toBeEmptyDOMElement();
+    // Closed = bottom-right launcher pill, but no open dialog or composer.
+    expect(container.querySelector('[data-testid="ask-trigger"]')).toBeInTheDocument();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector(".ask-input")).toBeNull();
   });
 
   test("open + no project shows the select-a-project hint, no composer", () => {

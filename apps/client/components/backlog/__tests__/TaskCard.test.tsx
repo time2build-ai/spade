@@ -100,16 +100,19 @@ describe("TaskCard", () => {
 });
 
 describe("Board", () => {
-  test("renders all 5 columns with correct counts", () => {
+  test("renders 4 columns with correct counts (blocked is not a column)", () => {
     const tasks = [
       makeTask({ id: "SPD-1", status: "ready" }),
       makeTask({ id: "SPD-2", status: "ready" }),
       makeTask({ id: "SPD-3", status: "review" }),
+      makeTask({ id: "SPD-4", status: "blocked" }),
     ];
     const { container } = render(<Board tasks={tasks} nodesById={{}} />);
 
     const cols = container.querySelectorAll(".col");
-    expect(cols).toHaveLength(5);
+    expect(cols).toHaveLength(4);
+    // Blocked is surfaced in the banner (page-level), never as a board column.
+    expect(container.querySelector('[data-status="blocked"]')).toBeNull();
 
     const ready = container.querySelector('[data-status="ready"] .count');
     expect(ready).toHaveTextContent("2");

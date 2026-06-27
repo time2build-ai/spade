@@ -155,22 +155,29 @@ export function nodeTypeCounts(
   return counts;
 }
 
+/**
+ * Per-type metadata for brain nodes — color + single-letter glyph + label.
+ * Mirrors the reference `typeMeta` (Spade standalone, GraphIssuesView): feature
+ * #c9b8ff/F, decision #e6b86a/D, convention #e69bb6/C, feedback #7adcc7/U,
+ * bug #e87d7d/B, metric #7ab6e6/M. Colors are expressed as our token vars.
+ */
+export const NODE_TYPE_META: Record<BrainNodeType, { color: string; glyph: string; label: string }> = {
+  feature: { color: "var(--accent)", glyph: "F", label: "Feature" },
+  decision: { color: "var(--amber)", glyph: "D", label: "Decision" },
+  convention: { color: "var(--pink)", glyph: "C", label: "Convention" },
+  feedback: { color: "var(--teal)", glyph: "U", label: "Feedback" },
+  bug: { color: "var(--red)", glyph: "B", label: "Bug" },
+  metric: { color: "var(--blue)", glyph: "M", label: "Metric" },
+};
+
 /** Token color var for a brain node type (drives node + legend colors). */
 export function nodeColor(type: BrainNodeType): string {
-  switch (type) {
-    case "feature":
-      return "var(--accent)";
-    case "decision":
-      return "var(--amber)";
-    case "feedback":
-      return "var(--blue)";
-    case "bug":
-      return "var(--red)";
-    case "metric":
-      return "var(--teal)";
-    case "convention":
-      return "var(--pink)";
-  }
+  return NODE_TYPE_META[type].color;
+}
+
+/** Single-letter glyph for a brain node type (F/D/C/U/B/M), per the reference. */
+export function nodeGlyph(type: BrainNodeType): string {
+  return NODE_TYPE_META[type].glyph;
 }
 
 export type LaidOutNode = BrainNode & { px: number; py: number };

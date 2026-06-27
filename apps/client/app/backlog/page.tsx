@@ -1,8 +1,11 @@
 "use client";
 
 import useSWR from "swr";
-import { PageHead, Btn } from "@/components/ui";
+import Link from "next/link";
+import { PageHead } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 import { Board } from "@/components/backlog/Board";
+import { BlockedBanner } from "@/components/backlog/BlockedBanner";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
 import { indexNodesById } from "@/lib/adapters";
@@ -66,11 +69,15 @@ export default function BacklogPage() {
       <PageHead
         title="Backlog"
         actions={
-          <Btn variant="primary" disabled>
-            + New
-          </Btn>
+          // No-fabrication: only "Run sprint" is wired (navigates to the
+          // orchestrator). Reference's Filter / Suggest-priority need real
+          // filtering / an AI action we don't have yet — deferred.
+          <Link href="/orchestrator" className="btn primary">
+            <Icon name="play" size={13} /> Run sprint
+          </Link>
         }
       />
+      {tasksData && <BlockedBanner tasks={tasksData.tasks} />}
       {body}
     </div>
   );

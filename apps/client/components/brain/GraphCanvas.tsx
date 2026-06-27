@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { layoutNodes, nodeColor } from "@/lib/adapters";
+import { layoutNodes, nodeColor, nodeGlyph } from "@/lib/adapters";
 import type { BrainEdge, BrainNode, BrainNodeType } from "@/lib/types";
 
 const VB_W = 800;
@@ -291,6 +291,21 @@ export function GraphCanvas({
                 opacity={selected || isFocusCenter ? 1 : 0.9}
               />
               <circle cx={-w / 2 + 13} cy={0} r={r} fill={color} />
+              {/* Single-letter type glyph (F/D/C/U/B/M), centered in the dot. */}
+              <text
+                x={-w / 2 + 13}
+                y={0}
+                dominantBaseline="central"
+                textAnchor="middle"
+                fontSize={r * 1.15}
+                fontFamily="var(--mono)"
+                fontWeight={700}
+                fill="#0b0b0d"
+                data-glyph={n.type}
+                style={{ pointerEvents: "none" }}
+              >
+                {nodeGlyph(n.type)}
+              </text>
               <text
                 x={textX}
                 y={4}

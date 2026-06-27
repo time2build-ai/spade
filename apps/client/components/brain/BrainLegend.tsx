@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { nodeColor, nodeTypeCounts } from "@/lib/adapters";
+import { nodeColor, nodeGlyph, nodeTypeCounts } from "@/lib/adapters";
 import type { BrainNode, BrainNodeType } from "@/lib/types";
 
 const TYPE_ORDER: { type: BrainNodeType; label: string }[] = [
@@ -51,8 +51,20 @@ export function BrainLegend({
           >
             <span
               className="legend-dot"
-              style={{ background: nodeColor(type) }}
-            />
+              data-type={type}
+              style={{
+                background: nodeColor(type),
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#0b0b0d",
+                fontFamily: "var(--mono)",
+                fontWeight: 700,
+                fontSize: 8.5,
+              }}
+            >
+              {nodeGlyph(type)}
+            </span>
             <span>{label}</span>
             <span className="count">{counts[type]}</span>
           </button>

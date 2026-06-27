@@ -486,7 +486,7 @@ body {
 /* === BACKLOG === (lifted from handoff Spade.html; height/overflow adapted to
    our PageHead + scrollable <main> so columns size to content) */
 .backlog-grid {
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 14px; padding: 16px 22px 22px; align-items: start;
 }
 .col {
@@ -729,19 +729,19 @@ body {
 .dec-row:hover .dec-row-open { color: var(--accent); }
 
 /* ADR detail modal */
+/* Right-docked aside (reference DecisionsView detail) — was a centered modal. */
 .dec-modal-backdrop {
-  position: fixed; inset: 0; z-index: 70; background: rgba(6, 6, 8, .62);
-  backdrop-filter: blur(3px);
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: 7vh 20px 40px; overflow-y: auto;
+  position: fixed; inset: 0; z-index: 70; background: rgba(6, 6, 8, .50);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: stretch; justify-content: flex-end;
   animation: ask-fade .16s ease;
 }
 .dec-modal {
-  width: 760px; max-width: 100%;
-  background: var(--bg-1); border: 1px solid var(--line-strong); border-radius: 16px;
-  box-shadow: 0 30px 80px -28px rgba(0, 0, 0, .8);
-  padding: 20px 24px 26px;
-  animation: ask-pop .26s cubic-bezier(.16, 1, .3, 1);
+  width: 560px; max-width: 100%; height: 100%;
+  background: var(--bg-1); border-left: 1px solid var(--line-strong);
+  box-shadow: -30px 0 80px -28px rgba(0, 0, 0, .8);
+  padding: 20px 24px 26px; overflow-y: auto;
+  animation: ask-slide .22s cubic-bezier(.16, 1, .3, 1);
 }
 .dec-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dec-modal-head-left { display: flex; align-items: center; gap: 10px; }
@@ -883,10 +883,20 @@ body {
 .acct-card {
   background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px;
   padding: 12px 16px; margin-bottom: 8px;
-  display: grid; grid-template-columns: 14px 1fr auto; gap: 14px; align-items: center;
+  display: grid; grid-template-columns: 28px 1fr auto; gap: 14px; align-items: center;
 }
 .acct-card:hover { border-color: var(--line-strong); }
 .acct-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line-strong); }
+.acct-glyph {
+  width: 28px; height: 28px; border-radius: 7px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; border: 1px solid;
+}
+.acct-state {
+  font-size: 10.5px; color: var(--text-3); flex: none;
+  display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+}
+.acct-state-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
 .acct-id { min-width: 0; }
 .acct-label {
   font-size: 13px; color: var(--text); font-weight: 500;
@@ -909,12 +919,30 @@ body {
 
 /* Ask the brain — right-side chat dock */
 /* ===== Ask the brain — floating, draggable glass companion ===== */
+/* Default: docked bottom-right (reference). Dragging (.placed) overrides via
+   inline left/top. */
 .ask-float {
-  position: fixed; z-index: 61; top: 16px; left: 50%;
-  transform: translateX(-50%);
-  width: 540px; max-width: 94vw;
+  position: fixed; z-index: 61; bottom: 18px; right: 18px;
+  width: 440px; max-width: 94vw;
 }
-.ask-float.placed { transform: none; } /* dragged → inline left/top take over */
+.ask-float.placed { top: auto; } /* dragged → inline left/top take over */
+.ask-float-inner { align-items: stretch !important; }
+
+/* Bottom-right launcher shown when the dock is closed. */
+.ask-trigger {
+  position: fixed; z-index: 61; bottom: 18px; right: 18px;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  color: #100b22; font-size: 12.5px; font-weight: 600;
+  border: none; cursor: pointer;
+  box-shadow: 0 8px 28px -8px rgba(142, 125, 255, .6);
+}
+.ask-trigger:hover { filter: brightness(1.05); }
+.ask-trigger-kbd {
+  font-size: 9.5px; padding: 1px 5px; border-radius: 5px;
+  background: rgba(16, 11, 34, .18); color: #100b22;
+}
 .ask-float-inner {
   display: flex; flex-direction: column; align-items: center; gap: 9px;
   animation: ask-pop .28s cubic-bezier(.16, 1, .3, 1);
@@ -1018,8 +1046,19 @@ body {
   .ask-thinking-text, .ask-thinking-dot { animation: none; }
 }
 
+/* Avatar + bubble row (reference Message anatomy). */
+.ask-msg-row { display: flex; gap: 8px; align-items: flex-start; max-width: 94%; }
+.ask-msg-row-you { align-self: flex-end; flex-direction: row-reverse; }
+.ask-msg-row-brain { align-self: flex-start; }
+.ask-msg-avatar {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .02em; margin-top: 2px;
+}
+.ask-msg-avatar.brain { background: rgba(201,184,255,.14); color: var(--accent); border: 1px solid rgba(201,184,255,.34); }
+.ask-msg-avatar.you { background: var(--bg-3); color: var(--text-3); border: 1px solid var(--line-2); }
 .ask-msg {
-  max-width: 86%; padding: 9px 12px; border-radius: 10px;
+  max-width: 100%; padding: 9px 12px; border-radius: 10px;
   font-size: 13px; line-height: 1.5; word-break: break-word;
 }
 /* User bubbles keep terminal-style whitespace; brain bubbles render Markdown
@@ -1147,3 +1186,85 @@ body {
 .ask-send-icon { transform: rotate(-90deg); }
 @keyframes ask-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ask-slide { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* === Brain Explorer (PR-05) — reference detail-first 3-column layout.
+   bx-* are scoped under .brain-explorer so they don't collide with NodeInfo's
+   pre-existing bx-detail / bx-rel-* styles used by the Graph view. === */
+.subtabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.brain-search { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-1); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; min-width: 320px; }
+.brain-search input { background: transparent; border: none; color: var(--text); outline: none; font: inherit; flex: 1; font-size: 12.5px; }
+.brain-search input::placeholder { color: var(--text-4); }
+
+.brain-explorer { display: grid; grid-template-columns: 220px minmax(0, 1fr) 280px; flex: 1; min-height: 0; overflow: hidden; }
+.brain-explorer .bx-tree { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 0 18px; background: var(--bg); }
+.brain-explorer .bx-tree-h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding: 6px 16px 8px; font-family: var(--mono); }
+.brain-explorer .bx-feature { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; padding: 5px 16px; font-size: 12.5px; cursor: pointer; color: var(--text-2); border-left: 2px solid transparent; }
+.brain-explorer .bx-feature:hover { background: var(--bg-1); color: var(--text); }
+.brain-explorer .bx-feature.on { background: linear-gradient(90deg, rgba(201,184,255,.08), transparent); border-left-color: var(--accent); color: var(--text); }
+.brain-explorer .bx-chevron { color: var(--text-4); font-size: 9px; }
+.brain-explorer .bx-feature.on .bx-chevron { color: var(--accent); }
+.brain-explorer .bx-fname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brain-explorer .bx-fcounts { display: inline-flex; gap: 5px; font-family: var(--mono); font-size: 10.5px; }
+.brain-explorer .bx-fcounts span { opacity: .85; }
+.brain-explorer .bx-index-row { display: flex; gap: 8px; align-items: center; padding: 5px 16px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.brain-explorer .bx-index-row:hover { background: var(--bg-1); color: var(--text); }
+.brain-explorer .bx-detail { overflow-y: auto; padding: 24px 32px 40px; background: var(--bg); font-size: 13px; color: var(--text-2); }
+.brain-explorer .bx-detail-h { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.brain-explorer .bx-glyph { width: 36px; height: 36px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 600; font-size: 16px; border: 1px solid; flex: none; }
+.brain-explorer .bx-title { margin: 4px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; color: var(--text); }
+.brain-explorer .bx-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; }
+.brain-explorer .bx-keys > div { padding: 10px 16px; display: flex; flex-direction: column; gap: 3px; border-right: 1px solid var(--line); font-size: 12.5px; color: var(--text); }
+.brain-explorer .bx-keys > div:last-child { border-right: none; }
+.brain-explorer .bx-keys .k { font-family: var(--mono); font-size: 10.5px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
+.brain-explorer .bx-section-h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); margin: 26px 0 10px; font-family: var(--mono); }
+.brain-explorer .bx-prose { font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
+.brain-explorer .bx-relations { border-left: 1px solid var(--line); background: var(--bg-1); overflow-y: auto; padding: 18px 16px 24px; }
+.brain-explorer .bx-rel-h { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding-bottom: 14px; margin-bottom: 4px; font-family: var(--mono); }
+.brain-explorer .bx-anchor { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px 14px; margin-bottom: 18px; }
+.brain-explorer .bx-anchor-center { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid; border-radius: 6px; background: var(--bg-1); font-family: var(--mono); font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+.brain-explorer .bx-anchor-label { color: var(--text); font-family: var(--sans); font-weight: 500; font-size: 13.5px; letter-spacing: -0.005em; }
+.brain-explorer .bx-anchor-spokes { display: flex; flex-direction: column; gap: 0; }
+.brain-explorer .bx-spoke { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 10px; border-left: 1px solid var(--line); margin-left: 10px; position: relative; }
+.brain-explorer .bx-spoke::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; height: 1px; background: var(--line); }
+.brain-explorer .bx-spoke-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; margin-left: 8px; }
+.brain-explorer .bx-rel-divider { height: 1px; background: var(--line); margin: 14px 0; }
+.brain-explorer .bx-rel-group { display: block; margin-bottom: 14px; }
+.brain-explorer .bx-rel-group-h { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); padding: 4px 4px; margin-bottom: 4px; font-family: var(--mono); letter-spacing: .04em; font-weight: 500; }
+.brain-explorer .bx-rel-group-h > span:first-child { width: 16px; text-align: center; font-weight: 600; }
+.brain-explorer .bx-rel-item { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 5px; cursor: pointer; font-size: 12.5px; color: var(--text-2); }
+.brain-explorer .bx-rel-item:hover { background: var(--bg-2); color: var(--text); }
+.brain-explorer .bx-rel-bullet { width: 5px; height: 5px; border-radius: 50%; opacity: .9; }
+.brain-explorer .bx-rel-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brain-explorer .bx-rel-id { font-size: 10px; color: var(--text-4); }
+
+/* === Orchestrator table (PR-08) — reference inline-expanding pipeline table.
+   Columns: chevron · Task · Title · Pipeline · Account · Status (Cost/ETA
+   omitted — no real data). === */
+.orch-table { display: grid; grid-template-columns: 24px 110px 1fr 1.4fr 110px 90px; background: var(--bg-1); }
+.orch-table .th, .orch-table .td { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.orch-table .th { color: var(--text-4); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; background: var(--bg); position: sticky; top: 0; z-index: 1; }
+.orch-table .td .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.orch-table .row { display: contents; cursor: pointer; }
+.orch-table .row:hover .td { background: var(--bg-2); }
+.orch-table .row.open .td { background: rgba(201,184,255,.04); border-bottom-color: transparent; }
+.orch-chev { color: var(--text-4); font-size: 9px; transition: transform .15s ease; display: inline-block; }
+.orch-table .row.open .orch-chev { color: var(--accent); }
+.orch-table .orch-detail { grid-column: 1 / -1; }
+
+/* === Active tasks (PR-09) — live pipeline cards with a progress rail. === */
+.active-list { padding: 16px 22px 22px; overflow-y: auto; }
+.active-card { background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.active-card .ac-head { padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 14px; align-items: center; cursor: pointer; transition: background .15s; }
+.active-card .ac-head:hover { background: var(--bg-2); }
+.active-card .progress-rail { height: 4px; background: var(--bg-3); position: relative; overflow: hidden; }
+.active-card .progress-rail .fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--blue), var(--accent)); transition: width .3s ease; }
+.active-card .progress-rail .pulse { position: absolute; top: 0; bottom: 0; width: 60px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent); animation: shimmer 2.4s infinite; }
+.active-card .ac-body { padding: 14px 16px; border-top: 1px solid var(--line); display: none; }
+.active-card.open .ac-body { display: block; }
+.ac-stages { display: flex; gap: 8px; }
+.ac-stage-mini { flex: 1; padding: 8px 10px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line); font-size: 11.5px; display: flex; flex-direction: column; gap: 2px; }
+.ac-stage-mini.done { border-color: rgba(122,209,154,.3); }
+.ac-stage-mini.run { border-color: rgba(122,182,230,.3); background: linear-gradient(180deg, rgba(122,182,230,.06), var(--bg-2)); }
+.ac-stage-mini.gate { border-color: rgba(230,184,106,.4); background: linear-gradient(180deg, rgba(230,184,106,.07), var(--bg-2)); }
+.ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
