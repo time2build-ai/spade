@@ -486,7 +486,7 @@ body {
 /* === BACKLOG === (lifted from handoff Spade.html; height/overflow adapted to
    our PageHead + scrollable <main> so columns size to content) */
 .backlog-grid {
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 14px; padding: 16px 22px 22px; align-items: start;
 }
 .col {

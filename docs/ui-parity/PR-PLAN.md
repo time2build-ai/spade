@@ -63,11 +63,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `brain-explorer.spec.ts` — 3 columns; default-first-feature record; tree selection; relations navigation; anchor glyph; Explorer↔Graph switch. **6 green** (mocks the brain API). Full suite: e2e 34✓ / vitest 140✓.
 - 🧑 **Manual:** open Brain → Explorer; click features in the left tree and neighbors in the right map; confirm the center record + anchor update; toggle the Graph subtab.
 
-### PR-06 · Backlog parity
-**Scope (from [§04](./sections/04-backlog-task-sprints.md)):** 4 columns (Ready / In progress / Review / Done) with **blocked routed to an amber banner** (not a 5th column); add head actions (Filter, Suggest priority, Run sprint); align card anatomy (priority dot, feature tag, status, assignee).
-**Files:** `app/backlog/page.tsx`, `components/backlog/Board.tsx`, `components/backlog/TaskCard.tsx`.
-- 🤖 **Automated:** `backlog.spec.ts` — exactly 4 columns with reference labels/colors/order; an amber blocked banner appears when a blocked task exists; head action buttons present; card shows priority+feature+assignee.
-- 🧑 **Manual:** compare board columns and a card vs reference; confirm blocked banner styling.
+### PR-06 · Backlog parity *(DONE)*
+**Scope (from [§04](./sections/04-backlog-task-sprints.md)):** 4 columns (Ready / In progress / Review / Shipped) with **blocked routed to an amber banner** (not a 5th column); "Run sprint" head action → orchestrator. The card anatomy (priority dot, id, feature, real brain-node intel bar + chips, "unassigned" footer) was already honest from prior work.
+**No-fabrication trims:** the banner shows only the real blocked task id + title (+ "Open gate →"); the reference's "reviewer flagged conflict with ADR-014" narrative is omitted. **Filter** and **Suggest priority** head buttons deferred (no real filtering / AI action yet). No assignee avatars (API has no assignee).
+**Files:** `components/backlog/Board.tsx` (5→4 cols), `components/backlog/BlockedBanner.tsx` (new), `app/backlog/page.tsx`, `app/globals.css` (`.backlog-grid` → 4 cols), `components/backlog/__tests__/TaskCard.test.tsx` (4-col).
+- 🤖 **Automated:** `backlog.spec.ts` — exactly 4 columns, no Blocked column, blocked banner with gate link, blocked task absent from columns, "Run sprint"→/orchestrator, per-column counts. **5 green** (mocks the API). Suite: e2e 39✓ / vitest 140✓.
+- 🧑 **Manual:** open Backlog; confirm 4 columns, that a blocked task shows the amber banner (with "Open gate →") instead of a column, and "Run sprint" goes to the orchestrator.
 
 ### PR-07 · Task detail: evidence + rail + head actions
 **Scope:** add the `.feedback-strip` 4-stat tiles, `.quote-card` verbatim quotes, `.lr-meta` right column, tracked-metric + sparkline card, "Will write back" prose, head actions; rail meta rows (Assignee/Sprint/Estimate/Branch).
