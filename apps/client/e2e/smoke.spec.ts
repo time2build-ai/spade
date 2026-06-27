@@ -11,8 +11,9 @@ test.describe("smoke", () => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
 
-    // "/" redirects to /backlog; either way the shell must mount.
-    await page.goto("/");
+    // "/" is now the full-bleed home (sidebar hidden); use a project route to
+    // assert the normal shell mounts.
+    await page.goto("/backlog");
 
     await expect(sidebar(page)).toBeVisible();
     // A couple of known built nav items prove the sidebar config rendered.
