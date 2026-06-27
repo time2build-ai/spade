@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { PageHead, Priority, Chip } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 import { OriginCard } from "@/components/task/OriginCard";
 import { EvidenceSection } from "@/components/task/EvidenceSection";
 import { MetaRow } from "@/components/task/MetaRow";
@@ -14,6 +15,15 @@ import { api } from "@/lib/api";
 import { groupNodesByType, indexNodesById, resolveNodes } from "@/lib/adapters";
 
 const PRIORITY_LABEL = ["critical", "high", "medium", "low"] as const;
+
+/** Status → dot color, matching the backlog column colors. */
+const STATUS_COLOR: Record<string, string> = {
+  ready: "var(--text-4)",
+  in_progress: "var(--blue)",
+  review: "var(--accent)",
+  shipped: "var(--green)",
+  blocked: "var(--amber)",
+};
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return (
@@ -46,8 +56,26 @@ export default function TaskPage() {
   const byId = indexNodesById(brain?.nodes ?? []);
   const grouped = groupNodesByType(resolveNodes(task?.nodes ?? [], byId));
 
+  // Head actions appear once the task is loaded. No-fabrication: the status
+  // chip is the real task status; "View in graph"/"Resume pipeline" are real
+  // navigation (to the brain and the orchestrator), matching the reference.
+  const headerActions = task ? (
+    <>
+      <span className="chip" data-testid="task-status-chip">
+        <span className="d" style={{ background: STATUS_COLOR[task.status] ?? "var(--text-4)" }} />
+        {task.status}
+      </span>
+      <Link href="/brain" className="btn">
+        <Icon name="graph" size={13} /> View in graph
+      </Link>
+      <Link href="/orchestrator" className="btn primary">
+        <Icon name="play" size={13} /> Resume pipeline
+      </Link>
+    </>
+  ) : undefined;
+
   const header = (
-    <PageHead>
+    <PageHead actions={headerActions}>
       <div className="breadcrumb">
         <Link href="/backlog">Backlog</Link> / <b>{id ?? "…"}</b>
       </div>

@@ -70,11 +70,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `backlog.spec.ts` — exactly 4 columns, no Blocked column, blocked banner with gate link, blocked task absent from columns, "Run sprint"→/orchestrator, per-column counts. **5 green** (mocks the API). Suite: e2e 39✓ / vitest 140✓.
 - 🧑 **Manual:** open Backlog; confirm 4 columns, that a blocked task shows the amber banner (with "Open gate →") instead of a column, and "Run sprint" goes to the orchestrator.
 
-### PR-07 · Task detail: evidence + rail + head actions
-**Scope:** add the `.feedback-strip` 4-stat tiles, `.quote-card` verbatim quotes, `.lr-meta` right column, tracked-metric + sparkline card, "Will write back" prose, head actions; rail meta rows (Assignee/Sprint/Estimate/Branch).
-**Files:** `app/task/[id]/page.tsx`, `components/task/*` (+ new `FeedbackStrip.tsx`, `QuoteCard.tsx`, `Sparkline.tsx`).
-- 🤖 **Automated:** `task-detail.spec.ts` — feedback strip renders 4 stat tiles; ≥1 quote card; right rail shows Assignee/Sprint/Estimate/Branch; sparkline svg present.
-- 🧑 **Manual:** open task SPD-142; compare evidence block, rail, and head actions vs reference.
+### PR-07 · Task detail: head actions *(honest subset — DONE)*
+**Scope:** our task detail already had the honest scaffold (breadcrumb, priority+feature chips, title, Origin from real quote/source, per-type evidence sections from real brain nodes, Properties rail, Activity from comments). The legitimate delta was the **page-head actions**: a real **status chip** + **"View in graph"** (→ /brain) + **"Resume pipeline"** (→ /orchestrator).
+**No-fabrication trims (the bulk of the reference TaskView):** the `.feedback-strip` 4-stat tiles, `.quote-card` verbatim quotes, tracked-metric + sparkline card, "Will write back" prose, and the Assignee/Sprint/Estimate/Branch rail rows are **all invented demo data** — omitted until the backend exposes them.
+**Files:** `app/task/[id]/page.tsx`.
+- 🤖 **Automated:** `task-detail.spec.ts` — status chip = real status, "View in graph"→/brain, "Resume pipeline"→/orchestrator, breadcrumb→/backlog. **4 green** (mocks the API). Suite: e2e 43✓ / vitest 140✓.
+- 🧑 **Manual:** open a task; confirm the status chip + the two head-action buttons navigate to the brain / orchestrator.
 
 ### PR-08 · Orchestrator: table rewrite + expanding detail + live log *(large)*
 **Scope (from [§05](./sections/05-orchestrator.md)):** replace card-list + side terminal with the reference **full-width sortable table** (priority dot / title / cost / ETA), **inline-expanding detail** (progress bar, Context + Files-touched cards, animated streaming Live-log terminal with colored `lvl-*` lines + blinking cursor), and a **6-cell KPI strip with sub-lines**. Reuse the already-matching `orch-d-stage` and `stages-mini` markup.
