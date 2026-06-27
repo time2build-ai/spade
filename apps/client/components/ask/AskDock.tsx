@@ -298,7 +298,23 @@ export function AskDock() {
     }
   }
 
-  if (!open) return null;
+  // Closed → a persistent bottom-right trigger pill (reference ChatBubble
+  // launcher). Clicking it (or ⌘K) opens the dock.
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="ask-trigger"
+        data-testid="ask-trigger"
+        aria-label="Ask the brain"
+        onClick={() => setOpen(true)}
+      >
+        <Icon name="brain" size={15} />
+        <span className="ask-trigger-label">Ask the brain</span>
+        <span className="ask-trigger-kbd mono">⌘K</span>
+      </button>
+    );
+  }
 
   return (
     <div

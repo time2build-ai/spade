@@ -115,11 +115,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `ask-messages.spec.ts` — a real send round-trips (mocked orchestrator); user + assistant rows render avatars; user row is right of the assistant row. **2 green**. Suite: e2e 56✓ / vitest 142✓.
 - 🧑 **Manual:** open the dock (⌘K / topbar), send a message; confirm the assistant bubble (left, brain avatar) vs your bubble (right, "you" avatar).
 
-### PR-14 · Ask: bubble + side-dock relocation + ⌘K *(depends on PR-13)*
-**Scope:** replace top-center glass float with the reference **bottom-right accent trigger pill → 440×620 bubble**, plus the separate **⌘K right-edge side dock (480px) with overlay**.
-**Files:** `components/ask/ChatBubble.tsx` (new), `components/ask/AskDock.tsx`, `lib/useAskDock.ts`.
-- 🤖 **Automated:** `chat-bubble.spec.ts` — trigger pill bottom-right; click expands bubble to ~440×620; `⌘K` opens a 480px side dock with overlay; Esc closes.
-- 🧑 **Manual:** click the pill (bottom-right), then `⌘K`; confirm bubble vs side-dock behaviors match reference.
+### PR-14 · Ask: bottom-right trigger pill + dock relocation *(DONE)*
+**Scope:** replaced the top-center glass float with the reference's **bottom-right accent trigger pill** (persistent launcher when closed) and docked the open panel **bottom-right** (440px). `⌘K` still toggles; dragging still overrides position.
+**Deferred:** the reference's *separate* **⌘K right-edge side-dock (480px) with overlay**, distinct from the bubble, is not split out — we keep a single bottom-right float + trigger (the dual bubble-vs-side-dock mode is a larger refactor with little honest-data benefit).
+**Files:** `components/ask/AskDock.tsx` (closed → trigger pill), `app/globals.css` (`.ask-float` bottom-right, `.ask-trigger`), `ask.test.tsx`.
+- 🤖 **Automated:** `ask-dock.spec.ts` — trigger pill bottom-right when closed; clicking opens the dock bottom-right (trigger gone); `⌘K` toggles. **3 green**. Suite: e2e 59✓ / vitest 142✓.
+- 🧑 **Manual:** confirm the bottom-right "Ask the brain" pill; click it (or ⌘K) → dock opens bottom-right; ⌘K again closes back to the pill.
 
 ### PR-15 · Ask: full page + multi-thread *(depends on PR-13)*
 **Scope:** add `/ask` route — 3-column page (thread list w/ search + pin/recent groups · ChatPanel `mode=page` · project-context/model rail). Seed `chatThreads` fixtures.
