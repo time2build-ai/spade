@@ -8,9 +8,10 @@ import { type Page, type Locator, expect } from "@playwright/test";
 
 export const sidebar = (page: Page): Locator => page.locator("aside.sidebar, aside").first();
 
-/** A sidebar nav row by its visible label. */
+/** A sidebar nav row by its visible label (items carry badges, so match by
+ *  substring on the .sb-item, not exact text). */
 export const navItem = (page: Page, label: string): Locator =>
-  sidebar(page).getByText(label, { exact: true }).first();
+  sidebar(page).locator(".sb-item", { hasText: label }).first();
 
 /** Click a built (non-"#") sidebar item and wait for the route to settle. */
 export async function gotoNav(page: Page, label: string): Promise<void> {

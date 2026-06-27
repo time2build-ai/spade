@@ -353,12 +353,15 @@ body {
 body.home-mode .app { grid-template-columns: 1fr; }
 body.home-mode .sidebar { display: none; }
 body.home-mode .app > main { grid-column: 1 / -1; }
-/* proj-only / ws-only sidebar group visibility */
-.sidebar .ws-only, .sidebar .ws-only-h { display: none; }
-.workspace-level:not(.home-mode) .sidebar .ws-only { display: flex; }
-.workspace-level:not(.home-mode) .sidebar .ws-only-h { display: flex; }
-.workspace-level:not(.home-mode) .sidebar .proj-only,
+/* proj-only / ws-only sidebar group visibility. Wrappers are block; header
+   cards (*-h) keep .sb-proj-head's flex. Default = project mode. */
+.sidebar .ws-only { display: none; }
+.sidebar .ws-only-h { display: none; }
+.sidebar .proj-only { display: block; }
+.workspace-level:not(.home-mode) .sidebar .proj-only { display: none !important; }
 .workspace-level:not(.home-mode) .sidebar .proj-only-h { display: none !important; }
+.workspace-level:not(.home-mode) .sidebar .ws-only { display: block; }
+.workspace-level:not(.home-mode) .sidebar .ws-only-h { display: flex; }
 /* lavender wash at workspace level */
 .workspace-level .topbar { background: linear-gradient(180deg, rgba(201,184,255,.05), var(--bg)); }
 .workspace-level .sidebar { background: linear-gradient(180deg, rgba(201,184,255,.04), var(--bg)); }
