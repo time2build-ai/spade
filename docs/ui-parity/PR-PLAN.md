@@ -91,11 +91,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `active-tasks.spec.ts` — only non-shipped pipelines listed; progress rail = 25% for 1/4 done; expand shows 4 real stage roles; Open→/task/T-1. **4 green** (mocks the API). Suite: e2e 50✓ / vitest 140✓.
 - 🧑 **Manual:** open Orchestrator → "Active tasks →"; confirm only live pipelines show with progress rails; expand a card for stages; Open jumps to the task.
 
-### PR-10 · Agent Pool: account-centric grid + executions table
-**Scope (from [§06](./sections/06-agentpool-accounts.md)):** rebuild pool as **account-centric** (provider glyph avatars, role pills, usage meters, current-issue bodies) + add the **"Executions in progress"** filterable table with graph-node chips. Seed fixtures for `Account` fields (model/plan/limit/used/today/role/strengths/sessions).
-**Files:** `app/agent-pool/page.tsx`, `components/agentpool/*` (+ `ProviderAvatar.tsx`, `UsageMeter.tsx`, `ExecutionsTable.tsx`), fixtures.
-- 🤖 **Automated:** `agent-pool.spec.ts` — account cards show provider glyph + usage meter + role pill; executions table filters; node chips render.
-- 🧑 **Manual:** compare account cards and executions table vs reference.
+### PR-10 · Agent Pool: provider glyph avatars + in-use state *(honest subset — DONE)*
+**Scope:** account cards gain the reference's **provider glyph avatars** (✦ Claude / ◇ Codex / ❮❯ Cursor / ✺ Gemini / ⌘ Aider), colored per the real `account.provider`, plus an **in-use / idle state** derived from real sessions (an alive `session.account_id`).
+**No-fabrication (most of the reference Agent Pool):** role pills, **usage meters / %**, model/plan/limit, "current issue" bodies, and the entire **"Executions in progress"** table with AI-ISS ids + brain-node chips are all invented (our `Account` exposes none of those fields) — **omitted**. Our existing honest "Live agent fleet" (from real sessions) + "Provider accounts" list remain.
+**Files:** `components/agentpool/AccountCard.tsx` (provider glyph + state), `app/agent-pool/page.tsx` (in-use derivation), `app/globals.css` (`.acct-glyph`, `.acct-state`), `agentpool.test.tsx`.
+- 🤖 **Automated:** `agent-pool.spec.ts` — provider glyphs (✦/◇); account with an alive session shows "in use", others "idle". **2 green** (mocks the API). Suite: e2e 52✓ / vitest 142✓.
+- 🧑 **Manual:** open Agent Pool; confirm provider-glyph avatars + that an account with a running session shows "in use".
 
 ### PR-11 · Decisions list parity
 **Scope (from [§07](./sections/07-decisions-gate.md)):** add the All/Active/Proposed/Superseded segmented filter, status pills (incl. superseded-strike), real amber ADR ids, owner, feature + conflict chips, head actions. Add a `status` field to the decisions adapter.
