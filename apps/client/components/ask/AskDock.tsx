@@ -33,13 +33,25 @@ function MessageBubble({ msg }: { msg: Msg }) {
   // plain text so the text sits directly on `.ask-msg-text` (preserves the
   // class hook used by tests + avoids markdown wrapping short error copy).
   const asMarkdown = msg.role === "brain" && !msg.error;
+  const isYou = msg.role === "you";
+  // Avatar + bubble row (reference Message anatomy): assistant avatar on the
+  // left, user avatar on the right.
   return (
-    <div className={cls} title={msg.detail ?? undefined}>
-      <div className="ask-msg-role">{msg.role === "you" ? "You" : "Brain"}</div>
-      <div className="ask-msg-text">
-        {asMarkdown ? <Markdown>{msg.text}</Markdown> : msg.text}
+    <div className={"ask-msg-row " + (isYou ? "ask-msg-row-you" : "ask-msg-row-brain")}>
+      <span
+        className={"ask-msg-avatar " + (isYou ? "you" : "brain")}
+        data-testid="ask-msg-avatar"
+        aria-hidden="true"
+      >
+        {isYou ? "you" : <Icon name="brain" size={12} />}
+      </span>
+      <div className={cls} title={msg.detail ?? undefined}>
+        <div className="ask-msg-role">{isYou ? "You" : "Brain"}</div>
+        <div className="ask-msg-text">
+          {asMarkdown ? <Markdown>{msg.text}</Markdown> : msg.text}
+        </div>
+        {msg.detail && <div className="ask-msg-detail">{msg.detail}</div>}
       </div>
-      {msg.detail && <div className="ask-msg-detail">{msg.detail}</div>}
     </div>
   );
 }

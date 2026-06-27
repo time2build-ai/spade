@@ -1028,8 +1028,19 @@ body {
   .ask-thinking-text, .ask-thinking-dot { animation: none; }
 }
 
+/* Avatar + bubble row (reference Message anatomy). */
+.ask-msg-row { display: flex; gap: 8px; align-items: flex-start; max-width: 94%; }
+.ask-msg-row-you { align-self: flex-end; flex-direction: row-reverse; }
+.ask-msg-row-brain { align-self: flex-start; }
+.ask-msg-avatar {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .02em; margin-top: 2px;
+}
+.ask-msg-avatar.brain { background: rgba(201,184,255,.14); color: var(--accent); border: 1px solid rgba(201,184,255,.34); }
+.ask-msg-avatar.you { background: var(--bg-3); color: var(--text-3); border: 1px solid var(--line-2); }
 .ask-msg {
-  max-width: 86%; padding: 9px 12px; border-radius: 10px;
+  max-width: 100%; padding: 9px 12px; border-radius: 10px;
   font-size: 13px; line-height: 1.5; word-break: break-word;
 }
 /* User bubbles keep terminal-style whitespace; brain bubbles render Markdown

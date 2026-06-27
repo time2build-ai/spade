@@ -108,11 +108,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `decisions-detail.spec.ts` — opening a decision shows a right-docked aside (bounding box on the right edge) with the real label + markdown; Escape closes. **2 green** (mocks the API). Suite: e2e 54✓ / vitest 142✓.
 - 🧑 **Manual:** open a decision; confirm the detail slides in as a right-side aside (not centered) with the markdown + linked work/connections; Escape closes.
 
-### PR-13 · Ask: shared ChatPanel + message anatomy *(foundation for Ask)*
-**Scope (from [§08](./sections/08-ask-chat.md)):** extract a single `ChatPanel(mode='page'|'dock'|'bubble')` from `AskDock`; rich message anatomy (avatars, who+timestamp header, right-aligned user vs left assistant, citation pills); keep our thinking indicator + Markdown.
-**Files:** new `components/ask/ChatPanel.tsx`, `components/ask/Message.tsx`; refactor `AskDock.tsx`, `lib/useAskDock.ts`.
-- 🤖 **Automated:** `chat-panel.spec.ts` — user vs assistant messages align opposite sides; avatars + timestamps render; citation pill renders when present.
-- 🧑 **Manual:** open the dock, send a message; confirm bubble alignment/avatars match reference.
+### PR-13 · Ask: message anatomy (avatars + alignment) *(DONE)*
+**Scope (from [§08](./sections/08-ask-chat.md)):** added the reference Message anatomy to the dock's bubbles — **avatar + who-header + opposite-side alignment** (assistant avatar left, user avatar right). Our alignment + role label already existed; this adds the avatars and the avatar/bubble row.
+**No-fabrication:** **timestamps** (our messages have none), **citation pills**, and **plan/diff/action cards** are omitted — the orchestrator doesn't emit that structure (those are PR-16, data-blocked). The full `ChatPanel(mode=…)` **extraction** is an internal refactor with no UI delta — deferred to when the bubble/side-dock (PR-14) actually need a shared panel.
+**Files:** `components/ask/AskDock.tsx` (MessageBubble → avatar+bubble row), `app/globals.css` (`.ask-msg-row`, `.ask-msg-avatar`).
+- 🤖 **Automated:** `ask-messages.spec.ts` — a real send round-trips (mocked orchestrator); user + assistant rows render avatars; user row is right of the assistant row. **2 green**. Suite: e2e 56✓ / vitest 142✓.
+- 🧑 **Manual:** open the dock (⌘K / topbar), send a message; confirm the assistant bubble (left, brain avatar) vs your bubble (right, "you" avatar).
 
 ### PR-14 · Ask: bubble + side-dock relocation + ⌘K *(depends on PR-13)*
 **Scope:** replace top-center glass float with the reference **bottom-right accent trigger pill → 440×620 bubble**, plus the separate **⌘K right-edge side dock (480px) with overlay**.
