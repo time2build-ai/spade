@@ -41,11 +41,13 @@ describe("nodeTypeCounts", () => {
 
 describe("nodeColor", () => {
   it("maps each type to its token var", () => {
+    // Reference typeMeta: feature #c9b8ff, decision #e6b86a, convention #e69bb6,
+    // feedback #7adcc7 (teal), bug #e87d7d, metric #7ab6e6 (blue).
     expect(nodeColor("feature")).toBe("var(--accent)");
     expect(nodeColor("decision")).toBe("var(--amber)");
-    expect(nodeColor("feedback")).toBe("var(--blue)");
+    expect(nodeColor("feedback")).toBe("var(--teal)");
     expect(nodeColor("bug")).toBe("var(--red)");
-    expect(nodeColor("metric")).toBe("var(--teal)");
+    expect(nodeColor("metric")).toBe("var(--blue)");
     expect(nodeColor("convention")).toBe("var(--pink)");
   });
 });

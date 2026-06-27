@@ -49,10 +49,11 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 
 ## Phase 2 — Restyle existing screens to match
 
-### PR-04 · Brain: color fix + node glyphs + edge style *(quick win)*
-**Scope (from [§03](./sections/03-brain-graphissues.md)):** fix the **swapped feedback/metric colors**; introduce a shared `typeMeta` (color + glyph per node type); render nodes as **circles with F/D/C/U/B/M glyphs** and **straight edges with relation labels** (reference style).
-**Files:** `components/brain/GraphCanvas.tsx`, `components/brain/BrainLegend.tsx`, new `lib/brainTypeMeta.ts`.
-- 🤖 **Automated:** `brain-style.spec.ts` — feedback node uses teal token / metric uses blue (assert computed fill); node glyph letters present; legend colors match `typeMeta`.
+### PR-04 · Brain: color fix + node glyphs + shared typeMeta *(quick win — DONE)*
+**Scope (from [§03](./sections/03-brain-graphissues.md)):** fix the **swapped feedback/metric colors**; introduce a shared `NODE_TYPE_META` (color + F/D/C/U/B/M glyph + label) in `lib/adapters.ts`; render the glyph inside each node's dot and in the legend swatches.
+**Deferred to PR-05:** changing node shape pill→**circle** and edges bezier→**straight with relation labels** — those are part of the Explorer rebuild and would otherwise be rewritten twice / risk regressing the current focus-highlight logic.
+**Files:** `lib/adapters.ts` (`NODE_TYPE_META`, `nodeColor`, `nodeGlyph`), `components/brain/GraphCanvas.tsx`, `components/brain/BrainLegend.tsx`, `lib/__tests__/brainAdapters.test.ts` (corrected to reference colors).
+- 🤖 **Automated:** `brain-style.spec.ts` — legend + node glyphs (F/D/C/U/B/M); feedback=teal `rgb(122,220,199)`, metric=blue `rgb(122,182,230)` (computed); regression guard for the swap. **8 green** (mocks the brain API).
 - 🧑 **Manual:** open Brain; confirm node colors/glyphs and edge labels match the reference legend.
 
 ### PR-05 · Brain: rebuild as 3-column Explorer *(large; depends on PR-04)*
