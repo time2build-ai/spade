@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Spade — Multi-Project Test &amp; Score Scenario</title>
+<title>Spade — Guided Test &amp; Score</title>
 <style>
   :root{
     --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22; --bg-4:#232329;
@@ -15,369 +15,380 @@
     --sans:"Inter Tight",ui-sans-serif,system-ui,-apple-system,sans-serif;
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14.5px;line-height:1.6;-webkit-font-smoothing:antialiased;}
   a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
   code,.mono{font-family:var(--mono);font-size:.85em}
   code{background:var(--bg-3);padding:1px 5px;border-radius:4px;color:var(--text-2)}
-  .wrap{max-width:1020px;margin:0 auto;padding:0 22px 120px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px 130px}
+  kbd{font-family:var(--mono);font-size:.8em;background:var(--bg-1);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--text)}
 
-  header.bar{position:sticky;top:0;z-index:20;background:rgba(11,11,13,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
-  .bar-inner{max-width:1020px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em}
+  /* sticky scoreboard */
+  header.bar{position:sticky;top:0;z-index:30;background:rgba(11,11,13,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+  .bar-inner{max-width:920px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
   .brand .mark{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#d2c3ff,#8e7dff)}
-  .score-box{display:flex;align-items:center;gap:14px;margin-left:auto;flex-wrap:wrap}
-  .score-num{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-.02em}
-  .score-sub{font-family:var(--mono);font-size:11px;color:var(--text-3)}
-  .meter{width:180px;height:8px;border-radius:999px;background:var(--bg-3);overflow:hidden;border:1px solid var(--line)}
+  .score-box{display:flex;align-items:center;gap:12px;margin-left:auto;flex-wrap:wrap}
+  .meter{width:150px;height:8px;border-radius:999px;background:var(--bg-3);overflow:hidden;border:1px solid var(--line)}
   .meter>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .25s}
-  .pills{display:flex;gap:8px;font-family:var(--mono);font-size:11px}
-  .pill{padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--text-3)}
-  .pill.pass{color:var(--green);border-color:rgba(122,209,154,.3);background:rgba(122,209,154,.08)}
-  .pill.partial{color:var(--amber);border-color:rgba(230,184,106,.3);background:rgba(230,184,106,.07)}
-  .pill.fail{color:var(--red);border-color:rgba(232,125,125,.3);background:rgba(232,125,125,.07)}
+  .score-num{font-family:var(--mono);font-size:20px;font-weight:600}
+  .score-sub{font-family:var(--mono);font-size:10.5px;color:var(--text-3)}
 
-  .intro{padding:28px 0 8px}
-  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
-  .lede{color:var(--text-2);max-width:74ch}
-  .meta-row{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0 6px}
+  /* tab bar */
+  nav.tabs{position:sticky;top:53px;z-index:25;background:rgba(11,11,13,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);overflow-x:auto;}
+  .tabs-inner{max-width:920px;margin:0 auto;padding:0 16px;display:flex;gap:2px}
+  .tab{flex:none;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-3);font:inherit;font-size:13px;padding:11px 13px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap}
+  .tab:hover{color:var(--text-2)}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .tab .tnum{font-family:var(--mono);font-size:10px;width:18px;height:18px;display:inline-grid;place-items:center;border-radius:50%;background:var(--bg-3);color:var(--text-3)}
+  .tab.active .tnum{background:var(--accent);color:#1a1730}
+  .tab .tsc{font-family:var(--mono);font-size:10px;color:var(--text-4)}
+
+  .panel{display:none;padding-top:26px}
+  .panel.active{display:block}
+  h1{font-size:24px;margin:0 0 6px;letter-spacing:-.02em}
+  h2.ph{font-size:19px;margin:0 0 4px;letter-spacing:-.01em}
+  .lede{color:var(--text-2);max-width:72ch}
+  .blurb{color:var(--text-3);margin:6px 0 18px;max-width:72ch}
+
+  .note{background:var(--bg-1);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;margin:16px 0;color:var(--text-2)}
+  .note.warn{border-left-color:var(--amber)}
+  .note.tip{border-left-color:var(--green)}
+
+  .meta-row{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0}
   .field{display:flex;flex-direction:column;gap:4px}
   .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4)}
-  .field input{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:6px 9px;color:var(--text);font-family:var(--sans);outline:none}
+  .field input{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:7px 9px;color:var(--text);font-family:var(--sans);outline:none}
   .field input:focus{border-color:var(--accent)}
-  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
-  .btn{font:inherit;font-size:12px;cursor:pointer;border:1px solid var(--line);background:var(--bg-1);color:var(--text-2);padding:6px 12px;border-radius:6px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+  .btn{font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);background:var(--bg-1);color:var(--text-2);padding:8px 14px;border-radius:7px}
   .btn:hover{background:var(--bg-2);color:var(--text)}
   .btn.primary{background:linear-gradient(180deg,#d2c3ff,#b6a3ff);color:#1a1730;border:none;font-weight:600}
+  .btn.big{font-size:14px;padding:10px 18px}
 
-  .note{background:var(--bg-1);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;margin:18px 0;color:var(--text-2)}
-  .note.warn{border-left-color:var(--amber)}
+  .howto{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+  @media(max-width:720px){.howto{grid-template-columns:1fr}}
+  .howto .h{background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .howto .h .n{font-family:var(--mono);color:var(--accent);font-size:12px}
+  .howto .h b{display:block;margin:6px 0 3px}
+  .howto .h span{color:var(--text-3);font-size:12.5px}
 
-  /* projects-under-test legend */
-  .legend{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+  .legend{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
   @media(max-width:760px){.legend{grid-template-columns:1fr}}
   .pcard{background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:14px}
   .pcard .slot{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(201,184,255,.08);border:1px solid rgba(201,184,255,.22);padding:1px 7px;border-radius:4px}
-  .pcard .role{font-size:11px;color:var(--text-3);margin:8px 0 10px}
-  .pcard .role b{color:var(--text-2)}
-  .pcard input{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;color:var(--text);font-family:var(--sans);outline:none;font-size:12.5px;margin-top:6px}
+  .pcard .role{font-size:12px;color:var(--text-3);margin:8px 0 4px}.pcard .role b{color:var(--text-2)}
+  .pcard input{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;color:var(--text);font-family:var(--sans);outline:none;font-size:12.5px;margin-top:8px}
   .pcard input:focus{border-color:var(--accent)}
   .pcard .ph{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin-top:8px;display:block}
 
-  section.area{margin:32px 0 0;scroll-margin-top:80px}
-  .area-head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:6px}
-  .area-head h2{font-size:16px;margin:0;letter-spacing:-.01em}
-  .area-head .eyebrow{font-family:var(--mono);font-size:11px;color:var(--text-4)}
-  .area-head .area-score{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-3)}
-  .area-blurb{color:var(--text-3);font-size:12.5px;margin:8px 0 14px}
-
-  .case{background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:0 0 14px}
-  .case[data-state="pass"]{border-color:rgba(122,209,154,.35)}
-  .case[data-state="partial"]{border-color:rgba(230,184,106,.35)}
-  .case[data-state="fail"]{border-color:rgba(232,125,125,.4)}
+  .case{background:var(--bg-1);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:0 0 16px}
+  .case[data-state="pass"]{border-color:rgba(122,209,154,.4)}
+  .case[data-state="partial"]{border-color:rgba(230,184,106,.4)}
+  .case[data-state="fail"]{border-color:rgba(232,125,125,.45)}
   .case-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
   .case-id{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(201,184,255,.08);border:1px solid rgba(201,184,255,.22);padding:1px 7px;border-radius:4px}
-  .case-title{font-size:14.5px;font-weight:600}
-  .case-goal{color:var(--text-3);font-size:12.5px;margin:2px 0 12px}
-  .case h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:14px 0 6px}
-  .case ol{margin:0;padding-left:20px}
-  .case ol li{margin:3px 0;color:var(--text-2)}
-  .case .pre{color:var(--text-3);font-size:12.5px}
-  .expect{background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:9px 12px;color:var(--text-2);font-size:13px}
+  .case-title{font-size:15.5px;font-weight:600}
+  .case-goal{color:var(--text-3);font-size:13px;margin:3px 0 14px}
+  .case h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:14px 0 7px;display:flex;align-items:center;gap:7px}
+  .case h4 .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .case h4.exp .dot{background:var(--green)}
+  .case ol{margin:0;padding-left:22px}
+  .case ol li{margin:5px 0;color:var(--text-2)}
+  .expect{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:11px 14px;color:var(--text-2)}
   .expect b{color:var(--text)}
 
-  .score-ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
-  .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-  .seg label{padding:5px 12px;font-size:12px;cursor:pointer;color:var(--text-3);border-right:1px solid var(--line);user-select:none}
-  .seg label:last-child{border-right:none}
-  .seg input{display:none}
-  .seg label.sel-pass{background:rgba(122,209,154,.14);color:var(--green)}
-  .seg label.sel-partial{background:rgba(230,184,106,.14);color:var(--amber)}
-  .seg label.sel-fail{background:rgba(232,125,125,.14);color:var(--red)}
+  .score-ctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+  .score-ctl .q{font-size:12px;color:var(--text-4)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg label{padding:7px 14px;font-size:13px;cursor:pointer;color:var(--text-3);border-right:1px solid var(--line);user-select:none}
+  .seg label:last-child{border-right:none}.seg input{display:none}
+  .seg label.sel-pass{background:rgba(122,209,154,.16);color:var(--green)}
+  .seg label.sel-partial{background:rgba(230,184,106,.16);color:var(--amber)}
+  .seg label.sel-fail{background:rgba(232,125,125,.16);color:var(--red)}
   .seg label.sel-skip{background:var(--bg-3);color:var(--text-2)}
   .notes{flex:1;min-width:220px}
-  .notes input{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:6px 9px;color:var(--text);font-family:var(--sans);outline:none;font-size:12.5px}
+  .notes input{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);outline:none;font-size:13px}
   .notes input:focus{border-color:var(--accent)}
 
-  .blocked-list{columns:2;gap:24px}
-  @media(max-width:680px){.blocked-list{columns:1}}
-  .blocked-list .bl{break-inside:avoid;background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 10px}
+  .nav-foot{display:flex;justify-content:space-between;align-items:center;margin:24px 0 0;gap:12px}
+  .blocked-list .bl{background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:11px 13px;margin:0 0 10px}
   .bl b{color:var(--text)}.bl span{color:var(--text-3);font-size:12.5px}
-  footer{margin-top:40px;color:var(--text-4);font-size:12px;text-align:center}
 </style>
 </head>
 <body>
 
 <header class="bar">
   <div class="bar-inner">
-    <div class="brand"><span class="mark"></span> Spade · Multi-Project Scenario</div>
+    <div class="brand"><span class="mark"></span> Spade · Guided Test</div>
     <div class="score-box">
-      <div class="pills">
-        <span class="pill pass" id="p-pass">✓ 0</span>
-        <span class="pill partial" id="p-partial">~ 0</span>
-        <span class="pill fail" id="p-fail">✗ 0</span>
-        <span class="pill" id="p-skip">untested 0</span>
-      </div>
       <div class="meter"><i id="meter-fill"></i></div>
-      <div><div class="score-num" id="score-num">—</div><div class="score-sub" id="score-sub">0 / 0 scored</div></div>
+      <div><div class="score-num" id="score-num">—</div><div class="score-sub" id="score-sub">0 / 0 done</div></div>
     </div>
   </div>
 </header>
+<nav class="tabs"><div class="tabs-inner" id="tabbar"></div></nav>
 
-<div class="wrap">
-  <div class="intro">
-    <h1>Spade — Multi-Project Test &amp; Score Scenario</h1>
-    <p class="lede">This isn’t a feature checklist — it’s a <b>realistic run</b>. You’ll stand up
-      <b>three projects</b> with different characters, do real work in each, then stress how Spade
-      <b>manages and switches context</b> between them. Score each step
-      <b style="color:var(--green)">Pass</b> / <b style="color:var(--amber)">Partial</b> /
-      <b style="color:var(--red)">Fail</b>. Scores + notes persist in this browser; the context
-      section (CTX) is where the product proves it can juggle multiple products at once.</p>
-
-    <div class="meta-row">
-      <div class="field"><label>Tester</label><input data-meta="tester" placeholder="your name" /></div>
-      <div class="field"><label>Date</label><input data-meta="testdate" placeholder="YYYY-MM-DD" /></div>
-      <div class="field"><label>Build / commit</label><input data-meta="build" placeholder="git short SHA" /></div>
-    </div>
-
-    <h4 style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:20px 0 0">Projects under test</h4>
-    <div class="legend">
-      <div class="pcard">
-        <span class="slot">P1</span>
-        <div class="role"><b>Established</b> — already has tasks, brain &amp; a connected account. Use the seeded <b>Hello Spade (PoC)</b>.</div>
-        <span class="ph">name used</span><input data-meta="p1name" placeholder="Hello Spade (PoC)">
-        <span class="ph">id / slug</span><input data-meta="p1id" placeholder="hello-spade">
-      </div>
-      <div class="pcard">
-        <span class="slot">P2</span>
-        <div class="role"><b>Grown via planning</b> — start empty, then build a real backlog by asking the orchestrator to plan.</div>
-        <span class="ph">name used</span><input data-meta="p2name" placeholder="Acme Mobile">
-        <span class="ph">id / slug</span><input data-meta="p2id" placeholder="acme-mobile">
-      </div>
-      <div class="pcard">
-        <span class="slot">P3</span>
-        <div class="role"><b>Blank slate</b> — created and left empty (and/or with no account) to test empty + degraded states.</div>
-        <span class="ph">name used</span><input data-meta="p3name" placeholder="Internal Tools">
-        <span class="ph">id / slug</span><input data-meta="p3id" placeholder="internal-tools">
-      </div>
-    </div>
-
-    <div class="toolbar">
-      <button class="btn primary" id="btn-export">Export results (copy markdown)</button>
-      <button class="btn" id="btn-reset">Reset all scores</button>
-    </div>
-
-    <div class="note">
-      <b>Setup.</b> <code>make dev</code> → <a href="http://127.0.0.1:3000" target="_blank">http://127.0.0.1:3000</a>
-      (API on <code>:8765</code>). P1 = the seeded <b>Hello Spade</b> (populated, has account <code>.claude-t2b</code>).
-      You’ll create P2 &amp; P3 in Scenario 0. Fill the cards above with the names/ids you actually use — the
-      CTX cases refer to “P1/P2/P3”.
-    </div>
-    <div class="note warn">
-      <b>Planning note.</b> The orchestrator’s planning skill is installed when an orchestrator <i>spawns</i>.
-      If a planning ask doesn’t kick in for a project, open <b>Agent pool</b>, kill that project’s current
-      orchestrator, then ask again so a fresh one spawns with the skill.
-    </div>
-  </div>
-
-  <div id="areas"></div>
-
-  <section class="area">
-    <div class="area-head"><span class="eyebrow">REF</span><h2>Known gaps — not built yet (don’t score)</h2></div>
-    <p class="area-blurb">These nav items intentionally show a “Próximamente” badge and are dimmed. Listed so you
-      don’t score them as failures. Tracked in <code>docs/backlog/</code>.</p>
-    <div class="blocked-list">
-      <div class="bl"><b>Overview / Home</b><br><span>Project &amp; cross-project dashboards (buildable).</span></div>
-      <div class="bl"><b>Sprints</b><br><span>No sprints backend.</span></div>
-      <div class="bl"><b>Graph &amp; Issues</b><br><span>Buildable from brain + tasks.</span></div>
-      <div class="bl"><b>Meetings / Feedback</b><br><span>No ingestion backend.</span></div>
-      <div class="bl"><b>CLI / logs · Settings</b><br><span>Not built.</span></div>
-      <div class="bl"><b>“All projects” workspace scope</b><br><span>Workspace-level shell not built.</span></div>
-    </div>
-  </section>
-
-  <footer>Spade multi-project scenario · scores stored locally in your browser</footer>
-</div>
+<div class="wrap" id="panels"></div>
 
 <script>
-const CASES = [
-  {area:"Scenario 0 · Set up the 3 projects", eyebrow:"SETUP", blurb:"Boot the app and provision the three projects you’ll juggle for the rest of the run.", cases:[
-    {id:"S0-1", title:"App boots into the shell", goal:"Dev servers up; shell renders.",
-     steps:["<code>make dev</code> → open <a target=_blank href='http://127.0.0.1:3000'>:3000</a>."],
-     expect:"Redirects to <b>/backlog</b>; 232px sidebar + 44px topbar in the dark/lavender theme; topbar shows a live <b>daemon · N sessions</b> + your real account; no console errors."},
-    {id:"S0-2", title:"P1 is the established project", goal:"Confirm the seeded project is selected and populated.",
-     steps:["Open the project switcher; select <b>Hello Spade (PoC)</b> (record it as P1 above)."],
-     expect:"Sidebar header shows the project + slug; Backlog/Brain/Decisions badges show <b>non-zero real counts</b>."},
-    {id:"S0-3", title:"Create P2 (will be grown via planning)", goal:"Create a second project from the switcher.",
-     steps:["Switcher → <b>New project</b> → name it (record as P2).","Confirm <b>Path</b> auto-fills <code>~/.spade/projects/&lt;slug&gt;</code> and tracks the name.","Create."],
-     expect:"P2 becomes active; its workspace dir is created; Backlog/Brain/Decisions badges read <b>0</b> (it’s empty)."},
-    {id:"S0-4", title:"Create P3 (blank slate)", goal:"Create a third, leave it empty.",
-     steps:["Switcher → New project → name it (record as P3) → Create.","Leave it untouched."],
-     expect:"P3 active, all counts 0. (Optional: this is your no-/least-account project for degraded-state tests.)"},
-  ]},
-
-  {area:"Scenario 1 · P1 — work an established product", eyebrow:"P1", blurb:"With P1 (Hello Spade) selected, exercise the data-rich flows.", cases:[
-    {id:"P1-1", title:"Backlog + task detail", goal:"Rich backlog renders; a task opens with grounded evidence.",
-     pre:"P1 selected.",
-     steps:["Sidebar → Backlog.","Click a task card (e.g. SPD-001)."],
-     expect:"Styled 5-column board with real cards (priority, ID, feature, intel bar, chips). Task detail shows a serif origin quote, evidence sections from grounded brain nodes, a timeline, metadata, and a Dependencies section. Honest empty states where data is missing."},
-    {id:"P1-2", title:"Product brain + Decisions", goal:"Graph + ADRs reflect P1’s real knowledge.",
-     pre:"P1 selected.",
-     steps:["Sidebar → Product brain (toggle a legend type, click a node).","Sidebar → Decisions."],
-     expect:"SVG graph with typed nodes/edges + working legend filters + node info panel. Decisions lists P1’s ADRs; count matches the sidebar badge."},
-    {id:"P1-3", title:"Ask the brain about P1", goal:"⌘K dock answers with P1’s real state.",
-     pre:"P1 selected.",
-     steps:["Press <code>⌘K</code> → ask “What do you know about the current project?”"],
-     expect:"Animated thinking, then a markdown answer describing <b>Hello Spade specifically</b> (its backlog/brain/pipelines) — not a generic or wrong-project answer."},
-  ]},
-
-  {area:"Scenario 2 · P2 — grow a project with planning", eyebrow:"P2", blurb:"Take P2 from empty to a real, dependency-linked backlog using the orchestrator’s planning flow.", cases:[
-    {id:"P2-1", title:"P2 starts empty (honest states)", goal:"Empty project shows real empty states.",
-     pre:"Switch to P2.",
-     steps:["Visit Backlog, Product brain, Decisions on P2."],
-     expect:"Empty board, “this brain is empty”, “no decisions” — all honest, no errors, no leftover P1 data."},
-    {id:"P2-2", title:"Plan a goal → propose (no creation yet)", goal:"Describing a goal triggers brainstorm→propose, gated on approval.",
-     pre:"P2 selected; fresh orchestrator (see Planning note).",
-     steps:["⌘K → “Plan out: build an API + MCP so agents fetch client-context data in real time.”"],
-     expect:"Loads the planning skill; may ask 1–3 clarifying questions; proposes a <b>task breakdown with dependencies</b> (epic/subtasks, blocks, related) as a message and <b>waits</b> — creates nothing yet."},
-    {id:"P2-3", title:"Approve → tasks created in P2", goal:"On approval, real tasks + links are written to P2.",
-     pre:"Continuing P2-2.",
-     steps:["Reply “go”.","Open P2’s Backlog and a created task."],
-     expect:"New tasks appear in <b>P2’s</b> backlog with the proposed <b>dependencies</b> on Task detail; the reply reports the real created ids."},
-    {id:"P2-4", title:"Ask about P2 reflects the new work", goal:"The brain now knows about what was just planned.",
-     pre:"After P2-3.",
-     steps:["⌘K → “What’s on the backlog now?”"],
-     expect:"The answer references the tasks just created in P2 (counts/titles), grounded in P2 — not P1."},
-  ]},
-
-  {area:"Scenario 3 · P3 — blank slate & degraded states", eyebrow:"P3", blurb:"Confirm the empty/edge project behaves honestly.", cases:[
-    {id:"P3-1", title:"P3 is empty everywhere", goal:"All views show zero-state without errors.",
-     pre:"Switch to P3.",
-     steps:["Visit Backlog / Brain / Decisions; check sidebar counts."],
-     expect:"Everything 0 / empty-state; no stale data from P1 or P2."},
-    {id:"P3-2", title:"Ask on P3 (empty / no-account)", goal:"Degraded states are graceful.",
-     pre:"P3 selected.",
-     steps:["⌘K → ask about the project."],
-     expect:"If P3 has an account → a grounded “brand-new, blank slate (0 tasks/nodes/runs)” answer. If P3 has <b>no</b> provider account → an honest “No provider accounts configured… add one in Agent pool” panel — <b>never a raw 500</b>."},
-  ]},
-
-  {area:"Scenario 4 · Context switching & isolation", eyebrow:"CTX", blurb:"The core test: can Spade hold three products at once without bleeding context? Switch deliberately and watch for stale/leaked data.", cases:[
-    {id:"CTX-1", title:"Switch updates the whole app at once", goal:"Selecting a project re-renders header, counts, and content together.",
-     pre:"All 3 projects exist.",
-     steps:["Switch P1 → P2 → P3, pausing on each."],
-     expect:"On every switch the sidebar <b>header card</b>, the nav <b>badge counts</b>, and the current view’s <b>content</b> all update together to the selected project. No stale numbers, no reload needed."},
-    {id:"CTX-2", title:"“Current project” grounding follows selection", goal:"The brain talks about whichever project is selected.",
-     pre:"All 3 exist.",
-     steps:["On P1: ⌘K → “What’s the current project?” Note the answer.","Switch to P2, ask again. Switch to P3, ask again."],
-     expect:"Each answer is about the <b>currently-selected</b> project (P1→Hello Spade, P2→its name + planned work, P3→blank slate). No answer describes the wrong project."},
-    {id:"CTX-3", title:"Data isolation — no cross-leak", goal:"Work created in one project never appears in another.",
-     pre:"P2 has tasks (from Scenario 2); P3 is empty.",
-     steps:["Compare backlogs/brain across P1, P2, P3."],
-     expect:"P2’s planned tasks appear ONLY in P2. P1’s tasks stay in P1. P3 stays empty. Counts per project are independent and correct."},
-    {id:"CTX-4", title:"Per-project orchestrators", goal:"Each project gets its own agent context; Ask talks to the right one.",
-     pre:"You’ve asked in ≥2 projects.",
-     steps:["Open <b>Agent pool</b>; read each orchestrator’s PROJECT field."],
-     expect:"Orchestrator sessions are tagged to their project; the Ask dock for a given project talks to <b>that</b> project’s orchestrator (and the answers prove it — see CTX-2). No single orchestrator answering for all."},
-    {id:"CTX-5", title:"Switch mid-conversation", goal:"Changing project while the dock is open re-targets context.",
-     pre:"Dock open with a thread on P1.",
-     steps:["With the dock open and a P1 reply on screen, switch the project to P2 (topbar).","Ask a new question in the same dock."],
-     expect:"The new question is answered about <b>P2</b> (the now-selected project). Note how prior P1 messages are handled (kept as history vs cleared) — record the behavior and whether it’s confusing."},
-    {id:"CTX-6", title:"Rapid switching stress", goal:"Fast back-and-forth doesn’t corrupt state.",
-     pre:"All 3 exist.",
-     steps:["Switch P1↔P2↔P3 quickly ~6–8 times.","Land on one and open Backlog + ⌘K."],
-     expect:"Counts/content settle on the <b>final</b> selection with no flicker of wrong-project data, no console errors, no stuck spinners."},
-    {id:"CTX-7", title:"Server current-project sync (advanced)", goal:"The backend’s notion of current project follows the UI.",
-     pre:"Terminal handy.",
-     steps:["Select a project in the UI.","Run <code>curl -s 127.0.0.1:8765/current-project</code>."],
-     expect:"The returned <code>project_id</code> matches the UI selection (so any agent/automation reasons about the project you’re viewing). Repeat after switching."},
-  ]},
-
-  {area:"Scenario 5 · Quality of life", eyebrow:"QOL", blurb:"Whole-product feel and resilience.", cases:[
-    {id:"QL-1", title:"Density &amp; fidelity", goal:"It looks like the intended dense, dark pro-tool.",
-     steps:["Eyeball spacing, mono IDs, lavender accents, chips/priority dots across all the views you visited."],
-     expect:"Consistent near-black surfaces + lavender accents, JetBrains Mono for IDs/metrics, serif origin quotes; dense, not loose; no obviously-unstyled screens."},
-    {id:"QL-2", title:"Errors are readable", goal:"Failures degrade gracefully.",
-     steps:["If any action errors during the run (esp. an Ask turn), observe the message."],
-     expect:"Friendly message + a real detail line (e.g. exception type), never a bare “500 Internal Server Error”. Mark Skip if nothing errored."},
-    {id:"QL-3", title:"Snappy / no jank", goal:"Navigation and switching feel responsive.",
-     steps:["Click through views; switch projects; open/close the dock."],
-     expect:"Sub-second view changes; polling views (Orchestrator/Agent pool) update without freezing the UI; the dock opens/closes smoothly."},
-  ]},
+/* ---------- content ---------- */
+const TABS = [
+  {key:"START", num:0, label:"Start here"},
+  {key:"P1",    num:1, label:"Project 1"},
+  {key:"P2",    num:2, label:"Project 2"},
+  {key:"P3",    num:3, label:"Project 3"},
+  {key:"CTX",   num:4, label:"Switching"},
+  {key:"FEEL",  num:5, label:"Overall feel"},
+  {key:"GAPS",  num:6, label:"Not built"},
 ];
 
-const KEY="spade-test-guide-v2";
+/* intro HTML shown at the top of the Start tab (not a scored case) */
+const START_INTRO = `
+  <h1>Spade — guided test &amp; score</h1>
+  <p class="lede">A friendly, click-by-click walkthrough. You'll set up <b>three pretend products</b>,
+  do a little work in each, then see how well Spade keeps them separate when you switch between them.
+  No coding needed — just follow the steps and mark how each one went.</p>
+
+  <div class="howto">
+    <div class="h"><span class="n">1</span><b>Do the steps in order</b><span>Each card has numbered steps and a “What you should see”.</span></div>
+    <div class="h"><span class="n">2</span><b>Mark how it went</b><span>Tap <b>Pass</b> if it matched, <b>Partial</b> if mostly, <b>Fail</b> if not. Add a quick note.</span></div>
+    <div class="h"><span class="n">3</span><b>Move to the next tab</b><span>Your progress saves automatically. The bar up top shows your score.</span></div>
+  </div>
+
+  <div class="meta-row">
+    <div class="field"><label>Your name</label><input data-meta="tester" placeholder="who's testing"></div>
+    <div class="field"><label>Date</label><input data-meta="testdate" placeholder="e.g. 2026-06-27"></div>
+  </div>
+
+  <div class="note tip"><b>Before you begin:</b> the app needs to be running.
+   If it isn't open already, ask your developer to start it (or run <code>make dev</code>), then open
+   <a href="http://127.0.0.1:3000" target="_blank">http://127.0.0.1:3000</a> in your browser.
+   Keep that browser window next to this guide.</div>
+
+  <h4 style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:22px 0 0">The 3 products you'll test with</h4>
+  <p class="blurb" style="margin-top:6px">Fill in the names you actually use — later tabs say “Project 1 / 2 / 3”.</p>
+  <div class="legend">
+    <div class="pcard"><span class="slot">Project 1</span>
+      <div class="role"><b>The established one.</b> Already has work in it. Use the built-in <b>“Hello Spade (PoC)”</b>.</div>
+      <span class="ph">name you'll use</span><input data-meta="p1name" placeholder="Hello Spade (PoC)"></div>
+    <div class="pcard"><span class="slot">Project 2</span>
+      <div class="role"><b>The new one.</b> You'll create it empty, then ask Spade to plan its work.</div>
+      <span class="ph">name you'll use</span><input data-meta="p2name" placeholder="e.g. Acme Mobile"></div>
+    <div class="pcard"><span class="slot">Project 3</span>
+      <div class="role"><b>The empty one.</b> Create it and leave it untouched, to see “nothing here yet” screens.</div>
+      <span class="ph">name you'll use</span><input data-meta="p3name" placeholder="e.g. Internal Tools"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn primary" id="btn-export">Copy my results</button>
+    <button class="btn" id="btn-reset">Start over (clear everything)</button>
+  </div>
+`;
+
+const GAPS_HTML = `
+  <h2 class="ph">Not built yet — please skip these</h2>
+  <p class="blurb">These menu items show a faint “Próximamente” (coming soon) tag and don't open. That's expected —
+  don't count them as problems.</p>
+  <div class="blocked-list">
+    <div class="bl"><b>Overview / Home</b> <span>— dashboards, coming later.</span></div>
+    <div class="bl"><b>Sprints</b> <span>— not built.</span></div>
+    <div class="bl"><b>Graph &amp; Issues</b> <span>— coming later.</span></div>
+    <div class="bl"><b>Meetings</b> &amp; <b>Feedback</b> <span>— need data sources first.</span></div>
+    <div class="bl"><b>CLI / logs</b> &amp; <b>Settings</b> <span>— not built.</span></div>
+    <div class="bl"><b>“All projects”</b> in the project menu <span>— coming later.</span></div>
+  </div>
+  <div class="note tip" style="margin-top:18px"><b>That's the whole test.</b> When you're done, go back to
+   <b>Start here</b> and tap <b>Copy my results</b> to share your scores and notes.</div>
+`;
+
+const CASES = {
+  START: [
+    {id:"S0-1", title:"Open the app", goal:"Get the app on screen.",
+     steps:["Open <a target=_blank href='http://127.0.0.1:3000'>http://127.0.0.1:3000</a> in your browser.","Look at the screen."],
+     expect:"A dark page with a <b>menu on the left</b> (Backlog, Product brain, Orchestrator, …) and a <b>bar across the top</b>. Top-right shows a small green dot with “daemon · N sessions” and an account name."},
+    {id:"S0-2", title:"Pick Project 1 (the established one)", goal:"Select the project that already has work in it.",
+     steps:["At the top-left, click the <b>project name with the little arrow</b> (the project menu).","Choose <b>“Hello Spade (PoC)”</b>."],
+     expect:"The top-left now shows “Hello Spade (PoC)”. In the left menu, the small number badges next to <b>Backlog</b>, <b>Product brain</b> and <b>Decisions</b> are <b>not zero</b> — there's real work in here."},
+    {id:"S0-3", title:"Create Project 2 (the new one)", goal:"Make a brand-new, empty project.",
+     steps:["Open the project menu again → click <b>“New project”</b>.","Type a name (write it in the Project 2 box on this page too).","Notice the <b>Path</b> fills in by itself. Leave it.","Click <b>Create</b>."],
+     expect:"The new project name appears at the top-left, and its menu badges show <b>0</b> — it's empty, which is correct for a brand-new project."},
+    {id:"S0-4", title:"Create Project 3 (the empty one)", goal:"Make a third project and leave it alone.",
+     steps:["Project menu → <b>New project</b> → type a name (write it in the Project 3 box) → <b>Create</b>.","Don't add anything to it."],
+     expect:"Third project selected, all badges <b>0</b>. You now have three projects to test with."},
+  ],
+  P1: [
+    {id:"P1-1", title:"Look at the task board", goal:"See the list of work as a board.",
+     pre:"Project 1 (Hello Spade) is selected — check the top-left.",
+     steps:["In the left menu, click <b>Backlog</b>.","Click any card in the board."],
+     expect:"A board with <b>columns</b>: Ready, In progress, Review, Shipped, Blocked — with task cards inside (each shows a colored dot, an ID like <code>SPD-001</code>, and a title). Clicking a card opens that task's <b>own page</b> with more detail (a quote, related info, a timeline down the side)."},
+    {id:"P1-2", title:"Look at the knowledge map", goal:"See the project's “brain” and decisions.",
+     pre:"Project 1 selected.",
+     steps:["Left menu → <b>Product brain</b>. Click one of the dots.","Then left menu → <b>Decisions</b>."],
+     expect:"<b>Product brain</b> shows a map of connected dots (a graph) with a legend on the side; clicking a dot shows its details. <b>Decisions</b> shows a list of decision cards. These have real content (not empty)."},
+    {id:"P1-3", title:"Ask the assistant about this project", goal:"Chat with the project's AI and get a relevant answer.",
+     pre:"Project 1 selected.",
+     steps:["Press <kbd>⌘</kbd>+<kbd>K</kbd> (Mac) or <kbd>Ctrl</kbd>+<kbd>K</kbd> (Windows) — or click the <b>“Ask the brain…”</b> bar at the top.","In the panel that slides in from the right, type: <i>What do you know about this project?</i> and press Enter.","Wait a few seconds."],
+     expect:"A little <b>“thinking…”</b> animation, then an answer that clearly describes <b>Hello Spade</b> specifically (its tasks, its topics). It should NOT describe some other project."},
+  ],
+  P2: [
+    {id:"P2-1", title:"Switch to Project 2 — it should be empty", goal:"Confirm a new project starts clean.",
+     steps:["Top-left project menu → choose <b>Project 2</b>.","Look at Backlog, Product brain, Decisions."],
+     expect:"Everything says it's empty in a friendly way (empty board, “nothing here yet”). The badges are <b>0</b>. None of Project 1's work shows up here."},
+    {id:"P2-2", title:"Ask Spade to plan the work", goal:"Describe a goal and get a proposed plan back.",
+     pre:"Project 2 selected. (If the assistant doesn't respond with a plan, see the note below.)",
+     steps:["Open the assistant (<kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd>).","Type a goal, for example: <i>Plan out building a simple customer feedback inbox.</i> Press Enter.","Read the reply."],
+     expect:"It may ask you a question or two, then it <b>proposes a list of tasks</b> (with which ones depend on others) and <b>asks you to approve</b> — it does <b>not</b> create anything yet."},
+    {id:"P2-3", title:"Approve, and watch tasks appear", goal:"Approve the plan and see real tasks created.",
+     pre:"Right after P2-2.",
+     steps:["Reply <i>go ahead</i> (or “yes, create them”).","Wait for it to confirm.","Open <b>Backlog</b> for Project 2 and click one of the new tasks."],
+     expect:"New task cards now appear in <b>Project 2's</b> board. Opening one shows a <b>“Dependencies”</b> area listing how it connects to the others (blocks / related / subtask)."},
+    {id:"P2-4", title:"Ask again — it should know the new work", goal:"The assistant reflects what was just created.",
+     pre:"After P2-3.",
+     steps:["Open the assistant and ask: <i>What's on the backlog now?</i>"],
+     expect:"The answer mentions the tasks you just created in Project 2 — proof it's looking at this project's current state."},
+  ],
+  P3: [
+    {id:"P3-1", title:"Switch to Project 3 — still empty", goal:"Confirm the untouched project shows empty screens.",
+     steps:["Project menu → choose <b>Project 3</b>.","Look at Backlog, Product brain, Decisions and the menu badges."],
+     expect:"Everything is empty / 0, with friendly “nothing here yet” messages. No leftover content from Project 1 or 2."},
+    {id:"P3-2", title:"Ask the assistant on the empty project", goal:"Empty (or no-account) projects respond gracefully.",
+     steps:["Open the assistant and ask anything about the project."],
+     expect:"Either a calm answer that the project is brand-new and empty, OR — if this project has no account connected — a clear message like “No account connected yet… add one in Agent pool.” It should <b>never</b> show a scary error or get stuck."},
+  ],
+  CTX: [
+    {id:"CTX-1", title:"Switching changes the whole screen", goal:"Picking a project updates everything at once.",
+     pre:"All three projects exist.",
+     steps:["Switch Project 1 → 2 → 3 using the top-left menu, pausing on each."],
+     expect:"Every time you switch, the <b>project name</b> (top-left), the <b>menu badges</b>, and whatever you're looking at all change together to the new project. Nothing shows stale numbers from the previous project."},
+    {id:"CTX-2", title:"The assistant always talks about the selected project", goal:"Context follows your selection — the big one.",
+     pre:"All three exist.",
+     steps:["On Project 1: open the assistant, ask <i>Which project is this and what's in it?</i> Read it.","Switch to Project 2, ask the same. Then Project 3, ask the same."],
+     expect:"Each answer is about the project you <b>currently have selected</b> — Project 1's answer is about Hello Spade, Project 2's about its planned work, Project 3's about being empty. No answer talks about the wrong project."},
+    {id:"CTX-3", title:"Projects don't mix together", goal:"Work in one project never leaks into another.",
+     pre:"Project 2 has tasks; Project 3 is empty.",
+     steps:["Look at the Backlog of Project 1, then 2, then 3."],
+     expect:"Project 2's tasks appear <b>only</b> in Project 2. Project 1 keeps its own. Project 3 stays empty. Each project's counts are its own."},
+    {id:"CTX-4", title:"Switch while the assistant is open", goal:"Changing project mid-chat re-points the assistant.",
+     pre:"Assistant open with an answer about Project 1 on screen.",
+     steps:["Keep the assistant panel open.","Use the top-left menu to switch to Project 2.","Ask a new question in the same panel."],
+     expect:"The new answer is about <b>Project 2</b> now. (Note in your comment whether the earlier Project-1 messages stayed on screen and if that felt confusing.)"},
+    {id:"CTX-5", title:"Fast switching doesn't break it", goal:"Rapid back-and-forth stays correct.",
+     pre:"All three exist.",
+     steps:["Quickly switch between the three projects 6–8 times.","Stop on one and open its Backlog and the assistant."],
+     expect:"It lands cleanly on the <b>last</b> project you picked — correct content, correct counts, no flicker of the wrong project, no errors, nothing stuck loading."},
+  ],
+  FEEL: [
+    {id:"QL-1", title:"Does it look polished?", goal:"Overall visual quality.",
+     steps:["Glance across the screens you visited."],
+     expect:"Consistent dark look with purple accents; clean spacing; nothing looks broken, unstyled, or half-loaded."},
+    {id:"QL-2", title:"Does it feel quick?", goal:"Responsiveness.",
+     steps:["Click around the menu, switch projects, open/close the assistant."],
+     expect:"Screens change almost instantly; the live screens (Orchestrator, Agent pool) update on their own without freezing; the assistant panel opens and closes smoothly."},
+    {id:"QL-3", title:"Are errors friendly?", goal:"Failures are handled gracefully.",
+     steps:["If anything ever shows an error during your test, note what it said."],
+     expect:"Any error is a readable, calm message — never a scary raw “500” with no explanation. (Mark <b>Not tested</b> if you never saw an error.)"},
+  ],
+};
+
+/* ---------- engine ---------- */
+const KEY="spade-test-guide-v3";
 const SCORES=["pass","partial","fail","skip"];
 const LABELS={pass:"Pass",partial:"Partial",fail:"Fail",skip:"Not tested"};
 let store=JSON.parse(localStorage.getItem(KEY)||"{}");
+store.scores=store.scores||{}; store.notes=store.notes||{}; store.meta=store.meta||{};
 function save(){localStorage.setItem(KEY,JSON.stringify(store));}
+function allCases(){return Object.values(CASES).flat();}
 
 function caseRow(c){
-  const cur=(store.scores&&store.scores[c.id])||"skip";
-  const note=(store.notes&&store.notes[c.id])||"";
+  const cur=store.scores[c.id]||"skip", note=store.notes[c.id]||"";
   const steps=c.steps.map(s=>`<li>${s}</li>`).join("");
   const seg=SCORES.map(s=>`<label class="opt${cur===s?" sel-"+s:""}" data-id="${c.id}" data-score="${s}"><input type="radio" name="sc-${c.id}" ${cur===s?"checked":""}>${LABELS[s]}</label>`).join("");
   return `<div class="case" data-id="${c.id}" data-state="${cur}">
     <div class="case-head"><span class="case-id">${c.id}</span><span class="case-title">${c.title}</span></div>
     <div class="case-goal">${c.goal}</div>
-    ${c.pre?`<div class="pre"><b style="color:var(--text-4)">Precondition:</b> ${c.pre}</div>`:""}
-    <h4>Steps</h4><ol>${steps}</ol>
-    <h4>Expected</h4><div class="expect">${c.expect}</div>
-    <div class="score-ctl"><div class="seg">${seg}</div>
-      <div class="notes"><input data-note="${c.id}" placeholder="notes / what broke / observations" value="${note.replace(/"/g,'&quot;')}"></div></div>
+    ${c.pre?`<div class="case-goal" style="color:var(--text-4)"><b>First:</b> ${c.pre}</div>`:""}
+    <h4><span class="dot"></span>Do this</h4><ol>${steps}</ol>
+    <h4 class="exp"><span class="dot"></span>What you should see</h4><div class="expect">${c.expect}</div>
+    <div class="score-ctl"><span class="q">How did it go?</span><div class="seg">${seg}</div>
+      <div class="notes"><input data-note="${c.id}" placeholder="optional note — what you saw / anything off" value="${note.replace(/"/g,'&quot;')}"></div></div>
   </div>`;
 }
+function panelHTML(t){
+  if(t.key==="START") return START_INTRO;
+  if(t.key==="GAPS") return GAPS_HTML;
+  const titles={P1:"Project 1 — the established product",P2:"Project 2 — plan new work",P3:"Project 3 — the empty one",CTX:"Switching between projects",FEEL:"Overall feel"};
+  const blurbs={
+    P1:"Make sure <b>Project 1 (Hello Spade)</b> is selected at the top-left, then go through these.",
+    P2:"Take a brand-new project from empty to a real backlog by asking the assistant to plan it.",
+    P3:"Confirm a truly empty project shows calm “nothing here yet” screens.",
+    CTX:"This is the important part — does Spade keep three products separate when you jump between them?",
+    FEEL:"A quick gut-check on polish and speed."};
+  const rows=(CASES[t.key]||[]).map(caseRow).join("");
+  let extra="";
+  if(t.key==="P2") extra=`<div class="note warn"><b>If the assistant doesn't propose a plan:</b> open <b>Agent pool</b> in the left menu, find this project's assistant and remove it, then ask again (a fresh assistant is needed). Ask your developer if unsure.</div>`;
+  return `<h2 class="ph">${titles[t.key]}</h2><p class="blurb">${blurbs[t.key]}</p>${extra}${rows}`;
+}
 function render(){
-  document.getElementById("areas").innerHTML=CASES.map(a=>`<section class="area">
-    <div class="area-head"><span class="eyebrow">${a.eyebrow}</span><h2>${a.area}</h2><span class="area-score" data-area="${a.eyebrow}"></span></div>
-    ${a.blurb?`<p class="area-blurb">${a.blurb}</p>`:""}${a.cases.map(caseRow).join("")}</section>`).join("");
-  document.querySelectorAll("[data-meta]").forEach(el=>{ if(store.meta&&store.meta[el.dataset.meta]!=null) el.value=store.meta[el.dataset.meta]; });
+  document.getElementById("tabbar").innerHTML=TABS.map(t=>
+    `<button class="tab" data-tab="${t.key}"><span class="tnum">${t.num}</span>${t.label}<span class="tsc" data-tabsc="${t.key}"></span></button>`).join("");
+  document.getElementById("panels").innerHTML=TABS.map(t=>{
+    const next=TABS[TABS.indexOf(t)+1];
+    const foot=`<div class="nav-foot">${TABS.indexOf(t)>0?`<button class="btn" data-goto="${TABS[TABS.indexOf(t)-1].key}">← Back</button>`:"<span></span>"}${next?`<button class="btn primary big" data-goto="${next.key}">Next: ${next.label} →</button>`:"<span></span>"}</div>`;
+    return `<section class="panel" data-panel="${t.key}">${panelHTML(t)}${foot}</section>`;
+  }).join("");
+  Object.entries(store.meta).forEach(([k,v])=>{const el=document.querySelector(`[data-meta="${k}"]`); if(el)el.value=v;});
+  showTab(store.activeTab||"START",false);
   recompute();
 }
-function allCases(){return CASES.flatMap(a=>a.cases);}
+function showTab(key,scroll=true){
+  store.activeTab=key; save();
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===key));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.dataset.panel===key));
+  if(scroll) window.scrollTo({top:0,behavior:"smooth"});
+}
 function recompute(){
-  const sc=store.scores||{}, counts={pass:0,partial:0,fail:0,skip:0};
-  allCases().forEach(c=>counts[(sc[c.id]||"skip")]++);
-  const scored=counts.pass+counts.partial+counts.fail, pts=counts.pass+counts.partial*0.5;
-  const pct=scored?Math.round(pts/scored*100):0;
-  document.getElementById("p-pass").textContent="✓ "+counts.pass;
-  document.getElementById("p-partial").textContent="~ "+counts.partial;
-  document.getElementById("p-fail").textContent="✗ "+counts.fail;
-  document.getElementById("p-skip").textContent="untested "+counts.skip;
+  const sc=store.scores, counts={pass:0,partial:0,fail:0,skip:0};
+  allCases().forEach(c=>counts[sc[c.id]||"skip"]++);
+  const scored=counts.pass+counts.partial+counts.fail, pct=scored?Math.round((counts.pass+counts.partial*.5)/scored*100):0;
   document.getElementById("score-num").textContent=scored?pct+"%":"—";
-  document.getElementById("score-sub").textContent=scored+" / "+allCases().length+" scored";
+  document.getElementById("score-sub").textContent=scored+" / "+allCases().length+" done";
   document.getElementById("meter-fill").style.width=pct+"%";
-  document.querySelectorAll(".area-score").forEach(el=>{
-    const cs=CASES.find(a=>a.eyebrow===el.dataset.area).cases; let p=0,n=0;
-    cs.forEach(c=>{const s=sc[c.id]||"skip"; if(s!=="skip"){n++; p+=s==="pass"?1:s==="partial"?.5:0;}});
-    el.textContent=n?Math.round(p/n*100)+"% ("+n+"/"+cs.length+")":"untested";
+  TABS.forEach(t=>{
+    const el=document.querySelector(`[data-tabsc="${t.key}"]`); if(!el)return;
+    const cs=CASES[t.key]; if(!cs){el.textContent="";return;}
+    const done=cs.filter(c=>(sc[c.id]||"skip")!=="skip").length;
+    el.textContent=done?done+"/"+cs.length:"";
   });
 }
 document.addEventListener("click",e=>{
-  const opt=e.target.closest(".opt"); if(!opt)return;
-  const id=opt.dataset.id, score=opt.dataset.score;
-  store.scores=store.scores||{}; store.scores[id]=score; save();
-  const seg=opt.parentElement; seg.querySelectorAll(".opt").forEach(o=>o.className="opt");
-  opt.className="opt sel-"+score; seg.closest(".case").dataset.state=score; recompute();
+  const tab=e.target.closest(".tab"); if(tab){showTab(tab.dataset.tab);return;}
+  const go=e.target.closest("[data-goto]"); if(go){showTab(go.dataset.goto);return;}
+  const opt=e.target.closest(".opt");
+  if(opt){
+    store.scores[opt.dataset.id]=opt.dataset.score; save();
+    const seg=opt.parentElement; seg.querySelectorAll(".opt").forEach(o=>o.className="opt");
+    opt.className="opt sel-"+opt.dataset.score; seg.closest(".case").dataset.state=opt.dataset.score; recompute(); return;
+  }
+  if(e.target.id==="btn-reset"){ if(confirm("Clear all your scores and notes and start over?")){store={scores:{},notes:{},meta:{},activeTab:"START"}; save(); render();} return;}
+  if(e.target.id==="btn-export"){ exportMd(); return; }
 });
 document.addEventListener("input",e=>{
-  if(e.target.dataset.note!==undefined){store.notes=store.notes||{}; store.notes[e.target.dataset.note]=e.target.value; save();}
-  if(e.target.dataset.meta!==undefined){store.meta=store.meta||{}; store.meta[e.target.dataset.meta]=e.target.value; save();}
+  if(e.target.dataset.note!==undefined){store.notes[e.target.dataset.note]=e.target.value; save();}
+  if(e.target.dataset.meta!==undefined){store.meta[e.target.dataset.meta]=e.target.value; save();}
 });
-document.getElementById("btn-reset").addEventListener("click",()=>{ if(confirm("Clear all scores and notes?")){store={}; save(); render();} });
-document.getElementById("btn-export").addEventListener("click",()=>{
-  const sc=store.scores||{}, nt=store.notes||{}, m=store.meta||{}, counts={pass:0,partial:0,fail:0,skip:0};
-  allCases().forEach(c=>counts[(sc[c.id]||"skip")]++);
-  const scored=counts.pass+counts.partial+counts.fail, pct=scored?Math.round((counts.pass+counts.partial*.5)/scored*100):0;
-  let md=`# Spade multi-project test run\n\n- Tester: ${m.tester||"—"}\n- Date: ${m.testdate||"—"}\n- Build: ${m.build||"—"}\n`;
-  md+=`- Projects: P1=${m.p1name||"—"} (${m.p1id||"?"}), P2=${m.p2name||"—"} (${m.p2id||"?"}), P3=${m.p3name||"—"} (${m.p3id||"?"})\n`;
-  md+=`- Score: **${pct}%** (${scored}/${allCases().length} scored) — ✓${counts.pass} ~${counts.partial} ✗${counts.fail} · untested ${counts.skip}\n\n`;
-  CASES.forEach(a=>{ md+=`## ${a.area}\n`; a.cases.forEach(c=>{
-    const s=sc[c.id]||"skip", mark={pass:"✓ Pass",partial:"~ Partial",fail:"✗ Fail",skip:"· untested"}[s];
-    md+=`- **${c.id}** ${c.title} — ${mark}`; if(nt[c.id])md+=` — _${nt[c.id]}_`; md+=`\n`;
-  }); md+=`\n`; });
-  navigator.clipboard.writeText(md).then(()=>alert("Markdown report copied to clipboard."),
-    ()=>{const w=window.open("","_blank"); w.document.write("<pre>"+md.replace(/</g,"&lt;")+"</pre>");});
-});
+function exportMd(){
+  const sc=store.scores,nt=store.notes,m=store.meta,counts={pass:0,partial:0,fail:0,skip:0};
+  allCases().forEach(c=>counts[sc[c.id]||"skip"]++);
+  const scored=counts.pass+counts.partial+counts.fail,pct=scored?Math.round((counts.pass+counts.partial*.5)/scored*100):0;
+  let md=`# Spade test run\n\n- Tester: ${m.tester||"—"}\n- Date: ${m.testdate||"—"}\n`;
+  md+=`- Projects: 1=${m.p1name||"Hello Spade"}, 2=${m.p2name||"—"}, 3=${m.p3name||"—"}\n`;
+  md+=`- Score: **${pct}%** (${scored}/${allCases().length} done) — Pass ${counts.pass} · Partial ${counts.partial} · Fail ${counts.fail} · untested ${counts.skip}\n\n`;
+  TABS.filter(t=>CASES[t.key]).forEach(t=>{ md+=`## ${t.label}\n`;
+    CASES[t.key].forEach(c=>{const s=sc[c.id]||"skip",mk={pass:"✓ Pass",partial:"~ Partial",fail:"✗ Fail",skip:"· untested"}[s];
+      md+=`- ${c.id} ${c.title} — ${mk}`; if(nt[c.id])md+=` — _${nt[c.id]}_`; md+=`\n`;}); md+=`\n`;});
+  navigator.clipboard.writeText(md).then(()=>alert("Your results were copied — paste them anywhere to share."),
+    ()=>{const w=window.open("","_blank");w.document.write("<pre>"+md.replace(/</g,"&lt;")+"</pre>");});
+}
 render();
 </script>
 </body>
