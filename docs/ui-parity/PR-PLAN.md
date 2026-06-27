@@ -40,11 +40,10 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `shell-topbar.spec.ts` — sprint pill visible on a project screen, hidden on Home/Workspace; account pill text matches `acct:… · NN%`; tweaks button has no border.
 - 🧑 **Manual:** check topbar on a project screen vs reference (pills present), then on Home (sprint pill gone).
 
-### PR-03 · Shell modes: `home-mode` full-bleed + `workspace-level`
-**Scope:** port the `App` effect that toggles `body.home-mode` (hide sidebar, full-bleed) and `body.workspace-level` (lavender tint, swap to workspace nav, project switcher → "Select a project" placeholder). This is the load-bearing machinery for Home, Workspace, Accounts, Integrations.
-**Files:** `app/layout.tsx`, a small `ShellModeProvider` in `lib/useShell.ts`, `app/globals.css` (`.home-mode`, `.workspace-level`).
-- 🤖 **Automated:** `shell-modes.spec.ts` — navigating to `/` (home) hides the sidebar and sets full-bleed; navigating to `/workspace` applies the workspace tint, swaps nav, and shows the "Select a project" placeholder; a project route restores the normal shell.
-- 🧑 **Manual:** click brand/Home → sidebar collapses, content goes edge-to-edge; click a Workspace item → background tint + nav swap; click a project → normal shell returns.
+### PR-03 · Shell modes: `home-mode` full-bleed + `workspace-level` — ⚠️ FOLDED INTO PR-18 / PR-25
+**Revised finding (decoding the reference CSS):** the rule is `.workspace-level:not(.home-mode) .sidebar .ws-only`. In the reference, both the `home` and `workspace` views set **both** `home-mode` *and* `workspace-level` (`mod_22.js` :22-26). Because `home-mode` hides the sidebar, the `:not(.home-mode)` ws-only nav swap **never triggers** — so the **Workspace/Projects sidebar groups are never actually visible**. Home and Workspace are simply **full-bleed screens with the sidebar hidden** + a lavender topbar tint + a "Select a project" switcher placeholder.
+**Consequence:** there is nothing to apply `home-mode` to until a full-bleed route exists (`/` Home = PR-18; `/workspace` = PR-25), and the never-visible nav groups should **not** be added. The mode mechanism (`ShellModeProvider`: route → `home-mode`/`workspace-level` body classes + the `app/globals.css` rules + switcher placeholder) is therefore **built inside PR-18 (Home)** and reused by **PR-25 (Workspace)** — not as a standalone PR. The standalone `shell-modes.spec.ts` is replaced by assertions inside `home.spec.ts` / `workspace.spec.ts` (sidebar hidden, full-bleed, lavender tint, switcher placeholder).
+**Net:** PR-03 is **closed as folded**; Phase 1 (foundation) = PR-00…PR-02 (done). The shell-mode CSS/mechanism ships with Home.
 
 ---
 
