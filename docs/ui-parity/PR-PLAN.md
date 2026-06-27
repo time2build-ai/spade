@@ -77,11 +77,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `task-detail.spec.ts` — status chip = real status, "View in graph"→/brain, "Resume pipeline"→/orchestrator, breadcrumb→/backlog. **4 green** (mocks the API). Suite: e2e 43✓ / vitest 140✓.
 - 🧑 **Manual:** open a task; confirm the status chip + the two head-action buttons navigate to the brain / orchestrator.
 
-### PR-08 · Orchestrator: table rewrite + expanding detail + live log *(large)*
-**Scope (from [§05](./sections/05-orchestrator.md)):** replace card-list + side terminal with the reference **full-width sortable table** (priority dot / title / cost / ETA), **inline-expanding detail** (progress bar, Context + Files-touched cards, animated streaming Live-log terminal with colored `lvl-*` lines + blinking cursor), and a **6-cell KPI strip with sub-lines**. Reuse the already-matching `orch-d-stage` and `stages-mini` markup.
-**Files:** `app/orchestrator/page.tsx`, `components/orchestrator/*` (+ new `PipelineTable.tsx`, `LiveLog.tsx`, expand KPI strip).
-- 🤖 **Automated:** `orchestrator.spec.ts` — KPI strip has 6 cells with sub-lines; table rows sortable; clicking a row expands inline detail with progress bar + live-log lines; log lines carry `lvl-*` color classes.
-- 🧑 **Manual:** sort the table; expand a pipeline; watch the live log animate; compare to reference.
+### PR-08 · Orchestrator: table rewrite + expanding detail *(DONE)*
+**Scope (from [§05](./sections/05-orchestrator.md)):** replaced the card-list + side terminal with the reference **inline-expanding table** (chevron · Task · Title · Pipeline stages-mini+step · Account · Status). Clicking a row expands the **real-stage detail** (`orch-d-stages` from real roles/states) and embeds our **real session Terminal** for that run. The KPI strip + filter segmented control already existed.
+**No-fabrication trims:** the reference's **Cost / ETA** columns and the fabricated **files-touched / tokens / context / animated fake live-log** cards are omitted (no real data). Title is joined from the real tasks list; Account from the real accounts list. Real Start/Advance actions are preserved inside the expanded detail.
+**Files:** `components/orchestrator/PipelineTable.tsx` (new), `app/orchestrator/page.tsx`, `app/globals.css` (`.orch-table`). `PipelineCard` retired from the page (kept for its unit test).
+- 🤖 **Automated:** `orchestrator.spec.ts` — row shows joined title/account/status + `step n/4`; row click expands the 4 real stages; filter narrows rows. **3 green** (mocks the API). Suite: e2e 46✓ / vitest 140✓.
+- 🧑 **Manual:** open Orchestrator; confirm the table; click a row to expand the stage detail + live terminal; use the filter.
 
 ### PR-09 · Active Tasks view *(depends on PR-08 components)*
 **Scope:** add `/active` route (ActiveCard, progress-rail/shimmer) for live pipelines.
