@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { IconBtn, Kbd, Avatar } from "@/components/ui";
+import { Btn, Kbd, Avatar } from "@/components/ui";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "@/lib/useProject";
 import { useShellData } from "@/lib/useShell";
@@ -47,10 +47,15 @@ export function Topbar() {
             <span
               style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }}
             />
-            {defaultAccount.label}
+            acct: {defaultAccount.label}
           </span>
         )}
-        <IconBtn icon="spark" title="Toggle tweaks panel" />
+        {/* Reference also shows a `· NN%` usage suffix and a `sprint NN · day N/M`
+            pill, but the API exposes neither — omitted per no-fabrication policy
+            (docs/ui-parity/PR-PLAN.md). They appear once the backend provides them. */}
+        <Btn variant="ghost" title="Toggle tweaks panel" aria-label="Toggle tweaks panel">
+          <Icon name="spark" size={14} />
+        </Btn>
         <Avatar>RM</Avatar>
       </div>
     </header>

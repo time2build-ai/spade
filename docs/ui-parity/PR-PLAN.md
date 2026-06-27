@@ -10,7 +10,7 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - Branch per PR off `development`: `feat/ui-<slug>` (e.g. `feat/ui-shell-foundation`).
 - Reference for visual truth: open `docs/Spade (standalone).html` in a browser side-by-side.
 - Playwright specs live in `apps/client/e2e/<screen>.spec.ts`; run with `npm run e2e` (added in PR-00).
-- **Data caveat:** screens needing data our API doesn't expose are built against seeded fixtures/adapters that mirror the reference `SpadeData`. Wiring real backend fields is out-of-scope unless a PR says otherwise.
+- **No-fabrication policy (decided):** match the reference's **layout, structure, and styling**, but render **only real API data**. Where the API has no field (e.g. `Account` has no usage %, there is no Sprint type), **omit** that element or show an honest empty/placeholder state — do **not** invent demo values or add a demo-seed module. Parity stays partial on data-rich screens until the backend grows those fields; that is accepted. Each PR's automated e2e asserts **layout + empty/omitted states**, not fabricated content (mocking a real-shaped API response is fine, as in PR-02). This supersedes any "seeded fixtures" phrasing elsewhere in this plan.
 - Sequencing: **Phase 0 → Phase 1 must land first** (foundation). Phases 2 and 3 can then run largely in parallel; intra-phase dependencies are noted.
 
 ---
