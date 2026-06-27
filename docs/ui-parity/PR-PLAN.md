@@ -84,11 +84,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `orchestrator.spec.ts` — row shows joined title/account/status + `step n/4`; row click expands the 4 real stages; filter narrows rows. **3 green** (mocks the API). Suite: e2e 46✓ / vitest 140✓.
 - 🧑 **Manual:** open Orchestrator; confirm the table; click a row to expand the stage detail + live terminal; use the filter.
 
-### PR-09 · Active Tasks view *(depends on PR-08 components)*
-**Scope:** add `/active` route (ActiveCard, progress-rail/shimmer) for live pipelines.
-**Files:** `app/active/page.tsx`, `components/orchestrator/ActiveCard.tsx`.
-- 🤖 **Automated:** `active-tasks.spec.ts` — route renders only non-shipped pipelines; each card shows an animated progress rail.
-- 🧑 **Manual:** open Active Tasks; confirm only live work shows with progress rails.
+### PR-09 · Active Tasks view *(DONE)*
+**Scope:** new `/active` route — live (non-shipped) pipelines as `ActiveCard`s with a progress rail + shimmer, expandable real-stage detail, and Open→task. Reachable via an "Active tasks →" link in the orchestrator head (the reference sidebar doesn't surface it either).
+**No-fabrication:** progress is derived from **completed/total stages** (not a fake %); status label = real run status; title/feature/account joined from real data; the summary strip shows only **Running / Live** (the reference's Avg-ETA / Tokens / $ cells are omitted).
+**Files:** `app/active/page.tsx` (new), `components/orchestrator/ActiveCard.tsx` (new), `app/globals.css` (`.active-*`, `shimmer`), `app/orchestrator/page.tsx` (reachability link).
+- 🤖 **Automated:** `active-tasks.spec.ts` — only non-shipped pipelines listed; progress rail = 25% for 1/4 done; expand shows 4 real stage roles; Open→/task/T-1. **4 green** (mocks the API). Suite: e2e 50✓ / vitest 140✓.
+- 🧑 **Manual:** open Orchestrator → "Active tasks →"; confirm only live pipelines show with progress rails; expand a card for stages; Open jumps to the task.
 
 ### PR-10 · Agent Pool: account-centric grid + executions table
 **Scope (from [§06](./sections/06-agentpool-accounts.md)):** rebuild pool as **account-centric** (provider glyph avatars, role pills, usage meters, current-issue bodies) + add the **"Executions in progress"** filterable table with graph-node chips. Seed fixtures for `Account` fields (model/plan/limit/used/today/role/strengths/sessions).

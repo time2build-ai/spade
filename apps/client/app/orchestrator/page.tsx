@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
 import { KpiStrip } from "@/components/orchestrator/KpiStrip";
@@ -129,9 +130,14 @@ export default function OrchestratorPage() {
       <PageHead
         title="Orchestrator"
         actions={
-          <span className="topbar-pill">
-            <span className="pulse-dot" /> {liveCount} sessions live
-          </span>
+          <>
+            <Link href="/active" className="btn ghost">
+              Active tasks →
+            </Link>
+            <span className="topbar-pill">
+              <span className="pulse-dot" /> {liveCount} sessions live
+            </span>
+          </>
         }
       />
       {body}
