@@ -32,7 +32,7 @@ function formatDate(iso?: string | null): string | null {
   });
 }
 
-/** Full ADR detail as a centered modal over the decisions list. */
+/** Full ADR detail as a right-docked aside over the decisions list. */
 export function DecisionDetail({
   node,
   index,
@@ -81,6 +81,7 @@ export function DecisionDetail({
     <div className="dec-modal-backdrop" onClick={onClose}>
       <div
         className="dec-modal"
+        data-testid="decision-aside"
         role="dialog"
         aria-modal="true"
         aria-label={node.label}

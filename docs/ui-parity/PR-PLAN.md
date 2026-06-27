@@ -98,17 +98,15 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `agent-pool.spec.ts` — provider glyphs (✦/◇); account with an alive session shows "in use", others "idle". **2 green** (mocks the API). Suite: e2e 52✓ / vitest 142✓.
 - 🧑 **Manual:** open Agent Pool; confirm provider-glyph avatars + that an account with a running session shows "in use".
 
-### PR-11 · Decisions list parity
-**Scope (from [§07](./sections/07-decisions-gate.md)):** add the All/Active/Proposed/Superseded segmented filter, status pills (incl. superseded-strike), real amber ADR ids, owner, feature + conflict chips, head actions. Add a `status` field to the decisions adapter.
-**Files:** `app/decisions/page.tsx`, `components/decisions/DecisionCard.tsx`, `lib/adapters.ts`.
-- 🤖 **Automated:** `decisions-list.spec.ts` — filter control switches visible rows; status pills render with correct classes; ADR id is `ADR-NNN` amber; chips present.
-- 🧑 **Manual:** toggle filters; compare a row vs reference.
+### PR-11 · Decisions list parity *(DEFERRED — fabrication-blocked)*
+**Why deferred:** the reference's All/Active/Proposed/Superseded **filter tabs** + **status pills** (incl. superseded-strike), owner, and conflict chips all require a **`status`/owner field** on decisions. Decisions are `type=decision` brain nodes whose API exposes only `id/type/label/detail/created_at` — none of those fields exist. Under no-fabrication there is no honest list-filter to build yet. Revisit once the backend adds decision status/owner. (The amber ADR id is already derived from list order in `DecisionCard`.)
 
-### PR-12 · ADR detail: re-dock + structured sections *(depends on PR-11)*
-**Scope:** move ADR detail from centered modal to **right-docked aside** with TOC scroll-spy + meta grid + the ~13 structured sections (Summary KV, metrics, drivers, 3-col Consequences, Alternatives, Validation, Discussion, Provenance, Changelog, Lineage, footer). Sections render from seeded narrative fixtures.
-**Files:** `components/decisions/DecisionDetail.tsx`.
-- 🤖 **Automated:** `adr-detail.spec.ts` — opening an ADR docks an aside (not a modal overlay); TOC links scroll to sections; Consequences renders 3 columns.
-- 🧑 **Manual:** open an ADR; confirm docked aside, TOC scroll-spy, and section layout vs reference.
+### PR-12 · ADR detail: re-dock to a right-side aside *(DONE)*
+**Scope:** moved the ADR detail from a **centered modal** to a **right-docked aside** (reference layout) — slide-in from the right, full height, left border, dim overlay. Content is unchanged real data: ADR code, recorded date, the markdown `detail`, **Linked work** (real tasks), and **Connections** (real edges).
+**No-fabrication:** the reference's ~13 structured sections (Summary KV, metrics, drivers, 3-col Consequences, Alternatives, Validation, Discussion, Provenance, Changelog, Lineage) + TOC scroll-spy are invented narrative — **omitted**; we keep our honest markdown + real links.
+**Files:** `app/globals.css` (`.dec-modal*` re-dock), `components/decisions/DecisionDetail.tsx` (test hook + comment).
+- 🤖 **Automated:** `decisions-detail.spec.ts` — opening a decision shows a right-docked aside (bounding box on the right edge) with the real label + markdown; Escape closes. **2 green** (mocks the API). Suite: e2e 54✓ / vitest 142✓.
+- 🧑 **Manual:** open a decision; confirm the detail slides in as a right-side aside (not centered) with the markdown + linked work/connections; Escape closes.
 
 ### PR-13 · Ask: shared ChatPanel + message anatomy *(foundation for Ask)*
 **Scope (from [§08](./sections/08-ask-chat.md)):** extract a single `ChatPanel(mode='page'|'dock'|'bubble')` from `AskDock`; rich message anatomy (avatars, who+timestamp header, right-aligned user vs left assistant, citation pills); keep our thinking indicator + Markdown.
