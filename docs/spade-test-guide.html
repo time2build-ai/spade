@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Spade — Product Test &amp; Score Guide</title>
+<title>Spade — Multi-Project Test &amp; Score Scenario</title>
 <style>
   :root{
     --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22; --bg-4:#232329;
@@ -17,22 +17,20 @@
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;}
-  a{color:var(--accent);text-decoration:none}
-  a:hover{text-decoration:underline}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
   code,.mono{font-family:var(--mono);font-size:.85em}
   code{background:var(--bg-3);padding:1px 5px;border-radius:4px;color:var(--text-2)}
-  .wrap{max-width:1000px;margin:0 auto;padding:0 22px 120px}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 22px 120px}
 
-  /* sticky scoreboard */
   header.bar{position:sticky;top:0;z-index:20;background:rgba(11,11,13,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
-  .bar-inner{max-width:1000px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .bar-inner{max-width:1020px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em}
   .brand .mark{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#d2c3ff,#8e7dff)}
   .score-box{display:flex;align-items:center;gap:14px;margin-left:auto;flex-wrap:wrap}
   .score-num{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-.02em}
   .score-sub{font-family:var(--mono);font-size:11px;color:var(--text-3)}
-  .meter{width:200px;height:8px;border-radius:999px;background:var(--bg-3);overflow:hidden;border:1px solid var(--line)}
-  .meter > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .25s}
+  .meter{width:180px;height:8px;border-radius:999px;background:var(--bg-3);overflow:hidden;border:1px solid var(--line)}
+  .meter>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .25s}
   .pills{display:flex;gap:8px;font-family:var(--mono);font-size:11px}
   .pill{padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--text-3)}
   .pill.pass{color:var(--green);border-color:rgba(122,209,154,.3);background:rgba(122,209,154,.08)}
@@ -41,7 +39,7 @@
 
   .intro{padding:28px 0 8px}
   h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
-  .lede{color:var(--text-2);max-width:70ch}
+  .lede{color:var(--text-2);max-width:74ch}
   .meta-row{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0 6px}
   .field{display:flex;flex-direction:column;gap:4px}
   .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4)}
@@ -55,11 +53,23 @@
   .note{background:var(--bg-1);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;margin:18px 0;color:var(--text-2)}
   .note.warn{border-left-color:var(--amber)}
 
-  section.area{margin:30px 0 0}
-  .area-head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:14px}
+  /* projects-under-test legend */
+  .legend{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+  @media(max-width:760px){.legend{grid-template-columns:1fr}}
+  .pcard{background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .pcard .slot{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(201,184,255,.08);border:1px solid rgba(201,184,255,.22);padding:1px 7px;border-radius:4px}
+  .pcard .role{font-size:11px;color:var(--text-3);margin:8px 0 10px}
+  .pcard .role b{color:var(--text-2)}
+  .pcard input{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;color:var(--text);font-family:var(--sans);outline:none;font-size:12.5px;margin-top:6px}
+  .pcard input:focus{border-color:var(--accent)}
+  .pcard .ph{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin-top:8px;display:block}
+
+  section.area{margin:32px 0 0;scroll-margin-top:80px}
+  .area-head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:6px}
   .area-head h2{font-size:16px;margin:0;letter-spacing:-.01em}
   .area-head .eyebrow{font-family:var(--mono);font-size:11px;color:var(--text-4)}
   .area-head .area-score{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-3)}
+  .area-blurb{color:var(--text-3);font-size:12.5px;margin:8px 0 14px}
 
   .case{background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:0 0 14px}
   .case[data-state="pass"]{border-color:rgba(122,209,154,.35)}
@@ -92,8 +102,7 @@
   .blocked-list{columns:2;gap:24px}
   @media(max-width:680px){.blocked-list{columns:1}}
   .blocked-list .bl{break-inside:avoid;background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 10px}
-  .bl b{color:var(--text)}
-  .bl span{color:var(--text-3);font-size:12.5px}
+  .bl b{color:var(--text)}.bl span{color:var(--text-3);font-size:12.5px}
   footer{margin-top:40px;color:var(--text-4);font-size:12px;text-align:center}
 </style>
 </head>
@@ -101,7 +110,7 @@
 
 <header class="bar">
   <div class="bar-inner">
-    <div class="brand"><span class="mark"></span> Spade · Test &amp; Score</div>
+    <div class="brand"><span class="mark"></span> Spade · Multi-Project Scenario</div>
     <div class="score-box">
       <div class="pills">
         <span class="pill pass" id="p-pass">✓ 0</span>
@@ -110,310 +119,265 @@
         <span class="pill" id="p-skip">untested 0</span>
       </div>
       <div class="meter"><i id="meter-fill"></i></div>
-      <div>
-        <div class="score-num" id="score-num">—</div>
-        <div class="score-sub" id="score-sub">0 / 0 scored</div>
-      </div>
+      <div><div class="score-num" id="score-num">—</div><div class="score-sub" id="score-sub">0 / 0 scored</div></div>
     </div>
   </div>
 </header>
 
 <div class="wrap">
-
   <div class="intro">
-    <h1>Spade — Product Test &amp; Score Guide</h1>
-    <p class="lede">Walk every user-facing flow, score each as <b style="color:var(--green)">Pass</b> /
-      <b style="color:var(--amber)">Partial</b> / <b style="color:var(--red)">Fail</b>, and jot notes.
-      Your scores + notes are saved in this browser (localStorage) and the scoreboard updates live.
-      Use <b>Export results</b> to copy a markdown report.</p>
+    <h1>Spade — Multi-Project Test &amp; Score Scenario</h1>
+    <p class="lede">This isn’t a feature checklist — it’s a <b>realistic run</b>. You’ll stand up
+      <b>three projects</b> with different characters, do real work in each, then stress how Spade
+      <b>manages and switches context</b> between them. Score each step
+      <b style="color:var(--green)">Pass</b> / <b style="color:var(--amber)">Partial</b> /
+      <b style="color:var(--red)">Fail</b>. Scores + notes persist in this browser; the context
+      section (CTX) is where the product proves it can juggle multiple products at once.</p>
 
     <div class="meta-row">
-      <div class="field"><label>Tester</label><input id="tester" placeholder="your name" /></div>
-      <div class="field"><label>Date</label><input id="testdate" placeholder="YYYY-MM-DD" /></div>
-      <div class="field"><label>Build / commit</label><input id="build" placeholder="git short SHA" /></div>
+      <div class="field"><label>Tester</label><input data-meta="tester" placeholder="your name" /></div>
+      <div class="field"><label>Date</label><input data-meta="testdate" placeholder="YYYY-MM-DD" /></div>
+      <div class="field"><label>Build / commit</label><input data-meta="build" placeholder="git short SHA" /></div>
     </div>
+
+    <h4 style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:20px 0 0">Projects under test</h4>
+    <div class="legend">
+      <div class="pcard">
+        <span class="slot">P1</span>
+        <div class="role"><b>Established</b> — already has tasks, brain &amp; a connected account. Use the seeded <b>Hello Spade (PoC)</b>.</div>
+        <span class="ph">name used</span><input data-meta="p1name" placeholder="Hello Spade (PoC)">
+        <span class="ph">id / slug</span><input data-meta="p1id" placeholder="hello-spade">
+      </div>
+      <div class="pcard">
+        <span class="slot">P2</span>
+        <div class="role"><b>Grown via planning</b> — start empty, then build a real backlog by asking the orchestrator to plan.</div>
+        <span class="ph">name used</span><input data-meta="p2name" placeholder="Acme Mobile">
+        <span class="ph">id / slug</span><input data-meta="p2id" placeholder="acme-mobile">
+      </div>
+      <div class="pcard">
+        <span class="slot">P3</span>
+        <div class="role"><b>Blank slate</b> — created and left empty (and/or with no account) to test empty + degraded states.</div>
+        <span class="ph">name used</span><input data-meta="p3name" placeholder="Internal Tools">
+        <span class="ph">id / slug</span><input data-meta="p3id" placeholder="internal-tools">
+      </div>
+    </div>
+
     <div class="toolbar">
       <button class="btn primary" id="btn-export">Export results (copy markdown)</button>
       <button class="btn" id="btn-reset">Reset all scores</button>
     </div>
 
     <div class="note">
-      <b>Setup before you start.</b> From the repo root run <code>make dev</code> (starts the API on
-      <code>:8765</code> and the Next UI on <code>:3000</code>) — or run them separately: <code>make api</code>
-      and <code>cd apps/client &amp;&amp; npm run dev</code>. Open <a href="http://127.0.0.1:3000" target="_blank">http://127.0.0.1:3000</a>.
-      Two seeded projects help: <b>Hello Spade (PoC)</b> is populated (tasks, brain, a connected account)
-      — use it for the data-rich flows; create a fresh empty project to test empty/blank-slate states.
+      <b>Setup.</b> <code>make dev</code> → <a href="http://127.0.0.1:3000" target="_blank">http://127.0.0.1:3000</a>
+      (API on <code>:8765</code>). P1 = the seeded <b>Hello Spade</b> (populated, has account <code>.claude-t2b</code>).
+      You’ll create P2 &amp; P3 in Scenario 0. Fill the cards above with the names/ids you actually use — the
+      CTX cases refer to “P1/P2/P3”.
+    </div>
+    <div class="note warn">
+      <b>Planning note.</b> The orchestrator’s planning skill is installed when an orchestrator <i>spawns</i>.
+      If a planning ask doesn’t kick in for a project, open <b>Agent pool</b>, kill that project’s current
+      orchestrator, then ask again so a fresh one spawns with the skill.
     </div>
   </div>
 
-  <!-- ============ AREAS ============ -->
   <div id="areas"></div>
 
-  <!-- ============ NOT YET BUILT ============ -->
   <section class="area">
-    <div class="area-head"><span class="eyebrow">REF</span><h2>Known gaps — not built yet (don't score)</h2></div>
-    <p class="case-goal">These nav items intentionally show a “Próximamente” badge and are dimmed/non-clickable.
-      They’re listed so you don’t mistake them for failures. Tracked in <code>docs/backlog/</code>.</p>
+    <div class="area-head"><span class="eyebrow">REF</span><h2>Known gaps — not built yet (don’t score)</h2></div>
+    <p class="area-blurb">These nav items intentionally show a “Próximamente” badge and are dimmed. Listed so you
+      don’t score them as failures. Tracked in <code>docs/backlog/</code>.</p>
     <div class="blocked-list">
-      <div class="bl"><b>Overview / Home</b><br><span>Project &amp; cross-project dashboards (composable from existing data — buildable).</span></div>
-      <div class="bl"><b>Sprints</b><br><span>No sprints backend yet.</span></div>
-      <div class="bl"><b>Graph &amp; Issues</b><br><span>Brain graph + grounded issue list (buildable).</span></div>
-      <div class="bl"><b>Meetings</b><br><span>No meeting-ingestion backend.</span></div>
-      <div class="bl"><b>Feedback</b><br><span>No feedback-cluster backend.</span></div>
-      <div class="bl"><b>CLI / logs</b><br><span>Session console view (buildable from /sessions).</span></div>
-      <div class="bl"><b>Settings</b><br><span>Not built.</span></div>
-      <div class="bl"><b>“All projects” (workspace scope)</b><br><span>Workspace-level shell not built.</span></div>
+      <div class="bl"><b>Overview / Home</b><br><span>Project &amp; cross-project dashboards (buildable).</span></div>
+      <div class="bl"><b>Sprints</b><br><span>No sprints backend.</span></div>
+      <div class="bl"><b>Graph &amp; Issues</b><br><span>Buildable from brain + tasks.</span></div>
+      <div class="bl"><b>Meetings / Feedback</b><br><span>No ingestion backend.</span></div>
+      <div class="bl"><b>CLI / logs · Settings</b><br><span>Not built.</span></div>
+      <div class="bl"><b>“All projects” workspace scope</b><br><span>Workspace-level shell not built.</span></div>
     </div>
   </section>
 
-  <footer>Spade test guide · scores stored locally in your browser · regenerate anytime</footer>
+  <footer>Spade multi-project scenario · scores stored locally in your browser</footer>
 </div>
 
 <script>
 const CASES = [
-  {area:"Setup & shell", eyebrow:"ENV", cases:[
-    {id:"SH-1", title:"App boots", goal:"The monorepo dev servers come up and the shell renders.",
-     pre:"Nothing running on :3000 / :8765.",
-     steps:["Run <code>make dev</code> from the repo root.","Open <a target=_blank href='http://127.0.0.1:3000'>http://127.0.0.1:3000</a>."],
-     expect:"You’re redirected to <b>/backlog</b>; the 232px sidebar + 44px topbar render in the dark/lavender theme with the three fonts; no console errors."},
-    {id:"SH-2", title:"Topbar shows live data", goal:"The right-side pills reflect real state, not mock values.",
-     pre:"App open, API running.",
-     steps:["Look at the topbar right group."],
-     expect:"<b>daemon · N sessions</b> reflects the live agent count; the account pill shows your real default account label (e.g. <code>.claude-t2b</code>). No fake “sprint 26 · day 2/10” pill."},
-    {id:"SH-3", title:"Unbuilt items marked", goal:"Not-yet-built views are clearly flagged, not broken links.",
-     pre:"App open.",
-     steps:["Scan the sidebar."],
-     expect:"Overview, Ask, Sprints, Graph &amp; Issues, Meetings, Feedback, CLI/logs, Settings are <b>dimmed with a “Próximamente” badge</b> and don’t navigate. Built items (Backlog, Product brain, Orchestrator, Agent pool, Human gates, Decisions) are active."},
+  {area:"Scenario 0 · Set up the 3 projects", eyebrow:"SETUP", blurb:"Boot the app and provision the three projects you’ll juggle for the rest of the run.", cases:[
+    {id:"S0-1", title:"App boots into the shell", goal:"Dev servers up; shell renders.",
+     steps:["<code>make dev</code> → open <a target=_blank href='http://127.0.0.1:3000'>:3000</a>."],
+     expect:"Redirects to <b>/backlog</b>; 232px sidebar + 44px topbar in the dark/lavender theme; topbar shows a live <b>daemon · N sessions</b> + your real account; no console errors."},
+    {id:"S0-2", title:"P1 is the established project", goal:"Confirm the seeded project is selected and populated.",
+     steps:["Open the project switcher; select <b>Hello Spade (PoC)</b> (record it as P1 above)."],
+     expect:"Sidebar header shows the project + slug; Backlog/Brain/Decisions badges show <b>non-zero real counts</b>."},
+    {id:"S0-3", title:"Create P2 (will be grown via planning)", goal:"Create a second project from the switcher.",
+     steps:["Switcher → <b>New project</b> → name it (record as P2).","Confirm <b>Path</b> auto-fills <code>~/.spade/projects/&lt;slug&gt;</code> and tracks the name.","Create."],
+     expect:"P2 becomes active; its workspace dir is created; Backlog/Brain/Decisions badges read <b>0</b> (it’s empty)."},
+    {id:"S0-4", title:"Create P3 (blank slate)", goal:"Create a third, leave it empty.",
+     steps:["Switcher → New project → name it (record as P3) → Create.","Leave it untouched."],
+     expect:"P3 active, all counts 0. (Optional: this is your no-/least-account project for degraded-state tests.)"},
   ]},
 
-  {area:"Projects", eyebrow:"PROJ", cases:[
-    {id:"PR-1", title:"Create a project", goal:"Create a project from the switcher; path defaults sensibly; it’s created on disk.",
-     pre:"App open.",
-     steps:["Click the project switcher (top-left) → <b>New project</b>.","Type a name (e.g. “Client Intelligence”).","Confirm the <b>Path</b> auto-fills to <code>~/.spade/projects/&lt;slug&gt;</code> and updates as you type the name.","Click <b>Create</b>."],
-     expect:"The new project becomes active; the <b>id preview</b> matched the slug; the workspace dir was created. No error."},
-    {id:"PR-2", title:"Switch projects updates the whole app", goal:"Selecting a project re-renders sidebar header, counts, and content together.",
-     pre:"At least two projects exist.",
-     steps:["Open the switcher and pick a different project."],
-     expect:"The sidebar <b>header card</b>, the nav <b>badge counts</b> (Backlog/Brain/Decisions…), and the current view’s content all update to the selected project at once (no stale data, no reload needed)."},
-    {id:"PR-3", title:"Sidebar counts are real", goal:"Counts reflect actual data, not static numbers.",
-     pre:"On a populated project (Hello Spade).",
-     steps:["Compare the Decisions badge to the Decisions page count; the Backlog badge to the number of tasks."],
-     expect:"Badge numbers match the real counts (e.g. Decisions badge == number of ADRs shown)."},
+  {area:"Scenario 1 · P1 — work an established product", eyebrow:"P1", blurb:"With P1 (Hello Spade) selected, exercise the data-rich flows.", cases:[
+    {id:"P1-1", title:"Backlog + task detail", goal:"Rich backlog renders; a task opens with grounded evidence.",
+     pre:"P1 selected.",
+     steps:["Sidebar → Backlog.","Click a task card (e.g. SPD-001)."],
+     expect:"Styled 5-column board with real cards (priority, ID, feature, intel bar, chips). Task detail shows a serif origin quote, evidence sections from grounded brain nodes, a timeline, metadata, and a Dependencies section. Honest empty states where data is missing."},
+    {id:"P1-2", title:"Product brain + Decisions", goal:"Graph + ADRs reflect P1’s real knowledge.",
+     pre:"P1 selected.",
+     steps:["Sidebar → Product brain (toggle a legend type, click a node).","Sidebar → Decisions."],
+     expect:"SVG graph with typed nodes/edges + working legend filters + node info panel. Decisions lists P1’s ADRs; count matches the sidebar badge."},
+    {id:"P1-3", title:"Ask the brain about P1", goal:"⌘K dock answers with P1’s real state.",
+     pre:"P1 selected.",
+     steps:["Press <code>⌘K</code> → ask “What do you know about the current project?”"],
+     expect:"Animated thinking, then a markdown answer describing <b>Hello Spade specifically</b> (its backlog/brain/pipelines) — not a generic or wrong-project answer."},
   ]},
 
-  {area:"Backlog & tasks", eyebrow:"TASK", cases:[
-    {id:"BK-1", title:"Backlog board renders", goal:"Tasks show as a styled kanban board.",
-     pre:"Hello Spade selected.",
-     steps:["Sidebar → <b>Backlog</b>."],
-     expect:"Five columns (Ready / In progress / Review / Shipped / Blocked) with counts; each <b>task card</b> shows a priority dot, mono ID (SPD-NNN), feature, title, an intel bar and chips. Empty columns show a subtle empty state."},
-    {id:"BK-2", title:"Open a task", goal:"Clicking a card opens its detail.",
-     pre:"On the Backlog with tasks.",
-     steps:["Click any task card."],
-     expect:"Navigates to <code>/task/SPD-NNN</code> and the detail loads."},
-    {id:"TK-1", title:"Task detail content", goal:"Detail shows real, grounded content with honest empty states.",
-     pre:"Open SPD-001 (or another task on Hello Spade).",
-     steps:["Read the main column and side rail."],
-     expect:"Serif <b>origin quote</b> (omitted if none), evidence sections (<b>Decisions / Bugs / Feedback / Metric</b>) populated from the task’s grounded brain nodes (empty ones say “No linked …”), a metadata side rail, and a <b>timeline</b> from the activity trail. Nothing fabricated."},
-    {id:"TK-2", title:"Task dependencies", goal:"Blocks / related / subtask links render and navigate.",
-     pre:"A task that has links (or create some via planning / API).",
-     steps:["On a task with links, find the <b>Dependencies</b> section."],
-     expect:"Non-empty buckets show: <b>Blocked by / Blocks / Parent / Subtasks / Related</b>, each a clickable chip to the other task. A task with none shows “No dependencies”."},
+  {area:"Scenario 2 · P2 — grow a project with planning", eyebrow:"P2", blurb:"Take P2 from empty to a real, dependency-linked backlog using the orchestrator’s planning flow.", cases:[
+    {id:"P2-1", title:"P2 starts empty (honest states)", goal:"Empty project shows real empty states.",
+     pre:"Switch to P2.",
+     steps:["Visit Backlog, Product brain, Decisions on P2."],
+     expect:"Empty board, “this brain is empty”, “no decisions” — all honest, no errors, no leftover P1 data."},
+    {id:"P2-2", title:"Plan a goal → propose (no creation yet)", goal:"Describing a goal triggers brainstorm→propose, gated on approval.",
+     pre:"P2 selected; fresh orchestrator (see Planning note).",
+     steps:["⌘K → “Plan out: build an API + MCP so agents fetch client-context data in real time.”"],
+     expect:"Loads the planning skill; may ask 1–3 clarifying questions; proposes a <b>task breakdown with dependencies</b> (epic/subtasks, blocks, related) as a message and <b>waits</b> — creates nothing yet."},
+    {id:"P2-3", title:"Approve → tasks created in P2", goal:"On approval, real tasks + links are written to P2.",
+     pre:"Continuing P2-2.",
+     steps:["Reply “go”.","Open P2’s Backlog and a created task."],
+     expect:"New tasks appear in <b>P2’s</b> backlog with the proposed <b>dependencies</b> on Task detail; the reply reports the real created ids."},
+    {id:"P2-4", title:"Ask about P2 reflects the new work", goal:"The brain now knows about what was just planned.",
+     pre:"After P2-3.",
+     steps:["⌘K → “What’s on the backlog now?”"],
+     expect:"The answer references the tasks just created in P2 (counts/titles), grounded in P2 — not P1."},
   ]},
 
-  {area:"Product brain", eyebrow:"BRAIN", cases:[
-    {id:"BR-1", title:"Knowledge graph", goal:"Brain renders as an interactive graph.",
-     pre:"Hello Spade selected.",
-     steps:["Sidebar → <b>Product brain</b>.","Toggle a type in the legend.","Click a node."],
-     expect:"SVG nodes (colored by type) + edges over a lavender glow; the <b>legend</b> shows per-type counts and toggling hides/shows that type; clicking a node opens the <b>info panel</b> with its detail + connected edges."},
-    {id:"DEC-1", title:"Decisions (ADRs)", goal:"Decision-type brain nodes list as ADR cards.",
-     pre:"Hello Spade selected.",
-     steps:["Sidebar → <b>Decisions</b>."],
-     expect:"A list of ADR cards (amber accent) with the decision label + detail; the count in the header matches the sidebar badge. Honest empty state on an empty project."},
+  {area:"Scenario 3 · P3 — blank slate & degraded states", eyebrow:"P3", blurb:"Confirm the empty/edge project behaves honestly.", cases:[
+    {id:"P3-1", title:"P3 is empty everywhere", goal:"All views show zero-state without errors.",
+     pre:"Switch to P3.",
+     steps:["Visit Backlog / Brain / Decisions; check sidebar counts."],
+     expect:"Everything 0 / empty-state; no stale data from P1 or P2."},
+    {id:"P3-2", title:"Ask on P3 (empty / no-account)", goal:"Degraded states are graceful.",
+     pre:"P3 selected.",
+     steps:["⌘K → ask about the project."],
+     expect:"If P3 has an account → a grounded “brand-new, blank slate (0 tasks/nodes/runs)” answer. If P3 has <b>no</b> provider account → an honest “No provider accounts configured… add one in Agent pool” panel — <b>never a raw 500</b>."},
   ]},
 
-  {area:"Orchestrator & pipelines", eyebrow:"ORCH", cases:[
-    {id:"OR-1", title:"Orchestrator view (live)", goal:"Pipelines, stages, and a live terminal render and poll.",
-     pre:"Hello Spade selected.",
-     steps:["Sidebar → <b>Orchestrator</b>."],
-     expect:"A KPI strip (Active / Gated / Shipped / Queued), <b>pipeline cards</b> with a 4-stage row (Developer→Reviewer→Integrator→Documentor) colored by state, filter pills, and a terminal panel. Data refreshes on its own (~2.5s)."},
-    {id:"OR-2", title:"Run / advance a pipeline", goal:"Start and Advance actions work against a real run.",
-     pre:"A task with a queued pipeline (create one via the spade-data API or the Ask flow).",
-     steps:["Expand a pipeline card.","If queued → click <b>Start</b>. If running → click <b>Advance</b>."],
-     expect:"The run transitions (queued→running, or advances a stage / ships on the last stage); the card + KPIs update on the next poll. (Spawning a real agent needs a connected account.)"},
-    {id:"AP-1", title:"Agent pool", goal:"Live fleet + provider accounts render with real fields only.",
-     pre:"Some sessions running (e.g. after an Ask or pipeline).",
-     steps:["Sidebar → <b>Agent pool</b>."],
-     expect:"Agent cards for live sessions (role, model, status, account, task) and a <b>Provider accounts</b> section. No fabricated usage meters / spend / handoff log."},
-    {id:"GT-1", title:"Human gates", goal:"The brakes approval queue renders and acts.",
-     pre:"App open.",
-     steps:["Sidebar → <b>Human gates</b>.","If a gate (brake) is pending, try <b>Allow</b> / <b>Skip</b>."],
-     expect:"With no pending gates → an honest empty state. With a brake → a card with Allow/Skip that resolves it and the list updates."},
+  {area:"Scenario 4 · Context switching & isolation", eyebrow:"CTX", blurb:"The core test: can Spade hold three products at once without bleeding context? Switch deliberately and watch for stale/leaked data.", cases:[
+    {id:"CTX-1", title:"Switch updates the whole app at once", goal:"Selecting a project re-renders header, counts, and content together.",
+     pre:"All 3 projects exist.",
+     steps:["Switch P1 → P2 → P3, pausing on each."],
+     expect:"On every switch the sidebar <b>header card</b>, the nav <b>badge counts</b>, and the current view’s <b>content</b> all update together to the selected project. No stale numbers, no reload needed."},
+    {id:"CTX-2", title:"“Current project” grounding follows selection", goal:"The brain talks about whichever project is selected.",
+     pre:"All 3 exist.",
+     steps:["On P1: ⌘K → “What’s the current project?” Note the answer.","Switch to P2, ask again. Switch to P3, ask again."],
+     expect:"Each answer is about the <b>currently-selected</b> project (P1→Hello Spade, P2→its name + planned work, P3→blank slate). No answer describes the wrong project."},
+    {id:"CTX-3", title:"Data isolation — no cross-leak", goal:"Work created in one project never appears in another.",
+     pre:"P2 has tasks (from Scenario 2); P3 is empty.",
+     steps:["Compare backlogs/brain across P1, P2, P3."],
+     expect:"P2’s planned tasks appear ONLY in P2. P1’s tasks stay in P1. P3 stays empty. Counts per project are independent and correct."},
+    {id:"CTX-4", title:"Per-project orchestrators", goal:"Each project gets its own agent context; Ask talks to the right one.",
+     pre:"You’ve asked in ≥2 projects.",
+     steps:["Open <b>Agent pool</b>; read each orchestrator’s PROJECT field."],
+     expect:"Orchestrator sessions are tagged to their project; the Ask dock for a given project talks to <b>that</b> project’s orchestrator (and the answers prove it — see CTX-2). No single orchestrator answering for all."},
+    {id:"CTX-5", title:"Switch mid-conversation", goal:"Changing project while the dock is open re-targets context.",
+     pre:"Dock open with a thread on P1.",
+     steps:["With the dock open and a P1 reply on screen, switch the project to P2 (topbar).","Ask a new question in the same dock."],
+     expect:"The new question is answered about <b>P2</b> (the now-selected project). Note how prior P1 messages are handled (kept as history vs cleared) — record the behavior and whether it’s confusing."},
+    {id:"CTX-6", title:"Rapid switching stress", goal:"Fast back-and-forth doesn’t corrupt state.",
+     pre:"All 3 exist.",
+     steps:["Switch P1↔P2↔P3 quickly ~6–8 times.","Land on one and open Backlog + ⌘K."],
+     expect:"Counts/content settle on the <b>final</b> selection with no flicker of wrong-project data, no console errors, no stuck spinners."},
+    {id:"CTX-7", title:"Server current-project sync (advanced)", goal:"The backend’s notion of current project follows the UI.",
+     pre:"Terminal handy.",
+     steps:["Select a project in the UI.","Run <code>curl -s 127.0.0.1:8765/current-project</code>."],
+     expect:"The returned <code>project_id</code> matches the UI selection (so any agent/automation reasons about the project you’re viewing). Repeat after switching."},
   ]},
 
-  {area:"Ask the brain", eyebrow:"ASK", cases:[
-    {id:"AS-1", title:"Open the dock", goal:"⌘K and the command pill open the chat dock.",
-     pre:"App open.",
-     steps:["Press <code>⌘K</code> (or <code>Ctrl+K</code>), then close it. Then click the “Ask the brain…” pill."],
-     expect:"A right-side slide-over opens both ways; Esc / the ✕ / clicking the overlay closes it. The header shows the current project name."},
-    {id:"AS-2", title:"Ask about the current project", goal:"The orchestrator answers about the SELECTED project, grounded in its data.",
-     pre:"Hello Spade selected (has an account).",
-     steps:["Open the dock and ask: “What do you know about the current project?”","Wait for the reply."],
-     expect:"An <b>animated thinking</b> indicator (cycling phrases), then a <b>markdown-rendered</b> answer describing <b>Hello Spade</b> specifically (its backlog, brain, pipelines). Composer is Claude-style (rounded, Enter sends, Shift+Enter newline)."},
-    {id:"AS-3", title:"Project context follows selection", goal:"Switching projects changes what the brain talks about.",
-     pre:"Two projects, one empty.",
-     steps:["Switch to a fresh/empty project.","Open the dock and ask the same question."],
-     expect:"The answer is about the <b>now-selected</b> project (e.g. “brand-new, blank slate — 0 tasks, 0 brain nodes”), NOT the previous one."},
-    {id:"AS-4", title:"Graceful no-account state", goal:"A project with no provider accounts is handled cleanly.",
-     pre:"All accounts removed, OR understand: if at least one account exists, Ask works (falls back to default).",
-     steps:["If you can reach a state with zero provider accounts, open the dock."],
-     expect:"An honest panel: “No provider accounts configured yet… add one in Agent pool,” with no raw 500. (If an account exists, this case is N/A → mark Skip.)"},
-    {id:"AS-5", title:"Errors are readable", goal:"A failed turn shows a friendly message, not a raw 500.",
-     pre:"If you hit an error during a turn.",
-     steps:["Observe a failed reply (if one occurs)."],
-     expect:"A friendly “the orchestrator hit an error…” bubble with the real error as a muted detail line (not a bare “500 Internal Server Error”). Mark Skip if you never hit an error."},
-  ]},
-
-  {area:"Planning", eyebrow:"PLAN", cases:[
-    {id:"PL-1", title:"Orchestrator proposes a plan", goal:"Describing a goal triggers a brainstorm→propose flow (no tasks created yet).",
-     pre:"Hello Spade selected, with a FRESH orchestrator (kill the project’s current orchestrator in Agent pool if planning doesn’t trigger — the skill is installed at spawn).",
-     steps:["Open the dock and say: “Plan out: build an API + MCP that lets agents fetch client-context data in real time.”","Read the reply."],
-     expect:"It loads the <b>planning skill</b>, may ask 1–3 clarifying questions, and <b>proposes a task breakdown with dependencies</b> (epic/subtasks, blocks, related) as a message — and <b>waits for approval</b> without creating anything yet."},
-    {id:"PL-2", title:"Approve → tasks created with dependencies", goal:"On approval, real backlog tasks + links are created.",
-     pre:"Continuing from PL-1.",
-     steps:["Reply “go” (or approve / request edits).","Wait for it to confirm with created task ids.","Open Backlog and a created task’s detail."],
-     expect:"New tasks appear in the <b>Backlog</b>; opening one shows the <b>Dependencies</b> it described (blocks/related/subtask). The reply reports the real created ids — nothing it didn’t actually make."},
-  ]},
-
-  {area:"Quality of life", eyebrow:"QOL", cases:[
-    {id:"QL-1", title:"Real-time CSS in dev", goal:"Style edits hot-reload (dev runs on webpack).",
-     pre:"Dev server running.",
-     steps:["(Optional, dev only) Edit a value in <code>apps/client/app/globals.css</code> and save."],
-     expect:"The change appears without a full restart. (If you’re only clicking through the running app, mark Skip.)"},
-    {id:"QL-2", title:"Density & fidelity", goal:"The UI feels like the dense, dark “pro tool” handoff aesthetic.",
-     pre:"App open.",
-     steps:["Eyeball spacing, mono IDs, lavender accents, chips, priority dots across views."],
-     expect:"Consistent dark/near-black surfaces, lavender accents, JetBrains Mono for IDs/metrics, Instrument Serif for origin quotes; dense, not loose. No obviously-broken/unstyled screens."},
+  {area:"Scenario 5 · Quality of life", eyebrow:"QOL", blurb:"Whole-product feel and resilience.", cases:[
+    {id:"QL-1", title:"Density &amp; fidelity", goal:"It looks like the intended dense, dark pro-tool.",
+     steps:["Eyeball spacing, mono IDs, lavender accents, chips/priority dots across all the views you visited."],
+     expect:"Consistent near-black surfaces + lavender accents, JetBrains Mono for IDs/metrics, serif origin quotes; dense, not loose; no obviously-unstyled screens."},
+    {id:"QL-2", title:"Errors are readable", goal:"Failures degrade gracefully.",
+     steps:["If any action errors during the run (esp. an Ask turn), observe the message."],
+     expect:"Friendly message + a real detail line (e.g. exception type), never a bare “500 Internal Server Error”. Mark Skip if nothing errored."},
+    {id:"QL-3", title:"Snappy / no jank", goal:"Navigation and switching feel responsive.",
+     steps:["Click through views; switch projects; open/close the dock."],
+     expect:"Sub-second view changes; polling views (Orchestrator/Agent pool) update without freezing the UI; the dock opens/closes smoothly."},
   ]},
 ];
 
-const KEY="spade-test-guide-v1";
-const SCORES = ["pass","partial","fail","skip"];
-const LABELS = {pass:"Pass", partial:"Partial", fail:"Fail", skip:"Not tested"};
-let store = JSON.parse(localStorage.getItem(KEY) || "{}");
-
-function save(){ localStorage.setItem(KEY, JSON.stringify(store)); }
+const KEY="spade-test-guide-v2";
+const SCORES=["pass","partial","fail","skip"];
+const LABELS={pass:"Pass",partial:"Partial",fail:"Fail",skip:"Not tested"};
+let store=JSON.parse(localStorage.getItem(KEY)||"{}");
+function save(){localStorage.setItem(KEY,JSON.stringify(store));}
 
 function caseRow(c){
-  const cur = (store.scores && store.scores[c.id]) || "skip";
-  const note = (store.notes && store.notes[c.id]) || "";
-  const steps = c.steps.map(s=>`<li>${s}</li>`).join("");
-  const seg = SCORES.map(s=>{
-    const sel = cur===s ? ` sel-${s}` : "";
-    return `<label class="opt${sel}" data-id="${c.id}" data-score="${s}">
-      <input type="radio" name="sc-${c.id}" ${cur===s?"checked":""}>${LABELS[s]}</label>`;
-  }).join("");
+  const cur=(store.scores&&store.scores[c.id])||"skip";
+  const note=(store.notes&&store.notes[c.id])||"";
+  const steps=c.steps.map(s=>`<li>${s}</li>`).join("");
+  const seg=SCORES.map(s=>`<label class="opt${cur===s?" sel-"+s:""}" data-id="${c.id}" data-score="${s}"><input type="radio" name="sc-${c.id}" ${cur===s?"checked":""}>${LABELS[s]}</label>`).join("");
   return `<div class="case" data-id="${c.id}" data-state="${cur}">
     <div class="case-head"><span class="case-id">${c.id}</span><span class="case-title">${c.title}</span></div>
     <div class="case-goal">${c.goal}</div>
     ${c.pre?`<div class="pre"><b style="color:var(--text-4)">Precondition:</b> ${c.pre}</div>`:""}
     <h4>Steps</h4><ol>${steps}</ol>
     <h4>Expected</h4><div class="expect">${c.expect}</div>
-    <div class="score-ctl">
-      <div class="seg">${seg}</div>
-      <div class="notes"><input data-note="${c.id}" placeholder="notes / what broke / observations" value="${note.replace(/"/g,'&quot;')}"></div>
-    </div>
+    <div class="score-ctl"><div class="seg">${seg}</div>
+      <div class="notes"><input data-note="${c.id}" placeholder="notes / what broke / observations" value="${note.replace(/"/g,'&quot;')}"></div></div>
   </div>`;
 }
-
 function render(){
-  const root = document.getElementById("areas");
-  root.innerHTML = CASES.map(area=>{
-    const rows = area.cases.map(caseRow).join("");
-    return `<section class="area">
-      <div class="area-head"><span class="eyebrow">${area.eyebrow}</span><h2>${area.area}</h2>
-        <span class="area-score" data-area="${area.eyebrow}"></span></div>
-      ${rows}</section>`;
-  }).join("");
-  // restore meta
-  ["tester","testdate","build"].forEach(k=>{ const el=document.getElementById(k); if(store.meta&&store.meta[k]) el.value=store.meta[k]; });
+  document.getElementById("areas").innerHTML=CASES.map(a=>`<section class="area">
+    <div class="area-head"><span class="eyebrow">${a.eyebrow}</span><h2>${a.area}</h2><span class="area-score" data-area="${a.eyebrow}"></span></div>
+    ${a.blurb?`<p class="area-blurb">${a.blurb}</p>`:""}${a.cases.map(caseRow).join("")}</section>`).join("");
+  document.querySelectorAll("[data-meta]").forEach(el=>{ if(store.meta&&store.meta[el.dataset.meta]!=null) el.value=store.meta[el.dataset.meta]; });
   recompute();
 }
-
-function allCases(){ return CASES.flatMap(a=>a.cases.map(c=>({...c, eyebrow:a.eyebrow}))); }
-
+function allCases(){return CASES.flatMap(a=>a.cases);}
 function recompute(){
-  const sc = store.scores||{};
-  const counts={pass:0,partial:0,fail:0,skip:0};
-  allCases().forEach(c=>{ counts[(sc[c.id]||"skip")]++; });
-  const scored = counts.pass+counts.partial+counts.fail;
-  const pts = counts.pass + counts.partial*0.5;
-  const pct = scored ? Math.round((pts/scored)*100) : 0;
+  const sc=store.scores||{}, counts={pass:0,partial:0,fail:0,skip:0};
+  allCases().forEach(c=>counts[(sc[c.id]||"skip")]++);
+  const scored=counts.pass+counts.partial+counts.fail, pts=counts.pass+counts.partial*0.5;
+  const pct=scored?Math.round(pts/scored*100):0;
   document.getElementById("p-pass").textContent="✓ "+counts.pass;
   document.getElementById("p-partial").textContent="~ "+counts.partial;
   document.getElementById("p-fail").textContent="✗ "+counts.fail;
   document.getElementById("p-skip").textContent="untested "+counts.skip;
-  document.getElementById("score-num").textContent = scored ? pct+"%" : "—";
-  document.getElementById("score-sub").textContent = scored+" / "+allCases().length+" scored";
-  document.getElementById("meter-fill").style.width = pct+"%";
-  // per-area
+  document.getElementById("score-num").textContent=scored?pct+"%":"—";
+  document.getElementById("score-sub").textContent=scored+" / "+allCases().length+" scored";
+  document.getElementById("meter-fill").style.width=pct+"%";
   document.querySelectorAll(".area-score").forEach(el=>{
-    const eye=el.dataset.area; const cs=CASES.find(a=>a.eyebrow===eye).cases;
-    let p=0,n=0; cs.forEach(c=>{const s=sc[c.id]||"skip"; if(s!=="skip"){n++; p+=s==="pass"?1:s==="partial"?0.5:0;}});
-    el.textContent = n ? Math.round(p/n*100)+"% ("+n+"/"+cs.length+")" : "untested";
+    const cs=CASES.find(a=>a.eyebrow===el.dataset.area).cases; let p=0,n=0;
+    cs.forEach(c=>{const s=sc[c.id]||"skip"; if(s!=="skip"){n++; p+=s==="pass"?1:s==="partial"?.5:0;}});
+    el.textContent=n?Math.round(p/n*100)+"% ("+n+"/"+cs.length+")":"untested";
   });
 }
-
 document.addEventListener("click",e=>{
-  const opt=e.target.closest(".opt");
-  if(opt){
-    const id=opt.dataset.id, score=opt.dataset.score;
-    store.scores=store.scores||{}; store.scores[id]=score; save();
-    // update segment styling + card border
-    const seg=opt.parentElement;
-    seg.querySelectorAll(".opt").forEach(o=>o.className="opt");
-    opt.className="opt sel-"+score;
-    seg.closest(".case").dataset.state=score;
-    recompute();
-  }
+  const opt=e.target.closest(".opt"); if(!opt)return;
+  const id=opt.dataset.id, score=opt.dataset.score;
+  store.scores=store.scores||{}; store.scores[id]=score; save();
+  const seg=opt.parentElement; seg.querySelectorAll(".opt").forEach(o=>o.className="opt");
+  opt.className="opt sel-"+score; seg.closest(".case").dataset.state=score; recompute();
 });
 document.addEventListener("input",e=>{
-  if(e.target.dataset.note!==undefined){
-    store.notes=store.notes||{}; store.notes[e.target.dataset.note]=e.target.value; save();
-  }
-  if(["tester","testdate","build"].includes(e.target.id)){
-    store.meta=store.meta||{}; store.meta[e.target.id]=e.target.value; save();
-  }
+  if(e.target.dataset.note!==undefined){store.notes=store.notes||{}; store.notes[e.target.dataset.note]=e.target.value; save();}
+  if(e.target.dataset.meta!==undefined){store.meta=store.meta||{}; store.meta[e.target.dataset.meta]=e.target.value; save();}
 });
-
-document.getElementById("btn-reset").addEventListener("click",()=>{
-  if(confirm("Clear all scores and notes?")){ store={}; save(); render(); }
-});
-
+document.getElementById("btn-reset").addEventListener("click",()=>{ if(confirm("Clear all scores and notes?")){store={}; save(); render();} });
 document.getElementById("btn-export").addEventListener("click",()=>{
-  const sc=store.scores||{}, nt=store.notes||{}, m=store.meta||{};
-  const counts={pass:0,partial:0,fail:0,skip:0};
+  const sc=store.scores||{}, nt=store.notes||{}, m=store.meta||{}, counts={pass:0,partial:0,fail:0,skip:0};
   allCases().forEach(c=>counts[(sc[c.id]||"skip")]++);
-  const scored=counts.pass+counts.partial+counts.fail;
-  const pct=scored?Math.round((counts.pass+counts.partial*0.5)/scored*100):0;
-  let md=`# Spade test run\n\n`;
-  md+=`- Tester: ${m.tester||"—"}\n- Date: ${m.testdate||"—"}\n- Build: ${m.build||"—"}\n`;
+  const scored=counts.pass+counts.partial+counts.fail, pct=scored?Math.round((counts.pass+counts.partial*.5)/scored*100):0;
+  let md=`# Spade multi-project test run\n\n- Tester: ${m.tester||"—"}\n- Date: ${m.testdate||"—"}\n- Build: ${m.build||"—"}\n`;
+  md+=`- Projects: P1=${m.p1name||"—"} (${m.p1id||"?"}), P2=${m.p2name||"—"} (${m.p2id||"?"}), P3=${m.p3name||"—"} (${m.p3id||"?"})\n`;
   md+=`- Score: **${pct}%** (${scored}/${allCases().length} scored) — ✓${counts.pass} ~${counts.partial} ✗${counts.fail} · untested ${counts.skip}\n\n`;
-  CASES.forEach(a=>{
-    md+=`## ${a.area}\n`;
-    a.cases.forEach(c=>{
-      const s=sc[c.id]||"skip"; const mark={pass:"✓ Pass",partial:"~ Partial",fail:"✗ Fail",skip:"· untested"}[s];
-      md+=`- **${c.id}** ${c.title} — ${mark}`;
-      if(nt[c.id]) md+=` — _${nt[c.id]}_`;
-      md+=`\n`;
-    });
-    md+=`\n`;
-  });
-  navigator.clipboard.writeText(md).then(
-    ()=>alert("Markdown report copied to clipboard."),
-    ()=>{ const w=window.open("","_blank"); w.document.write("<pre>"+md.replace(/</g,"&lt;")+"</pre>"); }
-  );
+  CASES.forEach(a=>{ md+=`## ${a.area}\n`; a.cases.forEach(c=>{
+    const s=sc[c.id]||"skip", mark={pass:"✓ Pass",partial:"~ Partial",fail:"✗ Fail",skip:"· untested"}[s];
+    md+=`- **${c.id}** ${c.title} — ${mark}`; if(nt[c.id])md+=` — _${nt[c.id]}_`; md+=`\n`;
+  }); md+=`\n`; });
+  navigator.clipboard.writeText(md).then(()=>alert("Markdown report copied to clipboard."),
+    ()=>{const w=window.open("","_blank"); w.document.write("<pre>"+md.replace(/</g,"&lt;")+"</pre>");});
 });
-
 render();
 </script>
 </body>
