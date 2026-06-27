@@ -135,7 +135,7 @@
 const TABS = [
   {key:"START", num:0, label:"Start here"},
   {key:"P1",    num:1, label:"Project 1"},
-  {key:"P2",    num:2, label:"Project 2"},
+  {key:"P2",    num:2, label:"Pawtrack"},
   {key:"P3",    num:3, label:"Project 3"},
   {key:"CTX",   num:4, label:"Switching"},
   {key:"FEEL",  num:5, label:"Overall feel"},
@@ -171,9 +171,9 @@ const START_INTRO = `
     <div class="pcard"><span class="slot">Project 1</span>
       <div class="role"><b>The established one.</b> Already has work in it. Use the built-in <b>“Hello Spade (PoC)”</b>.</div>
       <span class="ph">name you'll use</span><input data-meta="p1name" placeholder="Hello Spade (PoC)"></div>
-    <div class="pcard"><span class="slot">Project 2</span>
-      <div class="role"><b>The new one.</b> You'll create it empty, then ask Spade to plan its work.</div>
-      <span class="ph">name you'll use</span><input data-meta="p2name" placeholder="e.g. Acme Mobile"></div>
+    <div class="pcard"><span class="slot">Project 2 · Pawtrack</span>
+      <div class="role"><b>The new one.</b> Create it empty as <b>Pawtrack</b> (a dog-walking booking app), then ask Spade to plan its work.</div>
+      <span class="ph">name you'll use</span><input data-meta="p2name" placeholder="Pawtrack"></div>
     <div class="pcard"><span class="slot">Project 3</span>
       <div class="role"><b>The empty one.</b> Create it and leave it untouched, to see “nothing here yet” screens.</div>
       <span class="ph">name you'll use</span><input data-meta="p3name" placeholder="e.g. Internal Tools"></div>
@@ -209,8 +209,8 @@ const CASES = {
     {id:"S0-2", title:"Pick Project 1 (the established one)", goal:"Select the project that already has work in it.",
      steps:["At the top-left, click the <b>project name with the little arrow</b> (the project menu).","Choose <b>“Hello Spade (PoC)”</b>."],
      expect:"The top-left now shows “Hello Spade (PoC)”. In the left menu, the small number badges next to <b>Backlog</b>, <b>Product brain</b> and <b>Decisions</b> are <b>not zero</b> — there's real work in here."},
-    {id:"S0-3", title:"Create Project 2 (the new one)", goal:"Make a brand-new, empty project.",
-     steps:["Open the project menu again → click <b>“New project”</b>.","Type a name (write it in the Project 2 box on this page too).","Notice the <b>Path</b> fills in by itself. Leave it.","Click <b>Create</b>."],
+    {id:"S0-3", title:"Create Project 2 — Pawtrack (the new one)", goal:"Make a brand-new, empty project.",
+     steps:["Open the project menu again → click <b>“New project”</b>.","Name it <b>Pawtrack</b> (write it in the Pawtrack box on this page too).","Notice the <b>Path</b> fills in by itself. Leave it.","Click <b>Create</b>."],
      expect:"The new project name appears at the top-left, and its menu badges show <b>0</b> — it's empty, which is correct for a brand-new project."},
     {id:"S0-4", title:"Create Project 3 (the empty one)", goal:"Make a third project and leave it alone.",
      steps:["Project menu → <b>New project</b> → type a name (write it in the Project 3 box) → <b>Create</b>.","Don't add anything to it."],
@@ -231,21 +231,21 @@ const CASES = {
      expect:"A little <b>“thinking…”</b> animation, then an answer that clearly describes <b>Hello Spade</b> specifically (its tasks, its topics). It should NOT describe some other project."},
   ],
   P2: [
-    {id:"P2-1", title:"Switch to Project 2 — it should be empty", goal:"Confirm a new project starts clean.",
-     steps:["Top-left project menu → choose <b>Project 2</b>.","Look at Backlog, Product brain, Decisions."],
-     expect:"Everything says it's empty in a friendly way (empty board, “nothing here yet”). The badges are <b>0</b>. None of Project 1's work shows up here."},
+    {id:"P2-1", title:"Switch to Pawtrack — it should be empty", goal:"Confirm a new project starts clean.",
+     steps:["Top-left project menu → choose <b>Pawtrack</b>.","Look at Backlog, Product brain, Decisions."],
+     expect:"Everything says it's empty in a friendly way (empty board, “nothing here yet”). The badges are <b>0</b>. None of Hello Spade's work shows up here."},
     {id:"P2-2", title:"Ask Spade to plan the work", goal:"Describe a goal and get a proposed plan back.",
-     pre:"Project 2 selected. (If the assistant doesn't respond with a plan, see the note below.)",
-     steps:["Open the assistant (<kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd>).","Type a goal, for example: <i>Plan out building a simple customer feedback inbox.</i> Press Enter.","Read the reply."],
+     pre:"Pawtrack selected. (If the assistant doesn't respond with a plan, see the note below.)",
+     steps:["Open the assistant (<kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd>).","Type a goal, for example: <i>Plan out building “Pawtrack,” a simple dog-walking booking app where owners book a walker for a time slot, see availability on a calendar, and leave a review after the walk. Keep it to a small MVP backlog with clear dependencies.</i> Press Enter.","Read the reply."],
      expect:"It may ask you a question or two, then it <b>proposes a list of tasks</b> (with which ones depend on others) and <b>asks you to approve</b> — it does <b>not</b> create anything yet."},
     {id:"P2-3", title:"Approve, and watch tasks appear", goal:"Approve the plan and see real tasks created.",
      pre:"Right after P2-2.",
-     steps:["Reply <i>go ahead</i> (or “yes, create them”).","Wait for it to confirm.","Open <b>Backlog</b> for Project 2 and click one of the new tasks."],
-     expect:"New task cards now appear in <b>Project 2's</b> board. Opening one shows a <b>“Dependencies”</b> area listing how it connects to the others (blocks / related / subtask)."},
+     steps:["Reply <i>go ahead</i> (or “yes, create them”).","Wait for it to confirm.","Open <b>Backlog</b> for Pawtrack and click one of the new tasks."],
+     expect:"New task cards now appear in <b>Pawtrack's</b> board. Opening one shows a <b>“Dependencies”</b> area listing how it connects to the others (blocks / related / subtask)."},
     {id:"P2-4", title:"Ask again — it should know the new work", goal:"The assistant reflects what was just created.",
      pre:"After P2-3.",
      steps:["Open the assistant and ask: <i>What's on the backlog now?</i>"],
-     expect:"The answer mentions the tasks you just created in Project 2 — proof it's looking at this project's current state."},
+     expect:"The answer mentions the Pawtrack tasks you just created — proof it's looking at this project's current state."},
   ],
   P3: [
     {id:"P3-1", title:"Switch to Project 3 — still empty", goal:"Confirm the untouched project shows empty screens.",
@@ -258,20 +258,20 @@ const CASES = {
   CTX: [
     {id:"CTX-1", title:"Switching changes the whole screen", goal:"Picking a project updates everything at once.",
      pre:"All three projects exist.",
-     steps:["Switch Project 1 → 2 → 3 using the top-left menu, pausing on each."],
+     steps:["Switch Project 1 → Pawtrack → Project 3 using the top-left menu, pausing on each."],
      expect:"Every time you switch, the <b>project name</b> (top-left), the <b>menu badges</b>, and whatever you're looking at all change together to the new project. Nothing shows stale numbers from the previous project."},
     {id:"CTX-2", title:"The assistant always talks about the selected project", goal:"Context follows your selection — the big one.",
      pre:"All three exist.",
-     steps:["On Project 1: open the assistant, ask <i>Which project is this and what's in it?</i> Read it.","Switch to Project 2, ask the same. Then Project 3, ask the same."],
-     expect:"Each answer is about the project you <b>currently have selected</b> — Project 1's answer is about Hello Spade, Project 2's about its planned work, Project 3's about being empty. No answer talks about the wrong project."},
+     steps:["On Project 1: open the assistant, ask <i>Which project is this and what's in it?</i> Read it.","Switch to Pawtrack, ask the same. Then Project 3, ask the same."],
+     expect:"Each answer is about the project you <b>currently have selected</b> — Project 1's answer is about Hello Spade, Pawtrack's about its planned work, Project 3's about being empty. No answer talks about the wrong project."},
     {id:"CTX-3", title:"Projects don't mix together", goal:"Work in one project never leaks into another.",
-     pre:"Project 2 has tasks; Project 3 is empty.",
-     steps:["Look at the Backlog of Project 1, then 2, then 3."],
-     expect:"Project 2's tasks appear <b>only</b> in Project 2. Project 1 keeps its own. Project 3 stays empty. Each project's counts are its own."},
+     pre:"Pawtrack has tasks; Project 3 is empty.",
+     steps:["Look at the Backlog of Project 1, then Pawtrack, then Project 3."],
+     expect:"Pawtrack's tasks appear <b>only</b> in Pawtrack. Project 1 keeps its own. Project 3 stays empty. Each project's counts are its own."},
     {id:"CTX-4", title:"Switch while the assistant is open", goal:"Changing project mid-chat re-points the assistant.",
      pre:"Assistant open with an answer about Project 1 on screen.",
-     steps:["Keep the assistant panel open.","Use the top-left menu to switch to Project 2.","Ask a new question in the same panel."],
-     expect:"The new answer is about <b>Project 2</b> now. (Note in your comment whether the earlier Project-1 messages stayed on screen and if that felt confusing.)"},
+     steps:["Keep the assistant panel open.","Use the top-left menu to switch to Pawtrack.","Ask a new question in the same panel."],
+     expect:"The new answer is about <b>Pawtrack</b> now. (Note in your comment whether the earlier Project-1 messages stayed on screen and if that felt confusing.)"},
     {id:"CTX-5", title:"Fast switching doesn't break it", goal:"Rapid back-and-forth stays correct.",
      pre:"All three exist.",
      steps:["Quickly switch between the three projects 6–8 times.","Stop on one and open its Backlog and the assistant."],
@@ -316,10 +316,10 @@ function caseRow(c){
 function panelHTML(t){
   if(t.key==="START") return START_INTRO;
   if(t.key==="GAPS") return GAPS_HTML;
-  const titles={P1:"Project 1 — the established product",P2:"Project 2 — plan new work",P3:"Project 3 — the empty one",CTX:"Switching between projects",FEEL:"Overall feel"};
+  const titles={P1:"Project 1 — the established product",P2:"Pawtrack — plan new work",P3:"Project 3 — the empty one",CTX:"Switching between projects",FEEL:"Overall feel"};
   const blurbs={
     P1:"Make sure <b>Project 1 (Hello Spade)</b> is selected at the top-left, then go through these.",
-    P2:"Take a brand-new project from empty to a real backlog by asking the assistant to plan it.",
+    P2:"Take <b>Pawtrack</b> (a dog-walking booking app) from empty to a real backlog by asking the assistant to plan it.",
     P3:"Confirm a truly empty project shows calm “nothing here yet” screens.",
     CTX:"This is the important part — does Spade keep three products separate when you jump between them?",
     FEEL:"A quick gut-check on polish and speed."};

@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Ask the brain — floating companion (Cluely-style)</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22; --bg-4:#232329;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --accent-2:#8e7dff;
+    --amber:#e6b86a; --blue:#7ab6e6; --red:#e87d7d; --teal:#7adcc7; --pink:#e69ac9;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --sans:"Inter Tight",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    /* glass */
+    --glass:rgba(22,22,28,.62);
+    --glass-strong:rgba(26,26,33,.78);
+    --glass-line:rgba(201,184,255,.16);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 22px 60px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-.02em}
+  .sub{color:var(--text-3);max-width:80ch;margin:0 0 14px}
+  kbd{font-family:var(--mono);font-size:.78em;background:var(--bg-1);border:1px solid var(--line-strong);
+      border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--text)}
+  code,.mono{font-family:var(--mono)}
+  .controls{display:flex;gap:8px;align-items:center;margin:0 0 14px;flex-wrap:wrap}
+  .btn{font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);background:var(--bg-1);
+       color:var(--text-2);padding:8px 14px;border-radius:8px}
+  .btn:hover{background:var(--bg-2);color:var(--text)} .btn.primary{background:linear-gradient(180deg,#d2c3ff,#b6a3ff);color:#1a1730;border:none;font-weight:600}
+  .hintline{font-size:12px;color:var(--text-4)}
+
+  /* fake app stage */
+  .stage{position:relative;height:600px;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+         background:radial-gradient(80% 70% at 50% 18%,rgba(142,125,255,.10),rgba(11,11,13,0) 60%),#0b0b0d}
+  .app{position:absolute;inset:0;display:grid;grid-template-columns:172px 1fr}
+  .side{border-right:1px solid var(--line);background:var(--bg-1);padding:14px 12px}
+  .side .lg{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;margin-bottom:16px}
+  .side .lg .mk{width:16px;height:16px;border-radius:5px;background:linear-gradient(135deg,#d2c3ff,#8e7dff)}
+  .side .mi{font-size:12.5px;color:var(--text-3);padding:7px 8px;border-radius:6px}.side .mi.on{background:var(--bg-3);color:var(--text)}
+  .top{height:50px;border-bottom:1px solid var(--line);background:var(--bg-1);display:flex;align-items:center;padding:0 14px}
+  .askpill{display:flex;align-items:center;gap:8px;max-width:320px;background:var(--bg-2);border:1px solid var(--line);
+           border-radius:9px;padding:7px 11px;color:var(--text-4);font-size:13px;cursor:pointer}
+  .askpill .k{margin-left:auto;display:flex;gap:3px}
+  .dotgrid{position:absolute;inset:0;background-image:radial-gradient(rgba(201,184,255,.06) 1px,transparent 1px);background-size:24px 24px}
+  .canvas{position:relative}.canvas .ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--text-4);font-size:12px}
+
+  /* ===== floating companion ===== */
+  .float{position:absolute;top:18px;left:50%;transform:translateX(-50%);z-index:10;width:540px;max-width:92%;
+         display:flex;flex-direction:column;align-items:center;gap:9px;
+         opacity:0;transform:translateX(-50%) translateY(-10px) scale(.98);
+         transition:opacity .2s ease, transform .28s cubic-bezier(.16,1,.3,1)}
+  .float.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+  .float.dragging{transition:none}
+
+  /* control pill (drag handle) */
+  .handle{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:999px;
+          background:var(--glass-strong);border:1px solid var(--glass-line);cursor:grab;
+          backdrop-filter:blur(18px) saturate(1.3);box-shadow:0 10px 30px -10px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05)}
+  .handle:active{cursor:grabbing}
+  .handle .mk{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,#d2c3ff,#8e7dff);display:grid;place-items:center;color:#1a1730;font-size:12px;font-weight:800}
+  .handle .grip{display:flex;gap:2px;margin:0 2px;opacity:.5}
+  .handle .grip i{width:3px;height:3px;border-radius:50%;background:var(--text-2)}
+  .hbtn{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-2);background:rgba(255,255,255,.04);
+        border:1px solid var(--line-2);border-radius:999px;padding:4px 10px;cursor:pointer}
+  .hbtn:hover{background:rgba(255,255,255,.08);color:var(--text)}
+  .hbtn.icon{padding:4px 8px}
+  .hk{font-family:var(--mono);font-size:10px;color:var(--text-4)}
+
+  /* glass card */
+  .card{width:100%;background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;
+        backdrop-filter:blur(22px) saturate(1.3);box-shadow:0 24px 70px -24px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.06);
+        overflow:hidden}
+  .card.hidden{display:none}
+  .qrow{display:flex;justify-content:flex-end;padding:12px 14px 0}
+  .qchip{background:linear-gradient(180deg,#8e7dff,#7a68f0);color:#fff;font-size:12px;font-weight:600;
+         border-radius:999px;padding:5px 12px;box-shadow:0 4px 14px -4px rgba(142,125,255,.6)}
+  .ans{padding:10px 16px 4px;font-size:13.5px;line-height:1.6;color:var(--text-2)}
+  .ans b{color:var(--text)} .ans code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;font-size:.85em}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);background:rgba(255,255,255,.05);
+        border:1px solid var(--line-2);border-radius:999px;padding:3px 9px;cursor:pointer}
+  .chip .d{width:7px;height:7px;border-radius:50%}.chip:hover{color:var(--text);border-color:var(--line-strong)}
+  .actions{display:flex;align-items:center;gap:4px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.05);margin-top:6px;flex-wrap:wrap}
+  .act{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);padding:6px 9px;border-radius:8px;cursor:pointer}
+  .act:hover{background:rgba(255,255,255,.06);color:var(--text)}
+  .act .g{color:var(--accent);font-size:12px}
+  .sep{color:var(--text-4);font-size:11px}
+  .composer{margin:4px 12px 12px;background:rgba(10,10,13,.45);border:1px solid var(--line-2);border-radius:12px;padding:10px 12px}
+  .composer .in{display:flex;align-items:flex-start;gap:8px}
+  .composer textarea{all:unset;flex:1;font-family:var(--sans);font-size:13px;color:var(--text);min-height:20px}
+  .composer textarea::placeholder{color:var(--text-4)}
+  .composer .enter{font-family:var(--mono);font-size:10px;color:var(--text-4);border:1px solid var(--line-2);border-radius:5px;padding:1px 5px}
+  .composer .cr{display:flex;align-items:center;gap:8px;margin-top:9px}
+  .model{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2);background:rgba(255,255,255,.05);
+         border:1px solid var(--line-2);border-radius:999px;padding:4px 10px;cursor:pointer}
+  .model .dot{width:6px;height:6px;border-radius:50%;background:var(--teal)}
+  .send{margin-left:auto;width:30px;height:30px;border-radius:50%;border:none;cursor:pointer;
+        background:linear-gradient(180deg,#d2c3ff,#b6a3ff);color:#1a1730;display:grid;place-items:center;font-size:15px;
+        box-shadow:0 6px 16px -6px rgba(201,184,255,.6)}
+  .think{display:inline-flex;gap:4px;align-items:center;color:var(--text-3);font-size:12px;padding:0 16px 8px}
+  .think i{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:bli 1s infinite}
+  .think i:nth-child(2){animation-delay:.15s}.think i:nth-child(3){animation-delay:.3s}
+  @keyframes bli{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+
+  .pros{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0 0;font-size:12.5px}
+  .pros .c{flex:1;min-width:230px}
+  .pros h4{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:0 0 5px}
+  .pros li{margin:3px 0;color:var(--text-2)}.pros .good::marker{color:var(--teal)}.pros .bad::marker{color:var(--amber)}
+  .note{background:var(--bg-1);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:11px 13px;margin:18px 0 0;color:var(--text-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ask the brain — floating companion <span style="color:var(--text-4);font-weight:400;font-size:15px">· Cluely-style</span></h1>
+  <p class="sub">A glassy, <b>draggable</b> companion that floats over the app instead of a side panel. Defaults to
+  <b>top-center</b>. <b>Grab the pill</b> to drag it anywhere; <b>Hide</b> collapses to just the pill; <kbd>⌘</kbd><kbd>K</kbd>
+  summons it. On Spade's dark + lavender brand, with brain-node citation chips and a model picker.</p>
+  <div class="controls">
+    <button class="btn primary" id="open">Open ⌘K</button>
+    <button class="btn" id="reset">Reset position</button>
+    <span class="hintline">Drag the top pill · click <b>Hide</b> to collapse · <kbd>esc</kbd> to close</span>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="app">
+      <div class="side"><div class="lg"><span class="mk"></span>Spade</div>
+        <div class="mi">Backlog</div><div class="mi on">Product brain</div><div class="mi">Orchestrator</div><div class="mi">Decisions</div><div class="mi">Agent pool</div></div>
+      <div><div class="top"><div class="askpill" id="pill"><span>Ask the brain…</span><span class="k"><kbd>⌘</kbd><kbd>K</kbd></span></div></div>
+        <div class="canvas"><div class="dotgrid"></div><div class="ph">product brain graph — stays interactive behind the companion</div></div></div>
+    </div>
+
+    <!-- floating companion -->
+    <div class="float" id="float">
+      <!-- drag handle / control pill -->
+      <div class="handle" id="handle">
+        <span class="mk">✦</span>
+        <span class="grip"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="hbtn" id="hideBtn">▾ Hide</span>
+        <span class="hbtn icon" title="Ask">Ask the brain <span class="hk">⌘K</span></span>
+        <span class="hbtn icon" id="closeBtn" title="Close">✕</span>
+      </div>
+
+      <!-- glass card -->
+      <div class="card" id="card">
+        <div class="qrow"><span class="qchip">What's the login approach?</span></div>
+        <div class="ans">
+          The project standardised on <b>OAuth 2.1 with PKCE</b> for the SPA login flow. A
+          <b>Passkey (WebAuthn)</b> feature is in exploration as a passwordless, one-tap alternative —
+          motivated by the <code>Login is slow</code> user feedback.
+          <div class="chips">
+            <span class="chip"><span class="d" style="background:var(--accent)"></span>OAuth login</span>
+            <span class="chip"><span class="d" style="background:var(--accent)"></span>Passkey sign-in</span>
+            <span class="chip"><span class="d" style="background:var(--amber)"></span>Adopt OAuth 2.1</span>
+            <span class="chip"><span class="d" style="background:var(--blue)"></span>Login is slow</span>
+          </div>
+        </div>
+        <div class="actions">
+          <span class="act"><span class="g">✦</span> Ask</span><span class="sep">·</span>
+          <span class="act"><span class="g">≣</span> What's on the backlog</span><span class="sep">·</span>
+          <span class="act"><span class="g">◈</span> Recent decisions</span><span class="sep">·</span>
+          <span class="act"><span class="g">↻</span> Recap</span>
+        </div>
+        <div class="composer">
+          <div class="in"><textarea rows="1" placeholder="Ask the brain about this project…"></textarea>
+            <span class="enter">↵</span></div>
+          <div class="cr">
+            <span class="model"><span class="dot"></span>Sonnet ▾</span>
+            <span class="hk">⇧↵ newline</span>
+            <button class="send">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pros">
+    <div class="c"><h4>Why it fits Spade</h4><ul>
+      <li class="good">Floats over <i>any</i> view — ask while reading the graph, backlog, or a task</li>
+      <li class="good">Draggable + collapsible = stays out of the way, always one key away</li>
+      <li class="good">Glass + lavender aura is a natural brand extension</li>
+      <li class="good">Quick-actions ("backlog", "decisions", "recap") map to real Spade reads</li></ul></div>
+    <div class="c"><h4>Watch-outs</h4><ul>
+      <li class="bad">Floating window state to manage (position, collapsed, persistence)</li>
+      <li class="bad">Can occlude content — needs a remembered position + easy hide</li>
+      <li class="bad">Mobile/narrow needs a fallback (snap to full-width)</li></ul></div>
+  </div>
+
+  <div class="note"><b>How I'd build it:</b> replace the right <code>AskDock</code> with a floating <code>.float</code> container
+  (handle pill + glass card), remembered position in localStorage, default top-center, ⌘K spring-in, <b>Hide</b> collapses to
+  the pill, drag via the handle. Same conversation/model logic underneath. Want this exact layout, or tweak (e.g. left-align
+  default, add a model list, different quick-actions)? Tell me and I'll implement it in the real app.</div>
+</div>
+
+<script>
+  const float=document.getElementById('float'), card=document.getElementById('card'),
+        handle=document.getElementById('handle'), stage=document.getElementById('stage');
+  const DEFAULT={top:18,centered:true};
+  function show(){float.classList.add('show');}
+  function hide(){float.classList.remove('show');}
+  function reset(){float.style.left='50%';float.style.top='18px';float.style.transform='';
+    float.classList.remove('dragging');float.classList.add('show');
+    // re-apply centered transform via class default
+    float.style.transform='translateX(-50%) translateY(0) scale(1)';}
+  document.getElementById('open').onclick=()=>{ // replay spring
+    float.classList.remove('show'); void float.offsetWidth; reset(); };
+  document.getElementById('pill').onclick=()=>document.getElementById('open').click();
+  document.getElementById('reset').onclick=reset;
+  document.getElementById('closeBtn').onclick=hide;
+  document.getElementById('hideBtn').onclick=(e)=>{e.stopPropagation();
+    card.classList.toggle('hidden');
+    document.getElementById('hideBtn').textContent=card.classList.contains('hidden')?'▸ Show':'▾ Hide';};
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape')hide();
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();document.getElementById('open').click();}
+  });
+
+  // drag via handle
+  let drag=null;
+  handle.addEventListener('mousedown',e=>{
+    if(e.target.closest('.hbtn'))return; // buttons aren't drag
+    const r=float.getBoundingClientRect(), s=stage.getBoundingClientRect();
+    drag={dx:e.clientX-r.left, dy:e.clientY-r.top, sw:s.width, sh:s.height, sl:s.left, st:s.top, fw:r.width, fh:r.height};
+    float.classList.add('dragging'); float.style.transform='none'; e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    let nx=e.clientX-drag.sl-drag.dx, ny=e.clientY-drag.st-drag.dy;
+    nx=Math.max(6,Math.min(nx,drag.sw-drag.fw-6));
+    ny=Math.max(6,Math.min(ny,drag.sh-drag.fh-6));
+    float.style.left=nx+'px'; float.style.top=ny+'px';
+  });
+  window.addEventListener('mouseup',()=>{drag=null;float.classList.remove('dragging');});
+
+  reset();
+</script>
+</body>
+</html>

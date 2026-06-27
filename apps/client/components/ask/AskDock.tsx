@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { Icon } from "@/components/Icon";
-import { IconBtn } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAskDock } from "@/lib/useAskDock";
 import { useProject } from "@/lib/useProject";
@@ -74,6 +73,97 @@ export function AskDock() {
   const sessionIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const floatRef = useRef<HTMLDivElement | null>(null);
+
+  // Floating-companion UI state: collapsed (card hidden, just the pill) and a
+  // dragged position (null = default top-center). Both persist across sessions.
+  const [collapsed, setCollapsed] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const p = localStorage.getItem("spade-ask-pos");
+      if (p) setPos(JSON.parse(p));
+      setCollapsed(localStorage.getItem("spade-ask-collapsed") === "1");
+    } catch {
+      /* ignore malformed storage */
+    }
+  }, []);
+
+  const applyCollapsed = useCallback((next: boolean) => {
+    setCollapsed(next);
+    try {
+      localStorage.setItem("spade-ask-collapsed", next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleCollapsed = useCallback(
+    () => setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("spade-ask-collapsed", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    }),
+    [],
+  );
+
+  // Opening the dock (⌘K, the topbar bar, anything) always shows it expanded —
+  // a persisted/collapsed state shouldn't force an extra "Show" click.
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (open && !wasOpen.current) applyCollapsed(false);
+    wasOpen.current = open;
+  }, [open, applyCollapsed]);
+
+  // Click anywhere outside the companion collapses it down to the pill (not a
+  // full close — Escape / the × do that). Only armed while the card is open.
+  useEffect(() => {
+    if (!open || collapsed) return;
+    function onPointerDown(e: MouseEvent) {
+      if (floatRef.current && !floatRef.current.contains(e.target as Node)) {
+        applyCollapsed(true);
+      }
+    }
+    window.addEventListener("mousedown", onPointerDown);
+    return () => window.removeEventListener("mousedown", onPointerDown);
+  }, [open, collapsed, applyCollapsed]);
+
+  // Drag the whole companion by its handle pill. Buttons on the pill opt out.
+  const onHandleDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".ask-hbtn")) return;
+    const el = floatRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    e.preventDefault();
+    const move = (ev: MouseEvent) => {
+      const x = Math.max(8, Math.min(ev.clientX - offX, window.innerWidth - rect.width - 8));
+      const y = Math.max(8, Math.min(ev.clientY - offY, window.innerHeight - rect.height - 8));
+      setPos({ x, y });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      setPos((p) => {
+        if (p) {
+          try {
+            localStorage.setItem("spade-ask-pos", JSON.stringify(p));
+          } catch {
+            /* ignore */
+          }
+        }
+        return p;
+      });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }, []);
 
   // Auto-grow the composer textarea (min ~1 row, capped by max-height in CSS,
   // then it scrolls).
@@ -199,80 +289,112 @@ export function AskDock() {
   if (!open) return null;
 
   return (
-    <>
-      <div className="ask-overlay" onClick={() => setOpen(false)} />
-      <aside className="ask-dock" role="dialog" aria-label="Ask the brain">
-        <header className="ask-head">
-          <div className="ask-head-titles">
-            <span className="ask-head-title">Ask the brain</span>
-            {project && <span className="ask-head-proj">{project.name}</span>}
-          </div>
-          <IconBtn icon="x" title="Close" onClick={() => setOpen(false)} />
-        </header>
+    <div
+      ref={floatRef}
+      className={["ask-float", pos ? "placed" : ""].filter(Boolean).join(" ")}
+      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      role="dialog"
+      aria-label="Ask the brain"
+    >
+      <div className="ask-float-inner">
+        {/* Control pill — drag handle + hide/close. */}
+        <div className="ask-handle" onMouseDown={onHandleDown}>
+          <span className="ask-handle-mk" aria-hidden="true">
+            <Icon name="brain" size={13} />
+          </span>
+          <span className="ask-handle-grip" aria-hidden="true">
+            <i /><i /><i /><i /><i /><i />
+          </span>
+          <button type="button" className="ask-hbtn" onClick={toggleCollapsed}>
+            {collapsed ? "▸ Show" : "▾ Hide"}
+          </button>
+          <span className="ask-handle-label">
+            Ask the brain
+            {project && <span className="ask-handle-proj">{project.name}</span>}
+          </span>
+          <button
+            type="button"
+            className="ask-hbtn ask-hbtn-icon"
+            aria-label="Close"
+            title="Close"
+            onClick={() => setOpen(false)}
+          >
+            <Icon name="x" size={13} />
+          </button>
+        </div>
 
-        {!project ? (
-          <div className="ask-body ask-empty">Select a project to ask.</div>
-        ) : noAccount ? (
-          <div className="ask-body ask-no-account">
-            <div className="ask-no-account-icon" aria-hidden="true">
-              <Icon name="brain" size={22} />
-            </div>
-            <div className="ask-no-account-text">
-              No provider accounts configured yet. Add one in Agent pool so the
-              orchestrator has an account to run on.
-            </div>
-            <Link href="/agent-pool" className="btn primary sm">
-              Go to Agent pool
-            </Link>
-          </div>
-        ) : (
-          <>
-            <div className="ask-body" ref={scrollRef}>
-              {messages.length === 0 && !status && !busy && (
-                <div className="ask-hint">Ask the orchestrator about this project…</div>
-              )}
-              {messages.map((m, i) => (
-                <MessageBubble key={i} msg={m} />
-              ))}
-              {/* Spawning shows a plain status line; the thinking phase (busy with
-                  no spawn label) shows the animated indicator. */}
-              {status ? (
-                <div className="ask-status">{status}</div>
-              ) : busy ? (
-                <ThinkingIndicator />
-              ) : null}
-            </div>
-
-            <div className="ask-composer-wrap">
-              <div className="ask-composer">
-                <textarea
-                  ref={textareaRef}
-                  className="ask-input"
-                  placeholder="Ask the brain…"
-                  value={input}
-                  disabled={busy}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={onComposerKey}
-                  rows={1}
-                />
-                <div className="ask-composer-row">
-                  <span className="ask-composer-hint">⇧↵ for newline</span>
-                  <button
-                    type="button"
-                    className="ask-send"
-                    aria-label="Send"
-                    title="Send"
-                    disabled={busy || !input.trim()}
-                    onClick={() => void send()}
-                  >
-                    <Icon name="arrow" size={15} className="ask-send-icon" />
-                  </button>
+        {/* Glass card — animates closed when collapsed (kept mounted so the
+            collapse/expand micro-animation can play). */}
+        <div
+          className={["ask-card", collapsed ? "is-collapsed" : ""].filter(Boolean).join(" ")}
+          aria-hidden={collapsed}
+        >
+            {!project ? (
+              <div className="ask-body ask-empty">Select a project to ask.</div>
+            ) : noAccount ? (
+              <div className="ask-body ask-no-account">
+                <div className="ask-no-account-icon" aria-hidden="true">
+                  <Icon name="brain" size={22} />
                 </div>
+                <div className="ask-no-account-text">
+                  No provider accounts configured yet. Add one in Agent pool so
+                  the orchestrator has an account to run on.
+                </div>
+                <Link href="/agent-pool" className="btn primary sm">
+                  Go to Agent pool
+                </Link>
               </div>
-            </div>
-          </>
-        )}
-      </aside>
-    </>
+            ) : (
+              <>
+                <div className="ask-body" ref={scrollRef}>
+                  {messages.length === 0 && !status && !busy && (
+                    <div className="ask-hint">
+                      Ask the orchestrator about this project…
+                    </div>
+                  )}
+                  {messages.map((m, i) => (
+                    <MessageBubble key={i} msg={m} />
+                  ))}
+                  {/* Spawning shows a plain status line; the thinking phase
+                      (busy with no spawn label) shows the animated indicator. */}
+                  {status ? (
+                    <div className="ask-status">{status}</div>
+                  ) : busy ? (
+                    <ThinkingIndicator />
+                  ) : null}
+                </div>
+
+                <div className="ask-composer-wrap">
+                  <div className="ask-composer">
+                    <textarea
+                      ref={textareaRef}
+                      className="ask-input"
+                      placeholder="Ask the brain…"
+                      value={input}
+                      disabled={busy}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={onComposerKey}
+                      rows={1}
+                    />
+                    <div className="ask-composer-row">
+                      <span className="ask-composer-hint">⇧↵ for newline</span>
+                      <button
+                        type="button"
+                        className="ask-send"
+                        aria-label="Send"
+                        title="Send"
+                        disabled={busy || !input.trim()}
+                        onClick={() => void send()}
+                      >
+                        <Icon name="arrow" size={15} className="ask-send-icon" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -47,6 +47,12 @@ export default function BrainPage() {
     api.brainEdges(project!.id),
   );
 
+  // Tasks are only needed to show "grounded in" links in the info panel, so a
+  // failure here shouldn't block the graph — we just omit those links.
+  const { data: tasksData } = useSWR(project ? ["tasks", project.id] : null, () =>
+    api.tasks(project!.id),
+  );
+
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [visibleTypes, setVisibleTypes] = React.useState<Set<BrainNodeType>>(
     () => new Set(ALL_TYPES),
@@ -117,6 +123,7 @@ export default function BrainPage() {
           node={selectedNode}
           nodes={nodes}
           edges={edges}
+          tasks={tasksData?.tasks ?? []}
           onSelect={setSelectedId}
         />
       </div>

@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { Comment } from "@/lib/types";
+import { Markdown } from "@/components/ask/Markdown";
 
 export interface TimelineRailProps {
   comments: Comment[];
@@ -30,7 +31,7 @@ export function TimelineRail({ comments }: TimelineRailProps) {
               <b>{author}</b>
               {c.kind ? <span className="muted"> · {c.kind}</span> : null}
             </div>
-            <div>{c.body}</div>
+            <Markdown>{c.body}</Markdown>
             <div className="when">{relativeTime(c.created_at)}</div>
           </div>
         );

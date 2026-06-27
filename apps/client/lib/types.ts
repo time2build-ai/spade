@@ -35,6 +35,7 @@ export interface BrainNode {
   detail: string | null;
   x: number | null;
   y: number | null;
+  created_at?: string | null;
 }
 
 export type BrainEdge = {

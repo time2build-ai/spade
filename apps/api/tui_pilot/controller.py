@@ -359,6 +359,15 @@ _FOOTER_HINTS = (
     "for agents",
     "/effort",
     "bypass permissions",
+    # Claude Code's "tmux detected · scroll with PgUp/PgDn · or add
+    # 'set -g mouse on' to ~/.tmux.conf for wheel scroll" banner leaks in from
+    # the captured pane. It can wrap across pane lines, so match several
+    # fragments rather than the whole sentence.
+    "tmux detected",
+    "pgup/pgdn",
+    "set -g mouse",
+    ".tmux.conf",
+    "for wheel scroll",
 )
 
 

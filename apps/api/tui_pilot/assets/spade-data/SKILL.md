@@ -59,8 +59,11 @@ curl -s -X PUT $B/tasks/<task_id>/nodes -H 'content-type: application/json' -d '
 # "A subtask B" = A is the parent/epic of child B. "related" is symmetric.
 curl -s -X POST $B/tasks/<A>/links -H 'content-type: application/json' -d '{"to_task":"<B>","rel":"blocks"}'
 curl -s -X DELETE $B/tasks/<A>/links/<link_id>   # remove a link (each task carries its links[])
-# add a brain node / edge
-curl -s -X POST $B/brain/nodes -H 'content-type: application/json' -d '{"project_id":"<id>","type":"decision","label":"ADR-1 ...","detail":"..."}'
+# add a brain node / edge.
+# `label` = short title. `detail` = a SELF-CONTAINED markdown description (what it
+# is, why it matters, where it came from) — this is what the Product brain panel
+# renders (as markdown) when the human clicks the node, so make it substantive.
+curl -s -X POST $B/brain/nodes -H 'content-type: application/json' -d '{"project_id":"<id>","type":"decision","label":"Adopt OAuth 2.1","detail":"**What:** Use OAuth 2.1 with PKCE for the SPA login flow.\n**Why:** Eliminates implicit-flow token leakage and matches the new auth provider.\n**Source:** 2026-06-23 architecture review."}'
 curl -s -X POST $B/brain/edges -H 'content-type: application/json' -d '{"project_id":"<id>","from_id":"<a>","to_id":"<b>","rel":"decided_by"}'
 # RUN a task through the 4-stage agent pipeline (Developer→Reviewer→Integrator→Documentor)
 RID=$(curl -s -X POST $B/pipelines -H 'content-type: application/json' -d '{"project_id":"<id>","task_id":"<task_id>"}' | jq -r .id)
@@ -79,4 +82,9 @@ curl -s -X POST $B/pipelines/$RID/start    # spawns the developer agent; auto-ad
 - Running a pipeline is usually better than raw `spawn` for product tasks, because it is
   tracked in Spade and shows up in the Pipelines view. Use `spawn`/`answer`/`kill`/`status`
   (your orchestrator-comms skill) for ad-hoc work or to answer a worker that's blocked on you.
+- When you **capture knowledge in the brain**, write each node's `detail` as a
+  self-contained markdown description — 2–5 sentences covering *what it is, why it
+  matters, and the source/context* (e.g. the meeting, decision, or bug it came from).
+  The brain panel renders `detail` as markdown, so prefer `**bold**` lead-ins, short
+  lists, and `code` over a bare phrase. Avoid terse one-liners like "PKCE flow".
 - Keep the human informed with a `status` note (orchestrator-comms) and plain-text replies.
