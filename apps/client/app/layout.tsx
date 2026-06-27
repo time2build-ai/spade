@@ -3,6 +3,7 @@ import { Inter_Tight, JetBrains_Mono, Instrument_Serif } from "next/font/google"
 import "./globals.css";
 import { Topbar } from "@/components/shell/Topbar";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { ShellMode } from "@/components/shell/ShellMode";
 import { AskDock } from "@/components/ask/AskDock";
 
 const sans = Inter_Tight({
@@ -40,6 +41,7 @@ export default function RootLayout({
       className={`${sans.variable} ${mono.variable} ${serif.variable} h-full antialiased`}
     >
       <body>
+        <ShellMode />
         <div className="app">
           <Topbar />
           <Sidebar />

@@ -347,6 +347,22 @@ body {
   overflow: hidden;
 }
 
+/* === Shell modes (V2, from reference inner.html :506-527) ===
+   home-mode: full-bleed home (sidebar hidden); workspace-level: lavender wash +
+   ws-only sidebar groups (home or /workspace/*). */
+body.home-mode .app { grid-template-columns: 1fr; }
+body.home-mode .sidebar { display: none; }
+body.home-mode .app > main { grid-column: 1 / -1; }
+/* proj-only / ws-only sidebar group visibility */
+.sidebar .ws-only, .sidebar .ws-only-h { display: none; }
+.workspace-level:not(.home-mode) .sidebar .ws-only { display: flex; }
+.workspace-level:not(.home-mode) .sidebar .ws-only-h { display: flex; }
+.workspace-level:not(.home-mode) .sidebar .proj-only,
+.workspace-level:not(.home-mode) .sidebar .proj-only-h { display: none !important; }
+/* lavender wash at workspace level */
+.workspace-level .topbar { background: linear-gradient(180deg, rgba(201,184,255,.05), var(--bg)); }
+.workspace-level .sidebar { background: linear-gradient(180deg, rgba(201,184,255,.04), var(--bg)); }
+
 /* Topbar */
 .topbar {
   grid-column: 1 / -1;
