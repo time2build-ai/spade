@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { Btn, Kbd, Avatar } from "@/components/ui";
+import { DEMO_SPRINT, DEMO_ACCOUNT_USAGE, DEMO_ACCOUNT_USAGE_DEFAULT } from "@/lib/demo";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "@/lib/useProject";
 import { useShellData } from "@/lib/useShell";
@@ -37,22 +38,25 @@ export function Topbar() {
       </button>
 
       <div className="topbar-right">
-        {/* live: count of alive agent sessions (GET /sessions) */}
+        {/* live: count of alive agent sessions (GET /sessions) — real */}
         <span className="topbar-pill" title="Live agent sessions">
           <span className="pulse-dot" /> {sessionsLabel}
         </span>
-        {/* live: active default account (GET /accounts) — only when one exists */}
+        {/* sprint pill — seeded (BACKEND: sprint-counter API); hidden at
+            workspace level via CSS (.workspace-level .topbar-sprint). */}
+        <span className="topbar-pill mono topbar-sprint" title="Current sprint">
+          {DEMO_SPRINT.counter}
+        </span>
+        {/* active default account (GET /accounts) — label real, usage % seeded */}
         {defaultAccount && (
-          <span className="topbar-pill mono" title="Active account">
+          <span className="topbar-pill mono" title="Active Claude account">
             <span
               style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }}
             />
-            acct: {defaultAccount.label}
+            acct: {defaultAccount.label} ·{" "}
+            {DEMO_ACCOUNT_USAGE[defaultAccount.label] ?? DEMO_ACCOUNT_USAGE_DEFAULT}%
           </span>
         )}
-        {/* Reference also shows a `· NN%` usage suffix and a `sprint NN · day N/M`
-            pill, but the API exposes neither — omitted per no-fabrication policy
-            (docs/ui-parity/PR-PLAN.md). They appear once the backend provides them. */}
         <Btn variant="ghost" title="Toggle tweaks panel" aria-label="Toggle tweaks panel">
           <Icon name="spark" size={14} />
         </Btn>
