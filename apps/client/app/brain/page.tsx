@@ -4,6 +4,7 @@ import * as React from "react";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
 import { BrainLegend } from "@/components/brain/BrainLegend";
+import { BrainExplorer } from "@/components/brain/BrainExplorer";
 import { GraphCanvas } from "@/components/brain/GraphCanvas";
 import { NodeInfo } from "@/components/brain/NodeInfo";
 import { useProject } from "@/lib/useProject";
@@ -54,6 +55,7 @@ export default function BrainPage() {
   );
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [view, setView] = React.useState<"explorer" | "graph">("explorer");
   const [visibleTypes, setVisibleTypes] = React.useState<Set<BrainNodeType>>(
     () => new Set(ALL_TYPES),
   );
@@ -101,6 +103,19 @@ export default function BrainPage() {
         decisions, feedback and bugs are captured, they’ll appear here as a
         connected graph.
       </StateMessage>
+    );
+  } else if (view === "explorer") {
+    // Default selection: the first feature (else the first node).
+    const firstFeatureId =
+      nodes.find((n) => n.type === "feature")?.id ?? nodes[0]?.id ?? null;
+    const explorerSelected = (selectedId && byId[selectedId] ? selectedId : firstFeatureId);
+    body = (
+      <BrainExplorer
+        nodes={nodes}
+        edges={edges}
+        selectedId={explorerSelected}
+        onSelect={setSelectedId}
+      />
     );
   } else {
     body = (
@@ -150,6 +165,22 @@ export default function BrainPage() {
           </>
         }
       />
+      {nodes.length > 0 && (
+        <div className="subtabs">
+          <div
+            className={"subtab" + (view === "explorer" ? " active" : "")}
+            onClick={() => setView("explorer")}
+          >
+            Explorer
+          </div>
+          <div
+            className={"subtab" + (view === "graph" ? " active" : "")}
+            onClick={() => setView("graph")}
+          >
+            Graph
+          </div>
+        </div>
+      )}
       {body}
     </div>
   );

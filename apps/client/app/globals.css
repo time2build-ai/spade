@@ -1147,3 +1147,53 @@ body {
 .ask-send-icon { transform: rotate(-90deg); }
 @keyframes ask-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ask-slide { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* === Brain Explorer (PR-05) — reference detail-first 3-column layout.
+   bx-* are scoped under .brain-explorer so they don't collide with NodeInfo's
+   pre-existing bx-detail / bx-rel-* styles used by the Graph view. === */
+.subtabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.brain-search { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-1); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; min-width: 320px; }
+.brain-search input { background: transparent; border: none; color: var(--text); outline: none; font: inherit; flex: 1; font-size: 12.5px; }
+.brain-search input::placeholder { color: var(--text-4); }
+
+.brain-explorer { display: grid; grid-template-columns: 220px minmax(0, 1fr) 280px; flex: 1; min-height: 0; overflow: hidden; }
+.brain-explorer .bx-tree { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px 0 18px; background: var(--bg); }
+.brain-explorer .bx-tree-h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding: 6px 16px 8px; font-family: var(--mono); }
+.brain-explorer .bx-feature { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; padding: 5px 16px; font-size: 12.5px; cursor: pointer; color: var(--text-2); border-left: 2px solid transparent; }
+.brain-explorer .bx-feature:hover { background: var(--bg-1); color: var(--text); }
+.brain-explorer .bx-feature.on { background: linear-gradient(90deg, rgba(201,184,255,.08), transparent); border-left-color: var(--accent); color: var(--text); }
+.brain-explorer .bx-chevron { color: var(--text-4); font-size: 9px; }
+.brain-explorer .bx-feature.on .bx-chevron { color: var(--accent); }
+.brain-explorer .bx-fname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brain-explorer .bx-fcounts { display: inline-flex; gap: 5px; font-family: var(--mono); font-size: 10.5px; }
+.brain-explorer .bx-fcounts span { opacity: .85; }
+.brain-explorer .bx-index-row { display: flex; gap: 8px; align-items: center; padding: 5px 16px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.brain-explorer .bx-index-row:hover { background: var(--bg-1); color: var(--text); }
+.brain-explorer .bx-detail { overflow-y: auto; padding: 24px 32px 40px; background: var(--bg); font-size: 13px; color: var(--text-2); }
+.brain-explorer .bx-detail-h { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.brain-explorer .bx-glyph { width: 36px; height: 36px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 600; font-size: 16px; border: 1px solid; flex: none; }
+.brain-explorer .bx-title { margin: 4px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; color: var(--text); }
+.brain-explorer .bx-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; }
+.brain-explorer .bx-keys > div { padding: 10px 16px; display: flex; flex-direction: column; gap: 3px; border-right: 1px solid var(--line); font-size: 12.5px; color: var(--text); }
+.brain-explorer .bx-keys > div:last-child { border-right: none; }
+.brain-explorer .bx-keys .k { font-family: var(--mono); font-size: 10.5px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
+.brain-explorer .bx-section-h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); margin: 26px 0 10px; font-family: var(--mono); }
+.brain-explorer .bx-prose { font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
+.brain-explorer .bx-relations { border-left: 1px solid var(--line); background: var(--bg-1); overflow-y: auto; padding: 18px 16px 24px; }
+.brain-explorer .bx-rel-h { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding-bottom: 14px; margin-bottom: 4px; font-family: var(--mono); }
+.brain-explorer .bx-anchor { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px 14px; margin-bottom: 18px; }
+.brain-explorer .bx-anchor-center { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid; border-radius: 6px; background: var(--bg-1); font-family: var(--mono); font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+.brain-explorer .bx-anchor-label { color: var(--text); font-family: var(--sans); font-weight: 500; font-size: 13.5px; letter-spacing: -0.005em; }
+.brain-explorer .bx-anchor-spokes { display: flex; flex-direction: column; gap: 0; }
+.brain-explorer .bx-spoke { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 10px; border-left: 1px solid var(--line); margin-left: 10px; position: relative; }
+.brain-explorer .bx-spoke::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; height: 1px; background: var(--line); }
+.brain-explorer .bx-spoke-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; margin-left: 8px; }
+.brain-explorer .bx-rel-divider { height: 1px; background: var(--line); margin: 14px 0; }
+.brain-explorer .bx-rel-group { display: block; margin-bottom: 14px; }
+.brain-explorer .bx-rel-group-h { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); padding: 4px 4px; margin-bottom: 4px; font-family: var(--mono); letter-spacing: .04em; font-weight: 500; }
+.brain-explorer .bx-rel-group-h > span:first-child { width: 16px; text-align: center; font-weight: 600; }
+.brain-explorer .bx-rel-item { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 5px; cursor: pointer; font-size: 12.5px; color: var(--text-2); }
+.brain-explorer .bx-rel-item:hover { background: var(--bg-2); color: var(--text); }
+.brain-explorer .bx-rel-bullet { width: 5px; height: 5px; border-radius: 50%; opacity: .9; }
+.brain-explorer .bx-rel-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brain-explorer .bx-rel-id { font-size: 10px; color: var(--text-4); }

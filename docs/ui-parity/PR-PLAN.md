@@ -56,11 +56,12 @@ Derived from [`REPORT.md`](./REPORT.md). Goal: ship our client to **visual parit
 - 🤖 **Automated:** `brain-style.spec.ts` — legend + node glyphs (F/D/C/U/B/M); feedback=teal `rgb(122,220,199)`, metric=blue `rgb(122,182,230)` (computed); regression guard for the swap. **8 green** (mocks the brain API).
 - 🧑 **Manual:** open Brain; confirm node colors/glyphs and edge labels match the reference legend.
 
-### PR-05 · Brain: rebuild as 3-column Explorer *(large; depends on PR-04)*
-**Scope:** restructure Brain from free node-link canvas to the reference **detail-first Explorer** — subtabs row, brain-search + `⌘K`, Find-gaps / Export-to-MCP buttons, namespace feature tree (left), rich center record (keys grid, summary, description, code surface, activity), radial `.bx-anchor` relations map (right), MCP-server status block. Keep the graph canvas reachable as a secondary view (don't delete PR-04's work).
-**Files:** `app/brain/page.tsx`, new `components/brain/Explorer*.tsx`, `components/brain/NodeInfo.tsx`.
-- 🤖 **Automated:** `brain-explorer.spec.ts` — 3 columns render; selecting a tree node updates the center record (title + keys grid + sections); relations map shows anchor + neighbors; search box focuses on `⌘K`.
-- 🧑 **Manual:** click through the feature tree; confirm the center record and relations map update and match the reference layout.
+### PR-05 · Brain: rebuild as 3-column Explorer *(large; DONE)*
+**Scope:** restructured Brain into the reference **detail-first Explorer** — Explorer/Graph **subtabs**, namespace **feature tree** (left, with per-feature D/B/U counts + a type Index), **record detail** (center: type-glyph header + id + title + keys grid + Description), and a **relations map** (right: `.bx-anchor` radial diagram + neighbor groups, clickable). The graph canvas is preserved behind the **Graph** subtab (keeps PR-04's glyph/color work).
+**No-fabrication trims:** the reference's invented content is **omitted** — owner / confidence / coverage / source rows, the summary prose, the code-surface file list, the activity feed, and the MCP-server block (all need backend data we don't have). The keys grid shows the 3 honest fields (Type / Created / Edges); Description renders `node.detail` or an empty state. Brain-search input + Find-gaps / Export-to-MCP buttons deferred (search needs the Ask wiring; the buttons need real actions).
+**Files:** `components/brain/BrainExplorer.tsx` (new), `app/brain/page.tsx`, `app/globals.css` (bx-* scoped under `.brain-explorer` to avoid colliding with NodeInfo), `e2e/brain-explorer.spec.ts`, `e2e/brain-style.spec.ts` (switches to Graph subtab).
+- 🤖 **Automated:** `brain-explorer.spec.ts` — 3 columns; default-first-feature record; tree selection; relations navigation; anchor glyph; Explorer↔Graph switch. **6 green** (mocks the brain API). Full suite: e2e 34✓ / vitest 140✓.
+- 🧑 **Manual:** open Brain → Explorer; click features in the left tree and neighbors in the right map; confirm the center record + anchor update; toggle the Graph subtab.
 
 ### PR-06 · Backlog parity
 **Scope (from [§04](./sections/04-backlog-task-sprints.md)):** 4 columns (Ready / In progress / Review / Done) with **blocked routed to an amber banner** (not a 5th column); add head actions (Filter, Suggest priority, Run sprint); align card anatomy (priority dot, feature tag, status, assignee).
