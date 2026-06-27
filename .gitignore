@@ -5,3 +5,9 @@ __pycache__/
 .superpowers/
 .claude/
 .agent-comms/
+
+# macOS
+.DS_Store
+
+# Large reference mockup (kept locally, not in VCS)
+docs/Spade (standalone).html

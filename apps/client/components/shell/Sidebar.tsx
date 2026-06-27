@@ -28,14 +28,14 @@ const GROUPS: NavGroup[] = [
   {
     label: "Project",
     items: [
-      { label: "Overview", icon: "board", href: "#" },
-      { label: "Ask", icon: "brain", href: "#" },
+      { label: "Overview", icon: "graph", href: "#" },
+      { label: "Ask", icon: "spark", href: "#" },
     ],
   },
   {
     label: "Plan",
     items: [
-      { label: "Sprints", icon: "cal", href: "#" },
+      { label: "Sprints", icon: "board", href: "#" },
       { label: "Backlog", icon: "tasks", href: "/backlog", countKey: "backlog" },
       { label: "Product brain", icon: "brain", href: "/brain", countKey: "brain" },
       { label: "Graph & Issues", icon: "graph", href: "#" },
@@ -45,7 +45,7 @@ const GROUPS: NavGroup[] = [
     label: "Execution",
     items: [
       { label: "Orchestrator", icon: "orch", href: "/orchestrator", countKey: "orchestrator", badgeKind: "live" },
-      { label: "Agent pool", icon: "board", href: "/agent-pool", countKey: "agentPool" },
+      { label: "Agent pool", icon: "spark", href: "/agent-pool", countKey: "agentPool" },
       { label: "Human gates", icon: "gate", href: "/gate", countKey: "gates", badgeKind: "amber" },
     ],
   },
@@ -53,7 +53,7 @@ const GROUPS: NavGroup[] = [
     label: "Inputs",
     items: [
       { label: "Meetings", icon: "mic", href: "#" },
-      { label: "Feedback", icon: "link", href: "#" },
+      { label: "Feedback", icon: "flag", href: "#" },
       { label: "Decisions", icon: "doc", href: "/decisions", countKey: "decisions" },
     ],
   },
