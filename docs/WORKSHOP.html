@@ -107,71 +107,64 @@
   <!-- STEP 1 -->
   <div class="step">
     <div class="num">Step 1 · Plan</div>
-    <h2>Decide the stack</h2>
-    <p class="lead">Record the three architecture decisions that shape the app.</p>
+    <h2>Just say what you’re building</h2>
+    <p class="lead">Don’t enumerate ADRs or features — describe the app like you’d tell a teammate. Spade does the extracting.</p>
 
-    <div class="way ask"><div class="h">💬 Just talk — it’ll notice the decisions</div>
-      <div class="quote">“We’ll build the frontend in React with Vite, and the backend in FastAPI with SQLite via SQLModel.”</div>
-      <p style="font-size:13px;color:var(--text3);margin-top:8px">You didn’t say “ADR” — Spade hears three decisions and offers to record them (as <b>proposed</b>, for you to confirm).</p></div>
+    <div class="way ask"><div class="h">💬 Press <kbd>⌘</kbd><kbd>K</kbd> and talk</div>
+      <div class="quote">“Hey, let’s start a little todo app. People jot down todos, check them off when they’re done, edit or delete them, and filter to just the open ones — and down the line, due dates would be nice. I’m picturing a React + Vite front end with a small FastAPI + SQLite back end. Can you set up the brain and a starter backlog?”</div>
+      <p style="font-size:13.5px;color:var(--text2);margin-top:11px">From those few sentences — <b>no “create an ADR”, no lists</b> — Spade extracts and proposes:</p>
+      <ul style="margin:8px 0 0;padding-left:18px;color:var(--text2);font-size:13.5px;line-height:1.7">
+        <li><b>Decisions</b> — React + Vite (front), FastAPI + SQLite (back), recorded as <b>proposed</b> for you to confirm.</li>
+        <li><b>Features</b> — add, complete, edit/delete, filter, due dates, storage.</li>
+        <li><b>A starter backlog</b> — back-end + front-end tasks, each grounded in its feature.</li>
+      </ul>
+      <p style="font-size:13px;color:var(--text3);margin-top:10px">It replies with what it captured, e.g. <i>“Captured 2 decisions, 6 features, 10 tasks — all in the new project. Want me to mark the stack decisions active?”</i></p></div>
 
-    <div class="way cmd"><div class="h">⌘ Run</div>
+    <div class="way cmd"><div class="h">⌘ Or build it by hand — free, no agent</div>
+      <p>Same result with three quick command blocks. <b>Decisions:</b></p>
       <pre><code><span class="k">for</span> d <span class="k">in</span> "React + Vite for the frontend" "FastAPI backend" "SQLite via SQLModel"; <span class="k">do</span>
   <span class="k">curl</span> -s $B/brain/nodes -H 'content-type: application/json' \
     -d "<span class="s">{\"project_id\":\"$P\",\"type\":\"decision\",\"label\":\"$d\",\"status\":\"active\",\"owner\":\"You\"}</span>"; <span class="k">done</span></code></pre>
-      <p style="font-size:13px;color:var(--text3);margin-top:9px">Or click: <b>Decisions → + New decision</b>, three times.</p></div>
-
-    <div class="check"><div class="h">Open <b>Decisions</b> — your three ADRs, each with an <b>active</b> pill.</div>
-      <a class="shot" href="screenshots/tasker-decisions.png" target="_blank"><img src="screenshots/tasker-decisions.png" alt="Decisions"></a></div>
-  </div>
-
-  <!-- STEP 2 -->
-  <div class="step">
-    <div class="num">Step 2 · Plan</div>
-    <h2>Map the features into the brain</h2>
-    <p class="lead">The “product brain” is Spade’s knowledge graph. Add the app’s features as nodes.</p>
-
-    <div class="way ask"><div class="h">💬 Just talk — it’ll map the features</div>
-      <div class="quote">“The app needs to add todos, mark them complete, edit and delete them, filter by status, set due dates, and persist everything.”</div>
-      <p style="font-size:13px;color:var(--text3);margin-top:8px">Spade pulls the capabilities out as feature nodes and links them to the decisions.</p></div>
-
-    <div class="way cmd"><div class="h">⌘ Run</div>
+      <p style="margin-top:11px"><b>Features:</b></p>
       <pre><code><span class="k">for</span> f <span class="k">in</span> "Add a todo" "Complete a todo" "Edit & delete" \
          "Filter by status" "Due dates" "Persisted storage"; <span class="k">do</span>
   <span class="k">curl</span> -s $B/brain/nodes -H 'content-type: application/json' \
-    -d "<span class="s">{\"project_id\":\"$P\",\"type\":\"feature\",\"label\":\"$f\",\"owner\":\"You\"}</span>"; <span class="k">done</span></code></pre></div>
-
-    <div class="check"><div class="h">Open <b>Product brain</b> — your six features, each a real record. <b>Graph &amp; Issues</b> already flags gaps (a feature with no decision yet).</div>
-      <a class="shot" href="screenshots/tasker-brain.png" target="_blank"><img src="screenshots/tasker-brain.png" alt="Product brain"></a></div>
-  </div>
-
-  <!-- STEP 3 -->
-  <div class="step">
-    <div class="num">Step 3 · Build</div>
-    <h2>Fill the backlog — back &amp; front</h2>
-    <p class="lead">Now the work itself: backend CRUD + the React UI, as backlog cards.</p>
-
-    <div class="way ask"><div class="h">💬 Just talk — it’ll draft the backlog</div>
-      <div class="quote">“For the backend we need the SQLite schema and full CRUD on /api/todos with a status filter; on the frontend, a list view, an add form, a complete toggle, filter tabs and a due-date picker.”</div>
-      <p style="font-size:13px;color:var(--text3);margin-top:8px">Spade turns that into backlog cards, each grounded in its feature — then tells you what it created.</p></div>
-
-    <div class="way cmd"><div class="h">⌘ Run</div>
+    -d "<span class="s">{\"project_id\":\"$P\",\"type\":\"feature\",\"label\":\"$f\",\"owner\":\"You\"}</span>"; <span class="k">done</span></code></pre>
+      <p style="margin-top:11px"><b>Backlog (back + front):</b></p>
       <pre><code><span class="k">add</span>(){ <span class="k">curl</span> -s $B/tasks -H 'content-type: application/json' \
   -d "<span class="s">{\"project_id\":\"$P\",\"title\":\"$1\",\"feature\":\"$2\",\"priority\":$3}</span>" >/dev/null; }
-<span class="c"># backend</span>
 <span class="k">add</span> "SQLite schema + SQLModel models"        "Persisted storage" 0
 <span class="k">add</span> "POST /api/todos — create"               "Add a todo"        1
 <span class="k">add</span> "GET /api/todos — list + status filter"  "Filter by status"  1
 <span class="k">add</span> "PATCH /api/todos/:id — toggle & edit"   "Complete a todo"   1
 <span class="k">add</span> "DELETE /api/todos/:id"                  "Edit & delete"     2
-<span class="c"># frontend</span>
 <span class="k">add</span> "Todo list view"                         "Add a todo"        1
 <span class="k">add</span> "Add-todo input form"                    "Add a todo"        1
 <span class="k">add</span> "Complete toggle + strikethrough"        "Complete a todo"   1
 <span class="k">add</span> "Filter tabs (All / Active / Done)"      "Filter by status"  2
 <span class="k">add</span> "Due-date picker"                        "Due dates"         2
 <span class="k">echo</span> "<span class="s">backlog ready ✓</span>"</code></pre></div>
+  </div>
 
-    <div class="check"><div class="h">Open <b>Backlog</b> — ten cards in <b>Ready</b>, each tagged with its feature. Click one to see its detail. <span style="color:var(--text3)">(screenshot shows the finished app, with cards moved across columns)</span></div>
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="num">Step 2 · See what it captured</div>
+    <h2>Your decisions &amp; your brain — from a paragraph</h2>
+    <p class="lead">Open these and check Spade understood you.</p>
+
+    <div class="check"><div class="h"><b>Decisions</b> — the stack choices it pulled out, each a real ADR.</div>
+      <a class="shot" href="screenshots/tasker-decisions.png" target="_blank"><img src="screenshots/tasker-decisions.png" alt="Decisions"></a></div>
+
+    <div class="check" style="margin-top:18px"><div class="h"><b>Product brain</b> — every feature it heard, as a connected node. <b>Graph &amp; Issues</b> already flags any feature with no decision yet.</div>
+      <a class="shot" href="screenshots/tasker-brain.png" target="_blank"><img src="screenshots/tasker-brain.png" alt="Product brain"></a></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="num">Step 3 · Build</div>
+    <h2>The backlog it drafted</h2>
+    <p class="lead">Back-end and front-end work, as cards — each grounded in its feature.</p>
+    <div class="check"><div class="h">Open <b>Backlog</b> — your cards, ready to go. Click one to see its detail and the feature it’s tied to. <span style="color:var(--text3)">(shown with cards already moved across columns)</span></div>
       <a class="shot" href="screenshots/tasker-backlog.png" target="_blank"><img src="screenshots/tasker-backlog.png" alt="Backlog"></a></div>
   </div>
 
