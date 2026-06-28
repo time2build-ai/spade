@@ -1410,6 +1410,20 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
 
+/* === CLI / logs — V2 === */
+.cli-wrap { display: grid; grid-template-columns: 240px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+.cli-runs { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; background: var(--bg); }
+.cli-runs-h { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); font-family: var(--mono); margin-bottom: 8px; }
+.cli-run { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 9px 11px; border-radius: 7px; margin-bottom: 4px; }
+.cli-run:hover { background: var(--bg-1); }
+.cli-run.on { background: linear-gradient(90deg, rgba(201,184,255,.1), transparent); }
+.cli-run-cmd { font-size: 12px; color: var(--text); }
+.cli-run-when { font-size: 10px; color: var(--text-4); margin-top: 2px; }
+.cli-log { display: flex; flex-direction: column; min-height: 0; padding: 16px 20px; }
+.cli-log-h { font-size: 12px; color: var(--text-3); margin-bottom: 10px; }
+.cli-log .term { flex: 1; overflow-y: auto; background: #0a0a0c; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 12px; }
+.cli-log .term .tline { display: flex; gap: 0; white-space: pre-wrap; line-height: 1.7; }
+
 /* === Feedback — V2 === */
 .fb-wrap { display: grid; grid-template-columns: 280px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
 .fb-list { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; background: var(--bg); }

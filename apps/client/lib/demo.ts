@@ -629,6 +629,43 @@ export const DEMO_FEEDBACK_CLUSTERS: FeedbackCluster[] = [
   },
 ];
 
+// ── CLI / logs ───────────────────────────────────────────────────────────────
+// Seeded — no cli-runs API. BACKEND: real session logs.
+export type CliLine = { p?: string; c: string; lvl?: "ok" | "warn" | "info" | "muted" };
+export type CliRun = { id: string; cmd: string; when: string; lines: CliLine[] };
+export const DEMO_CLI_RUNS: CliRun[] = [
+  {
+    id: "run-sprint", cmd: "spade run --sprint", when: "2m ago",
+    lines: [
+      { p: "$ ", c: "spade run --sprint 26" },
+      { c: "orchestrator: priming pipeline for sprint 26", lvl: "info" },
+      { c: "task.next → SPD-142  Optimize mobile checkout speed", lvl: "info" },
+      { c: "session.spawn role=Developer → sess_8d2c", lvl: "info" },
+      { c: "warn: acct lab@acme rate-limited, cooling 5h", lvl: "warn" },
+      { c: "handoff lab → rmurphy on sess_8d2c", lvl: "info" },
+      { c: "npm test → passed (212 tests, 1.4s)", lvl: "ok" },
+      { c: "PR opened #2118 · +213 −62", lvl: "ok" },
+    ],
+  },
+  {
+    id: "brain-export", cmd: "spade brain export --mcp", when: "18m ago",
+    lines: [
+      { p: "$ ", c: "spade brain export --mcp" },
+      { c: "reading ~/.spade/brain.sqlite · 847 nodes · 2,312 edges", lvl: "info" },
+      { c: "writing MCP manifest → localhost:8717", lvl: "info" },
+      { c: "exported 847 nodes in 0.3s", lvl: "ok" },
+    ],
+  },
+  {
+    id: "gate-list", cmd: "spade gate list", when: "1h ago",
+    lines: [
+      { p: "$ ", c: "spade gate list" },
+      { c: "SPD-144 · paused at review · conflicts with ADR-014", lvl: "warn" },
+      { c: "1 gate awaiting a human call", lvl: "muted" },
+    ],
+  },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
