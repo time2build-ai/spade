@@ -33,6 +33,12 @@ export const api = {
     model_ceiling?: string | null;
     autopilot?: number;
   }) => http<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
+  // Patch a project's automation settings (autopilot / strategy / ceiling). Only
+  // the sent fields are updated; an explicit `model_ceiling: null` clears it.
+  updateProject: (
+    id: string,
+    body: Partial<Pick<Project, "name" | "path" | "account_strategy" | "model_ceiling" | "autopilot">>,
+  ) => http<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   // Host environment hints (e.g. home dir for default project paths).
   env: () => http<{ home: string }>("/env"),
   // The server's "current project" — what agents (orchestrator / spade-data

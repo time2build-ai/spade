@@ -68,3 +68,30 @@ def test_set_pool_rejects_unknown_account():
     projects.create(id="p", name="P", path="/w")
     with pytest.raises(ValueError):
         projects.set_pool("p", ["does-not-exist"])
+
+
+def test_patch_project_http_persists_automation_settings():
+    """Phase 3: the Settings screen persists autopilot/strategy/ceiling through
+    the existing PATCH /projects/{id} route."""
+    from fastapi.testclient import TestClient
+    from tui_pilot import server
+
+    projects.create(id="acme", name="Acme", path="/w",
+                    account_strategy="single", model_ceiling=None, autopilot=0)
+    client = TestClient(server.app)
+
+    r = client.patch("/projects/acme", json={
+        "autopilot": 1, "account_strategy": "round_robin", "model_ceiling": "opus",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["autopilot"] == 1
+    assert body["account_strategy"] == "round_robin"
+    assert body["model_ceiling"] == "opus"
+
+    # Persisted to the DB, and an explicit null clears the ceiling.
+    assert projects.get("acme")["autopilot"] == 1
+    r2 = client.patch("/projects/acme", json={"model_ceiling": None})
+    assert r2.status_code == 200 and projects.get("acme")["model_ceiling"] is None
+    # Omitted fields are untouched.
+    assert projects.get("acme")["autopilot"] == 1

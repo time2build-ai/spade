@@ -33,4 +33,17 @@ test.describe("settings", () => {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
   });
+
+  test("toggling autopilot PATCHes the project (Phase 3 — persists)", async ({ page }) => {
+    let patched: { url: string; body: unknown } | null = null;
+    await page.route("**/api/projects/p1", async (route) => {
+      patched = { url: route.request().url(), body: route.request().postDataJSON() };
+      await route.fulfill({ json: { id: "p1", name: "Acme Storefront", path: "acme/web", account_strategy: "round_robin", model_ceiling: "opus", autopilot: 0, created_at: "" } });
+    });
+    const toggle = page.getByTestId("set-row").filter({ hasText: "Autopilot" }).getByRole("switch");
+    await toggle.click(); // 1 → 0
+    await expect.poll(() => patched).not.toBeNull();
+    expect(patched!.url).toContain("/api/projects/p1");
+    expect(patched!.body).toEqual({ autopilot: 0 });
+  });
 });

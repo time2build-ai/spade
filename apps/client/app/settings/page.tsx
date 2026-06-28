@@ -1,15 +1,17 @@
 "use client";
 
 import * as React from "react";
+import { mutate } from "swr";
 import { PageHead, TogglePill } from "@/components/ui";
 import { useProject } from "@/lib/useProject";
+import { api } from "@/lib/api";
 import { DEMO_SETTINGS_GROUPS } from "@/lib/demo";
 
 export default function SettingsPage() {
   const { project } = useProject();
 
-  // Initial state: real autopilot wins; the rest from the seeded defaults.
-  // Toggles are local-only (BACKEND: project-settings update endpoint).
+  // Initial state: real autopilot wins; the rest from the seeded defaults
+  // (BACKEND: those non-column toggles aren't persisted yet).
   const initial = React.useMemo(() => {
     const s: Record<string, boolean> = {};
     for (const g of DEMO_SETTINGS_GROUPS) {
@@ -22,7 +24,18 @@ export default function SettingsPage() {
 
   const [state, setState] = React.useState<Record<string, boolean>>(initial);
   React.useEffect(() => setState(initial), [initial]);
-  const toggle = (key: string) => setState((p) => ({ ...p, [key]: !p[key] }));
+
+  // Autopilot is a real project column → persist via PATCH (optimistic). Other
+  // toggles stay local until their backend columns exist.
+  const toggle = (key: string, real?: "autopilot") => {
+    const next = !state[key];
+    setState((p) => ({ ...p, [key]: next }));
+    if (real === "autopilot" && project) {
+      api.updateProject(project.id, { autopilot: next ? 1 : 0 })
+        .then(() => mutate("projects"))
+        .catch(() => setState((p) => ({ ...p, [key]: !next }))); // revert on failure
+    }
+  };
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -47,7 +60,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="set-row-desc muted">{r.desc}</div>
                 </div>
-                <TogglePill on={!!state[r.key]} onChange={() => toggle(r.key)} aria-label={r.label} />
+                <TogglePill on={!!state[r.key]} onChange={() => toggle(r.key, r.real)} aria-label={r.label} />
               </div>
             ))}
           </section>
