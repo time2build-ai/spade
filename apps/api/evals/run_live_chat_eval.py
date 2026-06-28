@@ -35,9 +35,22 @@ def main() -> int:
         print("billable `claude` session). The no-cost workflow suite is run_evals.py.")
         return 0
 
+    import time
+
     from tui_pilot.controller import Controller
     from tui_pilot.screen import State
     from tui_pilot.session import TmuxSession
+
+    def ensure_idle(ctrl, timeout=60):
+        """Block until the agent is genuinely IDLE before prompting — without this
+        a prompt sent mid-boot reads the prior frame (one-turn lag)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            ctrl.wait_for_settle(timeout=timeout)
+            if ctrl.state() == State.IDLE:
+                return True
+            time.sleep(0.5)
+        return False
 
     name = f"spade-chat-eval-{uuid.uuid4().hex[:8]}"
     sess = TmuxSession(name, CMD, cols=120, rows=40)
@@ -45,8 +58,7 @@ def main() -> int:
     ctrl = Controller(sess)
     results = []
     try:
-        ctrl.wait_for_settle(timeout=45)
-        results.append(_eval("agent boots to IDLE", ctrl.state() == State.IDLE))
+        results.append(_eval("agent boots to IDLE", ensure_idle(ctrl)))
 
         # 1. Sanity round-trip.
         r = ctrl.prompt("Reply with exactly one word: pong", timeout=90)
@@ -54,6 +66,7 @@ def main() -> int:
                              r.get("response", "")[:120]))
 
         # 2. Planning: ask it to plan a feature; expect concrete, ordered steps.
+        ensure_idle(ctrl)
         r = ctrl.prompt(
             "You are a software orchestrator. In 3-5 numbered steps, plan how to add "
             "a 'mobile checkout speed' optimization to an e-commerce app. Be concise.",
@@ -68,6 +81,7 @@ def main() -> int:
                              r["response"][:160]))
 
         # 3. Execution reasoning: ask which role/agent should do the work.
+        ensure_idle(ctrl)
         r = ctrl.prompt(
             "For that work, which single role would you assign first — developer, "
             "reviewer, integrator, or documentor? Answer with just the role word.",
