@@ -1410,6 +1410,21 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
 
+/* === Feedback — V2 === */
+.fb-wrap { display: grid; grid-template-columns: 280px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+.fb-list { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; background: var(--bg); }
+.fb-cluster { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 10px 12px; border-radius: 8px; margin-bottom: 4px; }
+.fb-cluster:hover { background: var(--bg-1); }
+.fb-cluster.on { background: linear-gradient(90deg, rgba(201,184,255,.1), transparent); }
+.fb-cluster-label { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text); }
+.fb-cluster-count { font-size: 11px; color: var(--text-4); }
+.fb-detail { overflow-y: auto; padding: 22px 28px 40px; }
+.fb-title { font-size: 20px; font-weight: 600; letter-spacing: -.02em; color: var(--text); }
+.src-bar { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4px; }
+.fb-platforms { display: flex; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.fb-platform { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); }
+.fb-platform .d { width: 7px; height: 7px; border-radius: 50%; }
+
 /* === Meetings — V2 === */
 .mtg-wrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
 .mtg-list { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; background: var(--bg); }

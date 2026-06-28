@@ -583,6 +583,52 @@ export const DEMO_MEETINGS: Meeting[] = [
   },
 ];
 
+// ── Feedback clusters ───────────────────────────────────────────────────────
+// Seeded — no Feedback API. BACKEND: feedback clustering.
+export type FeedbackCluster = {
+  id: string;
+  label: string;
+  count: number;
+  sources: { name: string; n: number; color: string }[];
+  quotes: { q: string; src: string }[];
+};
+export const DEMO_FEEDBACK_CLUSTERS: FeedbackCluster[] = [
+  {
+    id: "fc-1", label: "Checkout slow on mobile", count: 12,
+    sources: [
+      { name: "Intercom", n: 7, color: "var(--blue)" },
+      { name: "App Store", n: 3, color: "var(--amber)" },
+      { name: "GitHub", n: 2, color: "#9aa0aa" },
+    ],
+    quotes: [
+      { q: "Checkout is unusable on my phone, takes like 8 seconds to even load.", src: "Intercom · Mar 21" },
+      { q: "Why does the cart page jank so badly on iPhone? It used to be fine.", src: "App Store · Mar 18" },
+      { q: "I’ve abandoned 3 carts this week because of how slow the images load.", src: "Intercom · Mar 17" },
+    ],
+  },
+  {
+    id: "fc-2", label: "Recommendations feel random", count: 8,
+    sources: [
+      { name: "App Store", n: 5, color: "var(--amber)" },
+      { name: "Intercom", n: 3, color: "var(--blue)" },
+    ],
+    quotes: [
+      { q: "The “recommended for you” section never matches what I actually want.", src: "App Store · Mar 19" },
+      { q: "Recs look like they’re picked at random, not based on my history.", src: "Intercom · Mar 15" },
+    ],
+  },
+  {
+    id: "fc-3", label: "Receipts missing line-item taxes", count: 5,
+    sources: [
+      { name: "Intercom", n: 4, color: "var(--blue)" },
+      { name: "Manual", n: 1, color: "var(--teal)" },
+    ],
+    quotes: [
+      { q: "My emailed receipt doesn’t show the tax breakdown my accountant needs.", src: "Intercom · Mar 20" },
+    ],
+  },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
