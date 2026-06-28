@@ -169,13 +169,21 @@ export function BrainExplorer({ nodes, edges, selectedId, onSelect }: BrainExplo
                 coverage (seeded; real-wins where the API exposes them). */}
             {(() => {
               const s = brainNodeSeed(sel.id, sel.detail);
+              // Real-wins: owner/source/updated_at are real columns now; the seed
+              // fills confidence/coverage/summary/code-surface/activity (no real
+              // source yet). updated_at (ISO) → short date for "Last touched".
+              const owner = sel.owner ?? s.owner;
+              const source = sel.source ?? s.source;
+              const lastTouched = sel.updated_at
+                ? new Date(sel.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                : s.lastTouched;
               return (
                 <>
                   <div className="bx-keys">
                     <div><span className="k">Type</span><span>{NODE_TYPE_META[sel.type].label}</span></div>
-                    <div><span className="k">Owner</span><span>{s.owner}</span></div>
-                    <div><span className="k">Last touched</span><span className="mono">{s.lastTouched}</span></div>
-                    <div><span className="k">Source</span><span>{s.source}</span></div>
+                    <div><span className="k">Owner</span><span data-testid="bx-owner">{owner}</span></div>
+                    <div><span className="k">Last touched</span><span className="mono" data-testid="bx-touched">{lastTouched}</span></div>
+                    <div><span className="k">Source</span><span data-testid="bx-source">{source}</span></div>
                     <div>
                       <span className="k">Confidence</span>
                       <span style={{ color: s.confidence.color }}>● {s.confidence.label}</span>

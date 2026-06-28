@@ -86,3 +86,21 @@ def test_node_status_owner_via_http(monkeypatch):
     nodes = {n["id"]: n for n in client.get("/brain/nodes", params={"project_id": "acme"}).json()["nodes"]}
     assert nodes[nid]["status"] == "proposed"
     assert client.patch(f"/brain/nodes/{nid}", json={"status": "active"}).json()["status"] == "active"
+
+
+def test_node_provenance_source_and_updated_at():
+    """Phase 3: brain nodes carry real source + an updated_at that bumps on edit."""
+    _proj()
+    n = brain.create_node(project_id="acme", type="feature", label="Checkout",
+                          owner="Akira", source="Sprint Planning")
+    assert n["source"] == "Sprint Planning"
+    assert n["owner"] == "Akira"
+    # created → updated_at is set (== created_at on insert).
+    assert n["updated_at"] is not None
+    first_touch = n["updated_at"]
+
+    # Any edit bumps updated_at (and persists source via the whitelist).
+    brain.update_node(n["id"], source="Architecture review")
+    got = brain.get_node(n["id"])
+    assert got["source"] == "Architecture review"
+    assert got["updated_at"] >= first_touch

@@ -177,6 +177,7 @@ class NodeCreate(BaseModel):
     y: float | None = None
     status: str | None = None
     owner: str | None = None
+    source: str | None = None
 
 
 class NodePatch(BaseModel):
@@ -187,6 +188,7 @@ class NodePatch(BaseModel):
     y: float | None = None
     status: str | None = None
     owner: str | None = None
+    source: str | None = None
 
 
 class EdgeCreate(BaseModel):
@@ -231,6 +233,7 @@ def create_brain_node(req: NodeCreate) -> dict:
             y=req.y,
             status=req.status,
             owner=req.owner,
+            source=req.source,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

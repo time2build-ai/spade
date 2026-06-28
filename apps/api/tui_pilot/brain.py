@@ -14,7 +14,7 @@ from tui_pilot import db
 
 NODE_TYPES = ["feature", "decision", "convention", "feedback", "bug", "metric"]
 
-_WRITABLE_NODE_COLS = {"type", "label", "detail", "x", "y", "status", "owner"}
+_WRITABLE_NODE_COLS = {"type", "label", "detail", "x", "y", "status", "owner", "source"}
 
 
 # -- helpers ------------------------------------------------------------------
@@ -42,16 +42,18 @@ def create_node(
     y: float | None = None,
     status: str | None = None,
     owner: str | None = None,
+    source: str | None = None,
 ) -> dict:
     """Insert a new brain node and return the created row as a dict."""
     if type not in NODE_TYPES:
         raise ValueError(f"invalid node type {type!r}; must be one of {NODE_TYPES}")
     nid = _new_id()
+    now = _now()
     with db.tx() as cx:
         cx.execute(
-            "INSERT INTO brain_nodes (id, project_id, type, label, detail, x, y, status, owner, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (nid, project_id, type, label, detail, x, y, status, owner, _now()),
+            "INSERT INTO brain_nodes (id, project_id, type, label, detail, x, y, status, owner, source, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (nid, project_id, type, label, detail, x, y, status, owner, source, now, now),
         )
     return get_node(nid)
 
@@ -80,6 +82,8 @@ def update_node(id: str, **fields) -> None:
         return
     if "type" in fields and fields["type"] not in NODE_TYPES:
         raise ValueError(f"invalid node type {fields['type']!r}; must be one of {NODE_TYPES}")
+    # Any edit bumps the last-touched timestamp (real provenance signal).
+    fields = {**fields, "updated_at": _now()}
     set_clause = ", ".join(f"{col} = ?" for col in fields)
     params = tuple(fields.values()) + (id,)
     with db.tx() as cx:

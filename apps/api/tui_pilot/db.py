@@ -49,8 +49,9 @@ def get_conn() -> sqlite3.Connection:
 _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     "accounts": {"role": "TEXT", "model": "TEXT", "plan": "TEXT"},
     # ADR (decision) lifecycle on brain nodes: status active/proposed/superseded
-    # + the decision owner. Nullable → existing nodes are unaffected.
-    "brain_nodes": {"status": "TEXT", "owner": "TEXT"},
+    # + the decision owner. Provenance: `source` (where the node came from) and
+    # `updated_at` (last-touched). All nullable → existing nodes are unaffected.
+    "brain_nodes": {"status": "TEXT", "owner": "TEXT", "source": "TEXT", "updated_at": "TEXT"},
 }
 
 

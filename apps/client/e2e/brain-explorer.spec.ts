@@ -8,7 +8,8 @@ import { test, expect, type Page } from "@playwright/test";
  */
 
 const NODES = [
-  { id: "f1", type: "feature", label: "Checkout" },
+  // f1 carries real provenance (Phase 3) — owner/source/updated_at win over the seed.
+  { id: "f1", type: "feature", label: "Checkout", owner: "Akira Real", source: "Sprint Planning Real", updated_at: "2026-03-25T10:00:00Z" },
   { id: "f2", type: "feature", label: "Search" },
   { id: "d1", type: "decision", label: "Use Stripe PaymentIntent" },
   { id: "b1", type: "bug", label: "Carousel jank" },
@@ -101,5 +102,12 @@ test.describe("brain explorer", () => {
   test("Brain is Explorer-only — no Graph subtab (graph lives at /graph-issues)", async ({ page }) => {
     await expect(page.locator(".subtab", { hasText: "Graph" })).toHaveCount(0);
     await expect(page.locator(".brain-explorer")).toBeVisible();
+  });
+
+  test("real provenance (owner/source/last-touched) wins over the seed (Phase 3)", async ({ page }) => {
+    // Default selection is f1, which carries real columns.
+    await expect(page.getByTestId("bx-owner")).toHaveText("Akira Real");
+    await expect(page.getByTestId("bx-source")).toHaveText("Sprint Planning Real");
+    await expect(page.getByTestId("bx-touched")).toContainText("Mar 25, 2026"); // from updated_at
   });
 });
