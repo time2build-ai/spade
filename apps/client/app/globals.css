@@ -798,6 +798,26 @@ body.home-mode .app > main { grid-column: 1 / -1; }
   color: var(--text-4); margin-bottom: 10px;
 }
 .dec-modal-links { display: flex; flex-direction: column; gap: 6px; }
+
+/* === Decisions: status pill + rich ADR detail sections (V2) === */
+.status-pill { font-size: 9.5px; font-family: var(--mono); padding: 1px 7px; border-radius: 999px; border: 1px solid; margin-left: 8px; text-transform: lowercase; }
+.dec-row-meta .chip { font-size: 10px; }
+.adr-toc { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 0 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.adr-toc-link { font-size: 11px; color: var(--text-3); }
+.adr-toc-link:hover { color: var(--accent); }
+.adr-section { margin-top: 20px; }
+.adr-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.adr-kv > div { display: flex; justify-content: space-between; gap: 10px; background: var(--bg-1); padding: 8px 12px; font-size: 12px; color: var(--text); }
+.adr-kv .k { color: var(--text-4); font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.adr-list { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.adr-list li { margin: 3px 0; }
+.adr-cons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.adr-cons-h { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; font-family: var(--mono); }
+.adr-alt { border-left: 2px solid var(--line-2); padding: 2px 0 2px 12px; margin-bottom: 8px; }
+.adr-alt-title { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.adr-alt-note { font-size: 11.5px; margin-top: 2px; }
+.adr-change { display: flex; gap: 10px; font-size: 12px; color: var(--text-2); padding: 4px 0; }
+.adr-change-date { color: var(--text-4); font-size: 11px; min-width: 48px; }
 .dec-modal-link {
   display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font: inherit;
   padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px;

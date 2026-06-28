@@ -286,6 +286,73 @@ export const DEMO_EXECUTIONS: Execution[] = [
   { id: "AI-ISS-235", role: "Developer", task: "SPD-145", elapsed: "5m 30s", nodes: ["f-checkout", "b-1153"] },
 ];
 
+// ── Decision (ADR) enrichment ───────────────────────────────────────────────
+// Real wins (label/detail/created_at/edges); status/owner/feature/conflict + the
+// narrative sections are seeded. Status is deterministic per id so the list
+// filter works. BACKEND: ADR status/owner/narrative + lifecycle.
+export type DecisionStatus = "active" | "proposed" | "superseded";
+const DEMO_DEC_STATUS: DecisionStatus[] = ["active", "active", "proposed", "superseded"];
+const DEMO_DEC_FEATURES = ["Checkout", "Search", "Email", "Cart", "Recommendations"];
+
+export type DecisionSeed = {
+  status: DecisionStatus;
+  owner: string;
+  feature: string;
+  conflict: string | null;
+  summary: { k: string; v: string }[];
+  drivers: string[];
+  consequences: { good: string[]; bad: string[]; neutral: string[] };
+  alternatives: { title: string; note: string }[];
+  validation: string[];
+  provenance: { k: string; v: string }[];
+  changelog: { date: string; text: string }[];
+};
+
+export function decisionSeed(id: string): DecisionSeed {
+  const h = hashId(id);
+  const status = DEMO_DEC_STATUS[h % DEMO_DEC_STATUS.length];
+  const owner = DEMO_OWNERS[h % DEMO_OWNERS.length];
+  return {
+    status,
+    owner,
+    feature: DEMO_DEC_FEATURES[h % DEMO_DEC_FEATURES.length],
+    conflict: h % 4 === 0 ? `ADR-0${10 + (h % 9)}` : null,
+    summary: [
+      { k: "Status", v: status },
+      { k: "Owner", v: owner },
+      { k: "Decided", v: "Mar 25, 2026" },
+      { k: "Supersedes", v: h % 3 === 0 ? "ADR-014" : "—" },
+    ],
+    drivers: [
+      "Mobile conversion is the headline metric this sprint.",
+      "12 feedback reports correlate slow image load with cart abandonment.",
+      "The existing CDN-only approach can't meet the LCP target on 3G.",
+    ],
+    consequences: {
+      good: ["LCP drops ~2.1s on P75 mobile.", "Carousel images defer until in-viewport."],
+      bad: ["Adds an IntersectionObserver dependency.", "Above-the-fold still needs eager-load."],
+      neutral: ["No change to the desktop render path."],
+    },
+    alternatives: [
+      { title: "CDN-only resize", note: "Rejected — doesn't address render-blocking." },
+      { title: "Server-side priority hints", note: "Deferred — larger change, revisit next sprint." },
+    ],
+    validation: [
+      "Lighthouse mobile LCP < 2.5s on the checkout route.",
+      "No regression in desktop conversion (A/B, 1 week).",
+    ],
+    provenance: [
+      { k: "Originated", v: "Sprint Planning · Mar 25" },
+      { k: "Author", v: owner },
+      { k: "Session", v: "sess_8d2c" },
+    ],
+    changelog: [
+      { date: "Mar 25", text: "Proposed by Claude · Reviewer" },
+      { date: "Mar 26", text: "Approved over the CDN-only approach" },
+    ],
+  };
+}
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";

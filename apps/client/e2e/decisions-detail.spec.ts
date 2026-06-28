@@ -52,4 +52,14 @@ test.describe("decision detail aside", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("decision-aside")).toHaveCount(0);
   });
+
+  test("aside has a TOC + structured sections", async ({ page }) => {
+    await page.locator(".decisions-list").getByText("Use Stripe PaymentIntent").click();
+    const aside = page.getByTestId("decision-aside");
+    await expect(aside.getByTestId("adr-toc")).toBeVisible();
+    for (const s of ["Summary", "Decision drivers", "Consequences", "Alternatives", "Validation", "Provenance", "Changelog"]) {
+      await expect(aside).toContainText(s);
+    }
+    await expect(aside.locator(".adr-cons")).toBeVisible(); // 3-col consequences
+  });
 });

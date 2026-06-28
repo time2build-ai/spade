@@ -7,7 +7,11 @@ import { DecisionCard } from "@/components/decisions/DecisionCard";
 import { DecisionDetail } from "@/components/decisions/DecisionDetail";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
+import { decisionSeed } from "@/lib/demo";
 import type { BrainNode } from "@/lib/types";
+
+const FILTERS = ["all", "active", "proposed", "superseded"] as const;
+type DecFilter = (typeof FILTERS)[number];
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return <div className="decisions-empty">{children}</div>;
@@ -39,6 +43,7 @@ export default function DecisionsPage() {
   );
 
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState<DecFilter>("all");
 
   // Honor a deep link from the brain panel (/decisions#dec-<id>): open that
   // decision's modal once the list has loaded.
@@ -75,16 +80,31 @@ export default function DecisionsPage() {
     body = <StateMessage>No decisions recorded yet.</StateMessage>;
   } else {
     body = (
-      <div className="decisions-list">
-        {decisions.map((node, i) => (
-          <DecisionCard
-            key={node.id}
-            node={node}
-            index={i}
-            onOpen={(n: BrainNode) => setOpenId(n.id)}
-          />
-        ))}
-      </div>
+      <>
+        <div className="filter-bar">
+          <span>Filter</span>
+          <div className="seg" data-testid="dec-filter">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                className={filter === f ? "on" : ""}
+                onClick={() => setFilter(f)}
+              >
+                {f === "all"
+                  ? `All (${decisions.length})`
+                  : f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="decisions-list">
+          {decisions.map((node, i) =>
+            filter === "all" || decisionSeed(node.id).status === filter ? (
+              <DecisionCard key={node.id} node={node} index={i} onOpen={(n: BrainNode) => setOpenId(n.id)} />
+            ) : null,
+          )}
+        </div>
+      </>
     );
   }
 
