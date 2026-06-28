@@ -118,6 +118,77 @@ export function taskCardSeed(id: string): TaskCardSeed {
   };
 }
 
+// ── Task detail enrichment (reference mod_08) ───────────────────────────────
+// The rich filler for the task page. Real fields (id/title/feature/priority/
+// status/origin) win; these seed the feedback strip, quotes, architectural
+// context, connected bugs, pipeline history, rich rail + tracked metric.
+// BACKEND: assignee, sprint, estimate/branch, feedback quotes, metric series,
+// pipeline-history events, write-back plan.
+export type TaskDetailSeed = {
+  createdFrom: string;
+  feedbackCount: string;
+  feedbackStats: { num: string; lbl: string }[];
+  quotes: { q: string; src: string }[];
+  decisions: { id: string; title: string; note: string; date: string }[];
+  convention: { title: string; note: string; meta: string };
+  bugs: { id: string; title: string }[];
+  pipeline: { text: string; when: string; now?: boolean }[];
+  assignee: { name: string; ai: boolean };
+  sprint: string;
+  estimate: string;
+  branch: string;
+  metric: { value: string; target: string; label: string; series: number[]; delta: string };
+  writeBack: string;
+};
+
+export function taskDetailSeed(id: string): TaskDetailSeed {
+  const slug = id.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return {
+    createdFrom: "created from sprint planning · 14h ago",
+    feedbackCount: "12 reports · 30d",
+    feedbackStats: [
+      { num: "12", lbl: "Intercom complaints" },
+      { num: "★ 2.3", lbl: "App Store, mobile checkout" },
+      { num: "34%", lbl: "Mobile conv (target 50%)" },
+      { num: "8.4s", lbl: "P75 LCP, mobile" },
+    ],
+    quotes: [
+      { q: "Checkout is unusable on my phone, takes like 8 seconds to even load.", src: "Intercom · Mar 21" },
+      { q: "Why does the cart page jank so badly on iPhone? It used to be fine.", src: "App Store · Mar 18" },
+      { q: "I’ve abandoned 3 carts this week because of how slow the images load.", src: "Intercom · Mar 17" },
+    ],
+    decisions: [
+      { id: "ADR-031", title: "Use lazy loading for product carousels", note: "approved over CDN-only approach", date: "Jan 14" },
+      { id: "ADR-018", title: "Image pipeline serves WebP via CDN", note: "Cloudflare Workers rewrite path", date: "Nov 09" },
+    ],
+    convention: { title: "CSS variables for design tokens", note: "All new components must consume tokens, not raw values.", meta: "47 files" },
+    bugs: [
+      { id: "BUG-1109", title: "Carousel images not compressed on mobile" },
+      { id: "BUG-1142", title: "Hero image blocks LCP on slow 3G" },
+      { id: "BUG-1153", title: "Apple Pay sheet layout shift" },
+    ],
+    pipeline: [
+      { text: "Task created from Sprint Planning · Mar 25", when: "14h ago · auto from transcript" },
+      { text: "Linked to 12 feedback items, 3 bugs, 2 decisions", when: "14h ago · semantic match" },
+      { text: "Picked up by Claude · Developer in sess_8d2c", when: "9m ago" },
+      { text: "Building — IntersectionObserver, WebP rewrite, image compression", when: "live · 412 lines streamed", now: true },
+    ],
+    assignee: { name: "Claude · Developer", ai: true },
+    sprint: "26",
+    estimate: "~25 min",
+    branch: `spd/${slug}-mobile-lcp`,
+    metric: {
+      value: "34%",
+      target: "target 50%",
+      label: "Mobile checkout conversion",
+      series: [42, 40, 41, 39, 40, 38, 37, 38, 36, 35, 36, 34, 34],
+      delta: "↓ 4.2pp / 30d",
+    },
+    writeBack:
+      "On merge, Spade will document the lazy-load implementation, update the Checkout feature page, link this PR to the originating meeting, and resolve BUG-1109, BUG-1142, BUG-1153.",
+  };
+}
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";

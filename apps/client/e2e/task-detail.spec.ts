@@ -53,4 +53,36 @@ test.describe("task detail", () => {
   test("breadcrumb links back to the backlog", async ({ page }) => {
     await expect(page.locator(".breadcrumb").getByRole("link", { name: "Backlog" })).toHaveAttribute("href", "/backlog");
   });
+
+  test("user justification: feedback strip (4 tiles) + quote cards", async ({ page }) => {
+    await expect(page.getByTestId("feedback-strip").locator(".fb-stat")).toHaveCount(4);
+    await expect(page.getByTestId("quote-card").first()).toBeVisible();
+    await expect(page.locator(".td-main")).toContainText("User justification");
+  });
+
+  test("architectural context + connected bugs link-rows", async ({ page }) => {
+    await expect(page.locator(".td-main")).toContainText("Architectural context");
+    await expect(page.locator(".td-main")).toContainText("ADR-031");
+    await expect(page.locator(".td-main")).toContainText("Connected bugs");
+    await expect(page.locator(".link-row")).not.toHaveCount(0);
+  });
+
+  test("pipeline history timeline with a live item", async ({ page }) => {
+    await expect(page.locator(".td-main")).toContainText("Pipeline history");
+    await expect(page.locator(".timeline .tl-item")).not.toHaveCount(0);
+    await expect(page.locator(".timeline .tl-item.now")).toHaveCount(1);
+  });
+
+  test("rich properties rail: Assignee / Sprint / Estimate / Branch", async ({ page }) => {
+    const rail = page.locator(".td-side");
+    for (const k of ["Assignee", "Sprint", "Estimate", "Branch"]) {
+      await expect(rail).toContainText(k);
+    }
+  });
+
+  test("tracked metric card with a sparkline + will-write-back", async ({ page }) => {
+    await expect(page.getByTestId("tracked-metric")).toBeVisible();
+    await expect(page.getByTestId("sparkline")).toBeVisible();
+    await expect(page.locator(".td-side")).toContainText("Will write back");
+  });
 });
