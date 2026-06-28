@@ -1394,6 +1394,32 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
 
+/* === Accounts (standalone) — V2 === */
+.acc-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 0; flex: 1; min-height: 0; overflow: hidden; }
+.acc-wrap > section { overflow-y: auto; padding: 18px 22px 30px; }
+.acc-intro { font-size: 17px; line-height: 1.5; color: var(--text); max-width: 640px; }
+.acc-stats { display: flex; gap: 28px; margin: 16px 0 6px; }
+.acc-stat .val { font-size: 22px; font-weight: 600; letter-spacing: -.02em; font-family: var(--mono); }
+.acc-stat .lbl { font-size: 11px; color: var(--text-4); }
+.acc-section-h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); font-family: var(--mono); margin: 24px 0 10px; }
+.acc-graph-wrap { border: 1px solid var(--line); border-radius: 10px; background: radial-gradient(600px 200px at 50% 0%, rgba(142,125,255,.06), transparent 70%), var(--bg-1); padding: 6px; }
+.acc-graph { width: 100%; height: 150px; }
+.acc-strategies { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.acc-strat { text-align: left; background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.acc-strat:hover { border-color: var(--line-strong); }
+.acc-strat.on { border-color: var(--accent); background: linear-gradient(180deg, rgba(201,184,255,.07), var(--bg-1)); }
+.acc-strat-label { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.acc-strat-desc { font-size: 11px; margin-top: 2px; }
+.acc-provider-tabs { display: inline-flex; gap: 2px; margin-left: auto; background: var(--bg-1); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.acc-ptab { padding: 3px 10px; font-size: 11px; color: var(--text-3); text-transform: capitalize; }
+.acc-ptab.on { background: var(--bg-3); color: var(--text); }
+.acc-handoffs { border-left: 1px solid var(--line); background: var(--bg-1); overflow-y: auto; padding: 16px 14px; }
+.acc-handoff { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.acc-handoff:last-child { border-bottom: none; }
+.acc-handoff-line { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); }
+.acc-handoff-arrow { color: var(--text-4); }
+.acc-handoff-meta { font-size: 10.5px; margin-top: 3px; }
+
 /* === Ask page (V2): thread list · chat panel · context rail === */
 .ask-page { display: grid; grid-template-columns: 260px minmax(0, 1fr) 240px; height: 100%; min-height: 0; }
 .ask-threads { border-right: 1px solid var(--line); overflow-y: auto; padding: 14px 12px; background: var(--bg); }

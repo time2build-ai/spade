@@ -392,6 +392,22 @@ export const DEMO_THREADS: ChatThread[] = [
   },
 ];
 
+// ── Accounts (standalone) — strategies + handoffs ───────────────────────────
+// Seeded. BACKEND: dispatch-strategy persistence + handoff log.
+export const DEMO_STRATEGIES = [
+  { id: "round-robin", label: "Round-robin", desc: "Even spread across the pool" },
+  { id: "cost-aware", label: "Cost-aware", desc: "Cheapest capable account first" },
+  { id: "capability", label: "Capability-match", desc: "Route by role strengths" },
+  { id: "manual", label: "Manual", desc: "Pin tasks to accounts" },
+];
+export type Handoff = { from: string; to: string; reason: string; when: string };
+export const DEMO_HANDOFFS: Handoff[] = [
+  { from: "lab@acme", to: "rmurphy@acme", reason: "rate-limit · cooling 5h", when: "9m ago" },
+  { from: "rmurphy@acme", to: "dan@acme", reason: "capability: multi-file edit", when: "32m ago" },
+  { from: "dan@acme", to: "lab@acme", reason: "round-robin", when: "1h ago" },
+  { from: "maya@acme", to: "rmurphy@acme", reason: "account exhausted", when: "2h ago" },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
