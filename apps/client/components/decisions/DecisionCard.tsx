@@ -50,30 +50,33 @@ export function DecisionCard({ node, index, onOpen }: DecisionCardProps) {
   const date = formatDate(node.created_at);
   const preview = snippet(node.detail);
   const seed = decisionSeed(node.id);
-  const pill = STATUS_PILL[seed.status];
+  // Real-wins: real status/owner columns show through; seed fills gaps.
+  const status = (node.status as "active" | "proposed" | "superseded") ?? seed.status;
+  const owner = node.owner ?? seed.owner;
+  const pill = STATUS_PILL[status] ?? STATUS_PILL[seed.status];
   return (
     // `dec-<id>` anchor lets the brain panel deep-link to this exact row.
     <button
       type="button"
       id={`dec-${node.id}`}
       className="dec-row"
-      data-status={seed.status}
+      data-status={status}
       onClick={() => onOpen(node)}
     >
       <span className="dec-row-code mono">{adrCode(index)}</span>
       <span className="dec-row-main">
         <span className="dec-row-title">
           <Icon name="doc" className="ico" />
-          <span style={seed.status === "superseded" ? { textDecoration: "line-through", color: "var(--text-4)" } : undefined}>
+          <span style={status === "superseded" ? { textDecoration: "line-through", color: "var(--text-4)" } : undefined}>
             {node.label}
           </span>
           <span className="status-pill" data-testid="dec-status" style={{ color: pill.color, background: pill.bg, borderColor: pill.color + "44" }}>
-            {seed.status}
+            {status}
           </span>
         </span>
         <span className="dec-row-meta">
           {date && <span>{date}</span>}
-          <span className="muted">· {seed.owner}</span>
+          <span className="muted">· {owner}</span>
           <span className="chip feature" style={{ padding: "0 6px" }}><span className="d" />{seed.feature}</span>
           {seed.conflict && (
             <span className="chip decision" data-testid="dec-conflict" style={{ padding: "0 6px" }}>

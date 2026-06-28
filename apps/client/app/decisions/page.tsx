@@ -99,7 +99,7 @@ export default function DecisionsPage() {
         </div>
         <div className="decisions-list">
           {decisions.map((node, i) =>
-            filter === "all" || decisionSeed(node.id).status === filter ? (
+            filter === "all" || (node.status ?? decisionSeed(node.id).status) === filter ? (
               <DecisionCard key={node.id} node={node} index={i} onOpen={(n: BrainNode) => setOpenId(n.id)} />
             ) : null,
           )}

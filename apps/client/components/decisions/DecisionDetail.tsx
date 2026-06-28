@@ -137,12 +137,19 @@ export function DecisionDetail({
 
           {(() => {
             const seed = decisionSeed(node.id);
+            // Real-wins: real status/owner override the seeded Summary rows; the
+            // long narrative below has no real source yet (seeded + noted).
+            const summary = seed.summary.map((r) =>
+              r.k === "Status" && node.status ? { ...r, v: node.status }
+              : r.k === "Owner" && node.owner ? { ...r, v: node.owner }
+              : r,
+            );
             return (
               <>
                 <section className="adr-section" id="adr-summary">
                   <div className="dec-modal-section-label">Summary</div>
                   <div className="adr-kv">
-                    {seed.summary.map((r) => (
+                    {summary.map((r) => (
                       <div key={r.k}><span className="k">{r.k}</span><span>{r.v}</span></div>
                     ))}
                   </div>

@@ -36,6 +36,9 @@ export interface BrainNode {
   x: number | null;
   y: number | null;
   created_at?: string | null;
+  // Phase 3: real ADR lifecycle columns on decision nodes (nullable).
+  status?: string | null;
+  owner?: string | null;
 }
 
 export type BrainEdge = {

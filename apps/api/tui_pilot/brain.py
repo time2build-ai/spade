@@ -14,7 +14,7 @@ from tui_pilot import db
 
 NODE_TYPES = ["feature", "decision", "convention", "feedback", "bug", "metric"]
 
-_WRITABLE_NODE_COLS = {"type", "label", "detail", "x", "y"}
+_WRITABLE_NODE_COLS = {"type", "label", "detail", "x", "y", "status", "owner"}
 
 
 # -- helpers ------------------------------------------------------------------
@@ -40,6 +40,8 @@ def create_node(
     detail: str | None = None,
     x: float | None = None,
     y: float | None = None,
+    status: str | None = None,
+    owner: str | None = None,
 ) -> dict:
     """Insert a new brain node and return the created row as a dict."""
     if type not in NODE_TYPES:
@@ -47,9 +49,9 @@ def create_node(
     nid = _new_id()
     with db.tx() as cx:
         cx.execute(
-            "INSERT INTO brain_nodes (id, project_id, type, label, detail, x, y, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (nid, project_id, type, label, detail, x, y, _now()),
+            "INSERT INTO brain_nodes (id, project_id, type, label, detail, x, y, status, owner, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (nid, project_id, type, label, detail, x, y, status, owner, _now()),
         )
     return get_node(nid)
 
