@@ -84,6 +84,20 @@ export const api = {
     http<{ nodes: BrainNode[] }>(
       `/brain/nodes?project_id=${encodeURIComponent(projectId)}`,
     ),
+  // Create a brain node (e.g. record a decision: type="decision" + status/owner).
+  createBrainNode: (body: {
+    project_id: string;
+    type: BrainNode["type"];
+    label: string;
+    detail?: string | null;
+    status?: string | null;
+    owner?: string | null;
+  }) => http<BrainNode>("/brain/nodes", { method: "POST", body: JSON.stringify(body) }),
+  // Patch a brain node (e.g. flip an ADR's status/owner).
+  updateBrainNode: (
+    id: string,
+    body: Partial<Pick<BrainNode, "label" | "detail" | "status" | "owner">>,
+  ) => http<BrainNode>(`/brain/nodes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   brainEdges: (projectId: string) =>
     http<{ edges: BrainEdge[] }>(
       `/brain/edges?project_id=${encodeURIComponent(projectId)}`,

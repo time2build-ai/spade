@@ -798,6 +798,9 @@ body.home-mode .app > main { grid-column: 1 / -1; }
   color: var(--text-4); margin-bottom: 10px;
 }
 .dec-modal-links { display: flex; flex-direction: column; gap: 6px; }
+.dec-record { display: flex; gap: 8px; align-items: center; padding: 10px 22px; border-bottom: 1px solid var(--line); }
+.dec-record input { flex: 1; min-width: 0; background: var(--bg-1); border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; color: var(--text); font: inherit; font-size: 13px; outline: none; }
+.dec-record input:focus { border-color: rgba(201,184,255,.4); }
 
 /* === Decisions: status pill + rich ADR detail sections (V2) === */
 .status-pill { font-size: 9.5px; font-family: var(--mono); padding: 1px 7px; border-radius: 999px; border: 1px solid; margin-left: 8px; text-transform: lowercase; }

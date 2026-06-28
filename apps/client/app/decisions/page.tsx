@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { PageHead } from "@/components/ui";
 import { DecisionCard } from "@/components/decisions/DecisionCard";
 import { DecisionDetail } from "@/components/decisions/DecisionDetail";
@@ -44,6 +44,25 @@ export default function DecisionsPage() {
 
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<DecFilter>("all");
+
+  // Record-decision (real): POST a new type=decision brain node, then revalidate
+  // the list so the new ADR appears. Status starts "proposed".
+  const [recording, setRecording] = React.useState(false);
+  const [newLabel, setNewLabel] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const recordDecision = async () => {
+    const label = newLabel.trim();
+    if (!label || !project || saving) return;
+    setSaving(true);
+    try {
+      await api.createBrainNode({ project_id: project.id, type: "decision", label, status: "proposed", owner: "You" });
+      await mutate(["brain-nodes", project.id]);
+      setNewLabel("");
+      setRecording(false);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Honor a deep link from the brain panel (/decisions#dec-<id>): open that
   // decision's modal once the list has loaded.
@@ -124,7 +143,28 @@ export default function DecisionsPage() {
             )}
           </>
         }
+        actions={project ? (
+          <button type="button" className="btn" data-testid="record-decision" onClick={() => setRecording((v) => !v)}>
+            + New decision
+          </button>
+        ) : undefined}
       />
+      {recording && project && (
+        <div className="dec-record" data-testid="dec-record">
+          <input
+            autoFocus
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && recordDecision()}
+            placeholder="Decision title — e.g. Use lazy loading for product carousels"
+            aria-label="Decision title"
+          />
+          <button type="button" className="btn primary" data-testid="record-save" disabled={saving || !newLabel.trim()} onClick={recordDecision}>
+            {saving ? "Recording…" : "Record"}
+          </button>
+          <button type="button" className="btn" onClick={() => { setRecording(false); setNewLabel(""); }}>Cancel</button>
+        </div>
+      )}
       {body}
       {openNode && (
         <DecisionDetail

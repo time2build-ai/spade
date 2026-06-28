@@ -72,4 +72,30 @@ test.describe("decisions list", () => {
     await expect(page.locator("#dec-dec-0 [data-testid='dec-status']")).toHaveText("active");
     await expect(page.locator("#dec-dec-1 [data-testid='dec-status']")).toHaveText("proposed");
   });
+
+  test("recording a decision POSTs a real node and it appears (Phase 3)", async ({ page }) => {
+    let posted: Record<string, unknown> | null = null;
+    // Intercept POST /brain/nodes and append the new node to subsequent GETs.
+    await page.route("**/api/brain/nodes**", async (route) => {
+      const req = route.request();
+      if (req.method() === "POST") {
+        posted = req.postDataJSON();
+        const created = { id: "dec-new", project_id: "p1", type: "decision", label: posted!.label, detail: null, x: null, y: null, created_at: "2026-02-02T00:00:00Z", status: posted!.status, owner: posted!.owner };
+        NODES.push(created as never);
+        await route.fulfill({ json: created });
+      } else {
+        await route.fulfill({ json: { nodes: NODES } });
+      }
+    });
+
+    await expect(page.locator(".dec-row")).toHaveCount(8);
+    await page.getByTestId("record-decision").click();
+    await page.getByTestId("dec-record").getByRole("textbox").fill("Adopt content-based recommender");
+    await page.getByTestId("record-save").click();
+
+    await expect.poll(() => posted).not.toBeNull();
+    expect(posted).toMatchObject({ type: "decision", label: "Adopt content-based recommender", status: "proposed" });
+    await expect(page.locator(".dec-row")).toHaveCount(9);
+    await expect(page.getByText("Adopt content-based recommender")).toBeVisible();
+  });
 });
