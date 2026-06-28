@@ -353,6 +353,45 @@ export function decisionSeed(id: string): DecisionSeed {
   };
 }
 
+// ── Ask chat threads (full /ask page) ───────────────────────────────────────
+// Seeded threads + rich messages (cites / plan / ADR-EDIT diff cards). The live
+// dock still sends to the real orchestrator; the /ask page is a seeded session
+// browser. BACKEND: chat thread persistence + structured tool-output.
+export type ChatMsg = {
+  role: "user" | "assistant";
+  who: string;
+  t: string;
+  text: string;
+  cites?: string[];
+  plan?: { title: string; steps: string[] };
+  action?: { kind: string; id: string; risk: string; title: string; remove: string[]; add: string[] };
+};
+export type ChatThread = { id: string; title: string; project: string; updated: string; pinned?: boolean; messages: ChatMsg[] };
+export const DEMO_THREADS: ChatThread[] = [
+  {
+    id: "th-1", title: "Lazy-load decision review", project: "Checkout", updated: "2m ago", pinned: true,
+    messages: [
+      { role: "user", who: "Robert", t: "08:44", text: "Can we tighten the lazy-load threshold for carousels?" },
+      { role: "assistant", who: "Spade · Claude", t: "08:46", text: "Drafted. Here's the diff:", action: { kind: "ADR-EDIT", id: "ADR-031", risk: "med", title: "Add viewport-aware caveat to lazy-load threshold", remove: ["Lazy-load any carousel containing more than 3 items."], add: ["Lazy-load any carousel containing more than 3 items on viewports ≤ 768px.", "On desktop, eager-load is permitted up to 6 items."] } },
+      { role: "user", who: "Robert", t: "08:50", text: "looks good. send to gates for Akira to review" },
+    ],
+  },
+  {
+    id: "th-2", title: "Why is mobile conversion down?", project: "Checkout", updated: "1h ago",
+    messages: [
+      { role: "user", who: "Robert", t: "07:10", text: "Why is mobile conversion down this sprint?" },
+      { role: "assistant", who: "Spade · Claude", t: "07:11", text: "Three signals point at checkout image load.", cites: ["fb-1", "m-conv", "b-1142"], plan: { title: "Investigate mobile checkout LCP", steps: ["Pull P75 LCP for /checkout (mobile)", "Correlate with the 12 Intercom reports", "Check ADR-031 carousel lazy-load coverage"] } },
+    ],
+  },
+  {
+    id: "th-3", title: "Sprint 26 standup summary", project: "Workspace", updated: "yesterday",
+    messages: [
+      { role: "user", who: "Robert", t: "Mar 25", text: "Summarize today's standup." },
+      { role: "assistant", who: "Spade · Claude", t: "Mar 25", text: "3 tasks shipped, 1 gate pending (SPD-144), 2 new feedback clusters." },
+    ],
+  },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
