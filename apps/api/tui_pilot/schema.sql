@@ -112,3 +112,11 @@ CREATE TABLE IF NOT EXISTS meetings (
   date TEXT, summary TEXT, attendees TEXT, created_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+-- Feedback clusters: a themed group of user reports. sources is a JSON array of
+-- {name,n,color}; verbatim quotes are a follow-up (client-seeded for now).
+CREATE TABLE IF NOT EXISTS feedback_clusters (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, label TEXT NOT NULL,
+  count INTEGER DEFAULT 0, sources TEXT, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);

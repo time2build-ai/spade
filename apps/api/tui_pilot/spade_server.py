@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import brain, meetings, pipelines, projects, sprints, tasks
+from . import brain, feedback, meetings, pipelines, projects, sprints, tasks
 
 router = APIRouter()
 
@@ -436,6 +436,31 @@ def create_meeting(req: MeetingCreate) -> dict:
     return meetings.create(
         project_id=req.project_id, title=req.title, date=req.date,
         summary=req.summary, attendees=req.attendees,
+    )
+
+
+# ---- feedback clusters ----------------------------------------------------
+
+
+class FeedbackCreate(BaseModel):
+    project_id: str
+    label: str
+    count: int = 0
+    sources: list[dict] | None = None
+
+
+@router.get("/feedback")
+def list_feedback(project_id: str) -> dict:
+    return {"clusters": feedback.list_for_project(project_id)}
+
+
+@router.post("/feedback")
+def create_feedback(req: FeedbackCreate) -> dict:
+    if projects.get(req.project_id) is None:
+        raise HTTPException(404, f"no project {req.project_id!r}")
+    return feedback.create(
+        project_id=req.project_id, label=req.label,
+        count=req.count, sources=req.sources,
     )
 
 

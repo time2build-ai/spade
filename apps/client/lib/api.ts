@@ -5,6 +5,7 @@ import type {
   BrainNode,
   Comment,
   LinkRel,
+  FeedbackClusterReal,
   Meeting,
   PipelineRun,
   Project,
@@ -138,6 +139,10 @@ export const api = {
   meetings: (projectId: string) =>
     http<{ meetings: Meeting[] }>(
       `/meetings?project_id=${encodeURIComponent(projectId)}`,
+    ),
+  feedbackClusters: (projectId: string) =>
+    http<{ clusters: FeedbackClusterReal[] }>(
+      `/feedback?project_id=${encodeURIComponent(projectId)}`,
     ),
   startPipeline: (runId: string) =>
     http<PipelineRun>(`/pipelines/${runId}/start`, { method: "POST" }),

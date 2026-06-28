@@ -198,3 +198,13 @@ export type Meeting = {
   attendees: string[];
   created_at: string | null;
 };
+
+// Phase 3: real feedback clusters. Verbatim quotes are a follow-up (seeded).
+export type FeedbackClusterReal = {
+  id: string;
+  project_id: string;
+  label: string;
+  count: number;
+  sources: { name: string; n: number; color: string }[];
+  created_at: string | null;
+};

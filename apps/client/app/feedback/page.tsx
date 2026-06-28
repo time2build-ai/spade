@@ -1,12 +1,33 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { useProject } from "@/lib/useProject";
+import { api } from "@/lib/api";
 import { DEMO_FEEDBACK_CLUSTERS } from "@/lib/demo";
 
 export default function FeedbackPage() {
-  const clusters = DEMO_FEEDBACK_CLUSTERS;
-  const [activeId, setActiveId] = React.useState(clusters[0].id);
+  const { project } = useProject();
+  const { data } = useSWR(
+    project ? ["feedback", project.id] : null,
+    () => api.feedbackClusters(project!.id),
+  );
+  // Real-wins: real label/count/sources drive the list + source bar + platform
+  // pills; the seed fills verbatim quotes (no real source yet) and the whole list
+  // when there are no real clusters, so the page always looks full.
+  const real = data?.clusters ?? [];
+  const clusters = real.length > 0
+    ? real.map((cl, i) => ({
+        id: cl.id,
+        label: cl.label,
+        count: cl.count,
+        sources: cl.sources.length ? cl.sources : DEMO_FEEDBACK_CLUSTERS[i % DEMO_FEEDBACK_CLUSTERS.length].sources,
+        quotes: DEMO_FEEDBACK_CLUSTERS[i % DEMO_FEEDBACK_CLUSTERS.length].quotes,
+      }))
+    : DEMO_FEEDBACK_CLUSTERS;
+
+  const [activeId, setActiveId] = React.useState<string | null>(null);
   const c = clusters.find((x) => x.id === activeId) ?? clusters[0];
 
   return (
@@ -16,7 +37,7 @@ export default function FeedbackPage() {
         {/* Cluster list */}
         <aside className="fb-list">
           {clusters.map((cl) => (
-            <button key={cl.id} className={"fb-cluster" + (cl.id === activeId ? " on" : "")} data-testid="fb-cluster" onClick={() => setActiveId(cl.id)}>
+            <button key={cl.id} className={"fb-cluster" + (cl.id === c.id ? " on" : "")} data-testid="fb-cluster" onClick={() => setActiveId(cl.id)}>
               <span className="fb-cluster-label">{cl.label}</span>
               <span className="fb-cluster-count mono">{cl.count}</span>
             </button>
