@@ -77,10 +77,10 @@ const WORKSPACE_GROUPS: NavGroup[] = [
   {
     label: "Workspace",
     items: [
-      { label: "Settings", icon: "cog", href: "/workspace/settings" },
-      { label: "Agents pool", icon: "spark", href: "/workspace/agents", seed: DEMO_WS_COUNTS.agentsPool },
-      { label: "Integrations", icon: "link", href: "/workspace/integrations", seed: DEMO_WS_COUNTS.integrations },
-      { label: "CLI / logs", icon: "term", href: "/workspace/cli" },
+      { label: "Settings", icon: "cog", href: "/settings" },
+      { label: "Agents pool", icon: "spark", href: "/accounts", seed: DEMO_WS_COUNTS.agentsPool },
+      { label: "Integrations", icon: "link", href: "/integrations", seed: DEMO_WS_COUNTS.integrations },
+      { label: "CLI / logs", icon: "term", href: "/cli" },
     ],
   },
   {
