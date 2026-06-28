@@ -443,6 +443,47 @@ export const DEMO_GATE = {
   suggestion: "approve as a scoped experiment behind a feature flag, then re-evaluate ADR-014 after 14 days. Spade will draft ADR-046 (proposed) if you accept.",
 };
 
+// ── Home dashboard (cross-project triage) ───────────────────────────────────
+// Seeded triage feed + KPI band + per-project meta. Real project list wins.
+// BACKEND: cross-project triage aggregation + project meta.
+export type TriageItem = { kind: string; title: string; project: string; meta: string; sev: "high" | "med" | "low" };
+export const TRIAGE_KIND_COLOR: Record<string, string> = {
+  gate: "var(--amber)", bug: "var(--red)", feedback: "var(--blue)", decision: "var(--accent)", metric: "var(--teal)", meeting: "var(--pink)",
+};
+export const DEMO_TRIAGE: TriageItem[] = [
+  { kind: "gate", title: "SPD-144 paused — conflicts with ADR-014", project: "Acme Storefront", meta: "needs a human call", sev: "high" },
+  { kind: "bug", title: "Apple Pay sheet layout shift on iOS Safari", project: "Acme Storefront", meta: "BUG-1153 · no root cause", sev: "high" },
+  { kind: "feedback", title: "12 reports: checkout slow on mobile", project: "Acme Storefront", meta: "Intercom · 30d", sev: "med" },
+  { kind: "metric", title: "Mobile checkout conversion at 34%", project: "Acme Storefront", meta: "target 50% · ↓ 4.2pp", sev: "high" },
+  { kind: "decision", title: "ADR-031 needs a viewport-aware caveat", project: "Acme Storefront", meta: "drafted by Claude", sev: "med" },
+  { kind: "feedback", title: "8 reports: recommendations feel random", project: "Beta App", meta: "App Store · 14d", sev: "med" },
+  { kind: "bug", title: "Cart drawer flicker on first open", project: "Acme Storefront", meta: "BUG-1109 · auto-linked", sev: "low" },
+  { kind: "meeting", title: "Sprint Planning · Mar 25 — 6 tasks created", project: "Acme Storefront", meta: "auto from transcript", sev: "low" },
+  { kind: "metric", title: "Recommendation CTR regression (2.1%)", project: "Beta App", meta: "target 4%", sev: "med" },
+  { kind: "gate", title: "Beta deploy waiting on review", project: "Beta App", meta: "SPD-301", sev: "med" },
+  { kind: "decision", title: "Document {data,error,meta} envelope gap", project: "Acme Storefront", meta: "convention drift", sev: "low" },
+  { kind: "feedback", title: "5 reports: receipts missing line-item taxes", project: "Acme Storefront", meta: "Intercom", sev: "med" },
+  { kind: "bug", title: "Hero image blocks LCP on slow 3G", project: "Acme Storefront", meta: "BUG-1142", sev: "high" },
+];
+export const DEMO_HOME_KPIS = [
+  { lbl: "Open triage", val: "13", sub: "across 2 projects" },
+  { lbl: "Gates pending", val: "2", sub: "need a human", color: "var(--amber)" },
+  { lbl: "Shipped · 7d", val: "18", sub: "+24% vs prev", color: "var(--green)" },
+  { lbl: "Active agents", val: "7", sub: "3 accounts" },
+  { lbl: "Tokens · 24h", val: "2.1M", sub: "≈ $14.20" },
+];
+export type ProjectMeta = { state: string; sprint: string; backlog: number; brain: number; workers: number };
+export function projectMeta(id: string): ProjectMeta {
+  const h = hashId(id);
+  return {
+    state: ["active", "active", "paused"][h % 3],
+    sprint: `${24 + (h % 4)}`,
+    backlog: 12 + (h % 30),
+    brain: 200 + (h % 800),
+    workers: 1 + (h % 5),
+  };
+}
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
