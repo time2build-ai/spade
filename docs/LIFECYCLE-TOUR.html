@@ -3,236 +3,205 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spade · Build an app — the full lifecycle</title>
+<title>Spade · See an app come to life</title>
 <style>
   :root{--bg:#0b0b0d;--bg1:#141417;--bg2:#1c1c21;--bg3:#26262c;--line:#2a2a30;--line2:#36363d;
-    --text:#e9e9ee;--text2:#bcbcc6;--text3:#85858f;--text4:#5f5f68;--accent:#c9b8ff;--accent2:#8e7dff;
-    --green:#7ad19a;--red:#e88;--amber:#e6b86a;--blue:#9bd1f0;--teal:#7ad1c4;--pink:#e6a8c8;}
+    --text:#edeef2;--text2:#bcbcc6;--text3:#85858f;--text4:#5f5f68;--accent:#c9b8ff;
+    --green:#7ad19a;--red:#e88;--amber:#e6b86a;--blue:#9bd1f0;}
   *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
   body{margin:0;background:var(--bg);color:var(--text);
     font:15px/1.65 -apple-system,BlinkMacSystemFont,"Inter",Segoe UI,sans-serif;}
   a{color:var(--accent);}
-  .wrap{max-width:860px;margin:0 auto;padding:0 24px 110px;}
-  header{padding:52px 0 10px;}
-  .kicker{font:12px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);}
-  header h1{font-size:33px;margin:8px 0 8px;letter-spacing:-.03em;font-weight:700;line-height:1.15;}
-  header p{color:var(--text2);margin:0;font-size:15.5px;max-width:620px;}
-  /* phase rail */
-  .rail{position:sticky;top:0;z-index:10;background:rgba(11,11,13,.92);backdrop-filter:blur(8px);
-    display:flex;gap:6px;flex-wrap:wrap;padding:12px 0;margin:24px 0 8px;border-bottom:1px solid var(--line);}
-  .rail a{font:12px "JetBrains Mono",monospace;color:var(--text3);text-decoration:none;
-    padding:5px 11px;border:1px solid var(--line);border-radius:7px;}
-  .rail a:hover{color:var(--text);border-color:var(--line2);background:var(--bg1);}
-  /* phase */
-  .phase{margin-top:46px;scroll-margin-top:64px;}
-  .phase-h{display:flex;align-items:center;gap:13px;margin-bottom:6px;}
-  .phase-h .tag{font:11px "JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--bg);background:var(--accent);padding:3px 9px;border-radius:6px;font-weight:700;}
-  .phase-h h2{font-size:23px;margin:0;letter-spacing:-.02em;}
-  .phase>.lead{color:var(--text3);margin:0 0 20px;font-size:14px;}
-  /* stop */
-  .stop{background:var(--bg1);border:1px solid var(--line);border-radius:13px;padding:18px 20px;margin-bottom:14px;}
-  .stop h3{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:10px;}
-  .where{font:11px "JetBrains Mono",monospace;color:var(--accent);background:var(--bg2);
-    border:1px solid var(--line);border-radius:6px;padding:1px 8px;white-space:nowrap;}
-  .stop p{margin:7px 0;color:var(--text2);}
-  .see{font-size:13.5px;color:var(--text2);background:rgba(122,209,154,.06);border:1px solid rgba(122,209,154,.22);
-    border-radius:9px;padding:10px 13px;margin:11px 0 2px;}
-  .see b{color:var(--green);}
-  .try{font-size:13.5px;color:var(--text2);background:rgba(201,184,255,.06);border:1px solid rgba(201,184,255,.22);
-    border-radius:9px;padding:10px 13px;margin:11px 0 2px;}
-  .try b{color:var(--accent);}
-  pre{position:relative;background:#08080a;border:1px solid var(--line);border-radius:9px;
-    padding:13px 14px;overflow-x:auto;margin:10px 0;font:13px/1.55 "JetBrains Mono",ui-monospace,monospace;}
+  .wrap{max-width:760px;margin:0 auto;padding:0 22px 110px;}
+
+  header{padding:60px 0 6px;text-align:center;}
+  .kicker{font:12px "JetBrains Mono",monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);}
+  header h1{font-size:34px;margin:12px 0 12px;letter-spacing:-.03em;font-weight:720;line-height:1.12;}
+  header p{color:var(--text2);margin:0 auto;font-size:16px;max-width:540px;}
+
+  .start{background:linear-gradient(180deg,rgba(201,184,255,.07),var(--bg1));border:1px solid var(--line2);
+    border-radius:16px;padding:22px;margin:34px 0 10px;}
+  .start .lbl{font:12px "JetBrains Mono",monospace;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;}
+  pre{position:relative;background:#08080a;border:1px solid var(--line);border-radius:10px;
+    padding:14px 15px;overflow-x:auto;margin:0;font:13.5px/1.5 "JetBrains Mono",ui-monospace,monospace;}
   pre code{color:#cdd3da;white-space:pre;}
-  pre .c{color:var(--text4);}
-  pre .k{color:var(--accent);}
-  pre .s{color:var(--green);}
-  .copy{position:absolute;top:8px;right:8px;background:var(--bg2);border:1px solid var(--line2);
+  pre .c{color:var(--text4);} pre .k{color:var(--accent);} pre .s{color:var(--green);}
+  .copy{position:absolute;top:9px;right:9px;background:var(--bg2);border:1px solid var(--line2);
     color:var(--text3);font:inherit;font-size:11px;border-radius:6px;padding:2px 9px;cursor:pointer;}
   .copy:hover{color:var(--text);border-color:var(--accent);}
-  .cols{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px;}
-  .col{flex:1;min-width:96px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;text-align:center;}
-  .col .t{font:10px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);}
-  .col .v{font-size:19px;font-weight:680;font-family:"JetBrains Mono",monospace;margin-top:2px;}
+  .start p{margin:13px 0 0;color:var(--text2);font-size:14px;}
+
+  /* phase divider */
+  .phase{display:flex;align-items:center;gap:14px;margin:64px 0 8px;}
+  .phase .tag{font:12px "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--bg);background:var(--accent);padding:4px 12px;border-radius:7px;font-weight:700;}
+  .phase .rule{flex:1;height:1px;background:var(--line);}
+  .phase .sub{color:var(--text3);font-size:13px;}
+
+  /* a screen */
+  .screen{margin:34px 0;}
+  .screen h2{font-size:21px;margin:0 0 5px;letter-spacing:-.015em;}
+  .screen .lead{color:var(--text2);margin:0 0 14px;font-size:14.5px;}
+  .shot{display:block;border:1px solid var(--line2);border-radius:12px;overflow:hidden;
+    box-shadow:0 18px 50px -24px rgba(0,0,0,.8);background:#000;}
+  .shot img{display:block;width:100%;}
+  .shot:hover{border-color:rgba(201,184,255,.45);}
+  .spot{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:7px;}
+  .spot li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--text2);}
+  .spot li b{color:var(--text);font-weight:600;}
+  .spot li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);
+    margin-top:7px;flex:none;}
+  .where{display:inline-block;font:11px "JetBrains Mono",monospace;color:var(--accent);background:var(--bg2);
+    border:1px solid var(--line);border-radius:6px;padding:1px 8px;margin-bottom:10px;}
+
+  .note{background:var(--bg1);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:10px;padding:13px 16px;margin:18px 0;font-size:14px;color:var(--text2);}
+  .note.warn{border-left-color:var(--amber);}
+  .note b{color:var(--text);}
   .live{font:11px "JetBrains Mono",monospace;color:var(--amber);border:1px solid rgba(230,184,106,.4);
     background:rgba(230,184,106,.08);border-radius:999px;padding:1px 8px;}
-  .note{background:var(--bg1);border:1px solid var(--line);border-left:3px solid var(--accent);
-    border-radius:9px;padding:12px 15px;margin:16px 0;font-size:14px;color:var(--text2);}
-  .note b{color:var(--text);}
   kbd{background:var(--bg3);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;
     font:12px "JetBrains Mono",monospace;color:var(--text);}
   .pill{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--accent);
     background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;}
-  footer{margin-top:50px;color:var(--text4);font-size:12.5px;border-top:1px solid var(--line);padding-top:20px;}
+  footer{margin-top:60px;color:var(--text4);font-size:12.5px;border-top:1px solid var(--line);padding-top:20px;text-align:center;}
 </style>
 </head>
 <body>
 <div class="wrap">
+
   <header>
-    <div class="kicker">A guided tour</div>
-    <h1>Let’s bring a small app to life<br>and walk its whole dev lifecycle.</h1>
-    <p>You’ll stand up a real, in-progress project — a link shortener — then move through it the
-       way a team would: a brain full of decisions, a backlog of cards, pipelines mid-flight, a
-       sprint burning down. One command sets the stage; the rest is you, exploring.</p>
+    <div class="kicker">A 5-minute tour</div>
+    <h1>Watch a small app<br>come to life in Spade.</h1>
+    <p>One command stands up a real link-shortener project — mid-build, just like a real team’s.
+       Then scroll: this is exactly what you’ll see.</p>
   </header>
 
-  <nav class="rail">
-    <a href="#start">① Set the stage</a>
-    <a href="#plan">② Plan</a>
-    <a href="#build">③ Build</a>
-    <a href="#ship">④ Ship</a>
-    <a href="#move">⑤ Make it move</a>
-    <a href="#again">⑥ Again</a>
-  </nav>
-
-  <!-- ===================== ① START ===================== -->
-  <div class="phase" id="start">
-    <div class="phase-h"><span class="tag">Step 0</span><h2>Set the stage</h2></div>
-    <p class="lead">Make sure the API + UI are running (see the hands-on guide), then run one command.</p>
-
-    <div class="stop">
-      <h3>Bring the app to life <span class="where">In a terminal</span></h3>
-      <p>This populates a real project — brain, backlog, decisions, pipelines, a sprint — in your
-         live database (<span class="pill">~/.spade</span>). No agents, no tokens.</p>
-      <pre><code><span class="c"># from apps/api</span>
-<span class="k">../../.venv/bin/python</span> -m demo --app link-shortener</code></pre>
-      <div class="see"><b>You’ll see</b> a summary: <i>“Snip · Link Shortener is live — 6 features · 4 decisions · 11 backlog cards · 6 pipeline runs.”</i></div>
-      <p style="margin-top:11px">Pick a different one with <span class="pill">--app recipe-box</span> or <span class="pill">--app habit-tracker</span> (<span class="pill">--list</span> shows all).</p>
-    </div>
-
-    <div class="stop">
-      <h3>Switch into it <span class="where">In the app</span></h3>
-      <p>Open <a href="http://localhost:3000">localhost:3000</a>, click the project switcher (top-left of the sidebar), and choose <b>Snip · Link Shortener</b>.</p>
-      <div class="see"><b>You’ll see</b> the sidebar fill with the project’s sections. Everything from here on is <i>your</i> project’s real data.</div>
-    </div>
+  <div class="start">
+    <div class="lbl">Run this once · from <span class="pill">apps/api</span></div>
+    <pre><code><span class="k">../../.venv/bin/python</span> -m demo --app link-shortener</code></pre>
+    <p>Then open <a href="http://localhost:3000">localhost:3000</a> and pick <b>Snip · Link Shortener</b> in the
+       project switcher (top-left). It’s instant and free — no agents, no tokens.</p>
   </div>
 
-  <!-- ===================== ② PLAN ===================== -->
-  <div class="phase" id="plan">
-    <div class="phase-h"><span class="tag">Plan</span><h2>What the project knows</h2></div>
-    <p class="lead">Before any code, Spade holds the <i>why</i>: features, the decisions that shape them, and the gaps between.</p>
+  <!-- ─────────── PLAN ─────────── -->
+  <div class="phase"><span class="tag">Plan</span><div class="rule"></div><span class="sub">the why, before the code</span></div>
 
-    <div class="stop">
-      <h3>The Product brain <span class="where">Sidebar → Product brain</span></h3>
-      <p>The rich record of one node at a time — owner, source, the decisions and feedback wired to it.</p>
-      <div class="try"><b>Try:</b> click around the node list — features like <i>Short-link creation</i> and <i>Click analytics</i>, each with a real owner and provenance.</div>
-    </div>
-
-    <div class="stop">
-      <h3>Decisions (ADRs) <span class="where">Sidebar → Decisions</span></h3>
-      <p>Four recorded decisions. Three are <b>active</b>; one — <i>“Move analytics to ClickHouse”</i> — is <b>proposed</b>.</p>
-      <div class="try"><b>Try:</b> use the filter tabs (All / Active / Proposed / Superseded). Open the proposed one to read its full record.</div>
-    </div>
-
-    <div class="stop">
-      <h3>Graph &amp; Issues — the gaps <span class="where">Sidebar → Graph &amp; Issues</span></h3>
-      <p>The graph on the left; on the right, the issues Spade <i>found by itself</i> from the graph.</p>
-      <div class="see"><b>You’ll see</b> real findings: an <b>undecided feature</b> (one feature intentionally has no decision yet), <b>orphan</b> nodes, and the <b>unresolved (proposed) decision</b>.</div>
-      <div class="try"><b>Try:</b> on Product brain, hit <b>Export to MCP</b> — it reports the live node/edge count of this exact graph.</div>
-    </div>
-
-    <div class="stop">
-      <h3>The conflict, waiting at the gate <span class="where">Sidebar → Human gates</span></h3>
-      <p>Because there’s a proposed decision against an active one, Spade derives a real conflict.</p>
-      <div class="see"><b>You’ll see</b> the two-panel <i>existing vs proposed</i> — pulled straight from your decision nodes — with Approve / Reject.</div>
-    </div>
+  <div class="screen">
+    <span class="where">Sidebar → Overview</span>
+    <h2>The project at a glance</h2>
+    <p class="lead">Where it stands today — the headline metric, what’s shipping, what’s in flight.</p>
+    <a class="shot" href="screenshots/overview.png" target="_blank"><img src="screenshots/overview.png" alt="Overview"></a>
   </div>
 
-  <!-- ===================== ③ BUILD ===================== -->
-  <div class="phase" id="build">
-    <div class="phase-h"><span class="tag">Build</span><h2>The backlog, and the work in flight</h2></div>
-    <p class="lead">This is the part you asked for — the cards, the columns, the work actually moving.</p>
-
-    <div class="stop">
-      <h3>The Backlog <span class="where">Sidebar → Backlog</span></h3>
-      <p>Eleven real cards spread across full-height status columns:</p>
-      <div class="cols">
-        <div class="col"><div class="t">ready</div><div class="v">4</div></div>
-        <div class="col"><div class="t">in&nbsp;progress</div><div class="v" style="color:var(--blue)">2</div></div>
-        <div class="col"><div class="t">review</div><div class="v" style="color:var(--accent)">1</div></div>
-        <div class="col"><div class="t">shipped</div><div class="v" style="color:var(--green)">3</div></div>
-        <div class="col"><div class="t">blocked</div><div class="v" style="color:var(--red)">1</div></div>
-      </div>
-      <div class="try"><b>Try:</b> scan the cards — <i>“Edge redirect handler”</i> (shipped), <i>“Click analytics dashboard”</i> (in progress), <i>“Fix 404 on expired links”</i> (blocked). Each shows its feature + priority.</div>
-    </div>
-
-    <div class="stop">
-      <h3>Open a card <span class="where">Click any backlog card</span></h3>
-      <p>The full task detail — origin, the feature it belongs to, the brain nodes it’s linked to, its status and priority, the pipeline history.</p>
-      <div class="see"><b>You’ll see</b> the card is wired into the brain: it links back to its feature node, so the “why” is one click away.</div>
-    </div>
-
-    <div class="stop">
-      <h3>The Orchestrator — pipelines in flight <span class="where">Sidebar → Orchestrator</span></h3>
-      <p>Six pipeline runs, each a task moving through developer → reviewer → integrator → documentor.</p>
-      <div class="see"><b>You’ll see</b> three <b>shipped</b> (100%) and three <b>running</b> at real, mid-stage progress (38% / 62%). Click a row to expand its stage detail, context and live-log.</div>
-    </div>
+  <div class="screen">
+    <span class="where">Sidebar → Product brain</span>
+    <h2>What the project knows</h2>
+    <p class="lead">Every feature, decision and signal as a connected record — the memory the agents work from.</p>
+    <a class="shot" href="screenshots/brain.png" target="_blank"><img src="screenshots/brain.png" alt="Product brain"></a>
+    <ul class="spot">
+      <li>Each node has a real <b>owner</b> and where it came from.</li>
+      <li>Features link to the decisions and feedback that shaped them.</li>
+    </ul>
   </div>
 
-  <!-- ===================== ④ SHIP ===================== -->
-  <div class="phase" id="ship">
-    <div class="phase-h"><span class="tag">Ship</span><h2>Progress, the way a sprint sees it</h2></div>
-    <p class="lead">The dashboards don’t make numbers up — they read your real runs.</p>
-
-    <div class="stop">
-      <h3>Sprints <span class="where">Sidebar → Sprints</span></h3>
-      <p>The current sprint’s stacked bar and counts are <i>derived</i> from the pipeline runs you just saw.</p>
-      <div class="see"><b>You’ll see</b> shipped vs in-progress reflect the real runs — ship another (next phase) and these move.</div>
-    </div>
-
-    <div class="stop">
-      <h3>Feedback &amp; Meetings <span class="where">Sidebar → Feedback / Meetings</span></h3>
-      <p>The inputs that justify the work: two feedback clusters (<i>“Want bulk link import”</i>, <i>“Analytics update too slowly”</i>) with source breakdowns, and the kickoff + analytics-review meetings with their summaries.</p>
-    </div>
+  <div class="screen">
+    <span class="where">Sidebar → Decisions</span>
+    <h2>The decisions on record</h2>
+    <p class="lead">Architecture decisions (ADRs), with their status front and center.</p>
+    <a class="shot" href="screenshots/decisions.png" target="_blank"><img src="screenshots/decisions.png" alt="Decisions"></a>
+    <ul class="spot">
+      <li>Three are <b>active</b>; one — <b>“Move analytics to ClickHouse”</b> — is still <b>proposed</b>.</li>
+      <li>Filter by status with the tabs; click any to read the full record.</li>
+    </ul>
   </div>
 
-  <!-- ===================== ⑤ MOVE ===================== -->
-  <div class="phase" id="move">
-    <div class="phase-h"><span class="tag">Live</span><h2>Make it move</h2></div>
-    <p class="lead">Everything so far was instant and free. Now hand the wheel to a real agent.</p>
+  <div class="screen">
+    <span class="where">Sidebar → Graph &amp; Issues</span>
+    <h2>The gaps Spade found by itself</h2>
+    <p class="lead">The graph on the left; on the right, issues derived straight from it.</p>
+    <a class="shot" href="screenshots/graph-issues.png" target="_blank"><img src="screenshots/graph-issues.png" alt="Graph and Issues"></a>
+    <ul class="spot">
+      <li>An <b>undecided feature</b> (one feature has no decision yet), <b>orphans</b>, and the unresolved proposal — all real findings.</li>
+      <li>On Product brain, <b>Export to MCP</b> reports this exact graph’s live size.</li>
+    </ul>
+  </div>
 
-    <div class="stop">
-      <h3>Ask the brain to plan the next feature <span class="where">In the app · <kbd>⌘</kbd><kbd>K</kbd></span> <span class="live">live agent</span></h3>
-      <p>First connect an account (once), then open Ask and talk to it:</p>
-      <pre><code><span class="c"># connect your logged-in claude (one time)</span>
+  <!-- ─────────── BUILD ─────────── -->
+  <div class="phase"><span class="tag">Build</span><div class="rule"></div><span class="sub">the cards, and the work moving</span></div>
+
+  <div class="screen">
+    <span class="where">Sidebar → Backlog</span>
+    <h2>The backlog — cards across columns</h2>
+    <p class="lead">Eleven real cards, from <b>Ready</b> to <b>Shipped</b>, plus one blocked at the top.</p>
+    <a class="shot" href="screenshots/backlog.png" target="_blank"><img src="screenshots/backlog.png" alt="Backlog"></a>
+    <ul class="spot">
+      <li><b>Click a card</b> to open its full detail — origin, linked feature, pipeline history.</li>
+      <li>The banner up top flags <b>SPD-016</b> blocked by an <b>ADR-014</b> conflict.</li>
+    </ul>
+  </div>
+
+  <div class="screen">
+    <span class="where">Sidebar → Orchestrator</span>
+    <h2>Pipelines in flight</h2>
+    <p class="lead">Each task runs through developer → reviewer → integrator → documentor.</p>
+    <a class="shot" href="screenshots/orchestrator.png" target="_blank"><img src="screenshots/orchestrator.png" alt="Orchestrator"></a>
+    <ul class="spot">
+      <li>Three <b>shipped</b>, three <b>running</b> mid-stage — the progress is real.</li>
+      <li>Click a row to expand its stages, context and live log.</li>
+    </ul>
+  </div>
+
+  <!-- ─────────── SHIP ─────────── -->
+  <div class="phase"><span class="tag">Ship</span><div class="rule"></div><span class="sub">progress, and the call to make</span></div>
+
+  <div class="screen">
+    <span class="where">Sidebar → Sprints</span>
+    <h2>The sprint, burning down</h2>
+    <p class="lead">The counts and bar are <b>derived from the real runs</b> you just saw — not made up.</p>
+    <a class="shot" href="screenshots/sprints.png" target="_blank"><img src="screenshots/sprints.png" alt="Sprints"></a>
+  </div>
+
+  <div class="screen">
+    <span class="where">Sidebar → Human gates</span>
+    <h2>A decision waiting on you</h2>
+    <p class="lead">Because a proposed decision conflicts with an active one, Spade surfaces a real gate.</p>
+    <a class="shot" href="screenshots/gate.png" target="_blank"><img src="screenshots/gate.png" alt="Human gate"></a>
+    <ul class="spot">
+      <li>The two panels — <b>existing vs proposed</b> — come straight from your decision nodes.</li>
+      <li>Approve, reject, or override — it’s your call.</li>
+    </ul>
+  </div>
+
+  <!-- ─────────── MOVE ─────────── -->
+  <div class="phase"><span class="tag">Live</span><div class="rule"></div><span class="sub">hand it to a real agent</span></div>
+
+  <div class="screen">
+    <h2>Make it actually move <span class="live">live agent · costs tokens</span></h2>
+    <p class="lead">Everything above was instant and free. To plan the next feature for real, talk to it.</p>
+    <pre><code><span class="c"># connect your logged-in claude once</span>
 <span class="k">curl</span> -s 127.0.0.1:8765/accounts/import -H 'content-type: application/json' \
-  -d '<span class="s">{"id":"me","label":"My Claude","config_dir":"~/.claude","provider":"claude-code"}</span>'
+  -d '<span class="s">{"id":"me","label":"My Claude","config_dir":"~/.claude"}</span>'
 <span class="k">curl</span> -s -X PUT 127.0.0.1:8765/projects/snip/accounts \
   -H 'content-type: application/json' -d '<span class="s">{"account_ids":["me"]}</span>'</code></pre>
-      <p>Then <kbd>⌘</kbd><kbd>K</kbd> and ask:</p>
-      <pre><code><span class="s">"We have bulk-import feedback. Plan the 'Bulk CSV import' task in 3 steps,
- then say which role should start it."</span></code></pre>
-      <div class="see"><b>You’ll see</b> the orchestrator spin up and answer for real — about <i>your</i> project. If it proposes a costly model it pauses at the Human gate for you.</div>
-    </div>
-
-    <div class="stop">
-      <h3>Advance a pipeline yourself <span class="where">In a terminal</span></h3>
-      <p>Push the analytics dashboard one stage further and watch the Orchestrator + Sprint update on refresh:</p>
-      <pre><code><span class="c"># grab a running run's id, then advance it</span>
-<span class="k">curl</span> -s '127.0.0.1:8765/pipelines?project_id=snip'</code></pre>
-      <div class="try"><b>Try:</b> after asking, revisit <b>Orchestrator</b> and <b>Sprints</b> — the picture has moved.</div>
-    </div>
+    <p style="color:var(--text2);font-size:14px;margin:13px 0 0">
+      Then in the app press <kbd>⌘</kbd><kbd>K</kbd> and ask:
+      <i>“We have bulk-import feedback — plan the Bulk CSV import task in 3 steps.”</i>
+      The orchestrator spins up and answers about <b>your</b> project.</p>
   </div>
 
-  <!-- ===================== ⑥ AGAIN ===================== -->
-  <div class="phase" id="again">
-    <div class="phase-h"><span class="tag">Reset</span><h2>Start over · try another app</h2></div>
-    <div class="stop">
-      <h3>Wipe &amp; re-seed <span class="where">In a terminal</span></h3>
-      <pre><code><span class="c"># fresh copy of the same app</span>
-<span class="k">../../.venv/bin/python</span> -m demo --app link-shortener --reset
-
-<span class="c"># or a different app entirely</span>
-<span class="k">../../.venv/bin/python</span> -m demo --app recipe-box
-<span class="k">../../.venv/bin/python</span> -m demo --app habit-tracker</code></pre>
-      <div class="note"><b>Want it to plan from scratch instead?</b> Tell me an app idea (“a flashcards app”, “a tiny CRM”) and I’ll add it as a template — or wire the orchestrator to write its own backlog so you can watch the cards appear as it plans.</div>
-    </div>
+  <div class="note">
+    <b>Start over or try another app:</b>
+    <span class="pill">python -m demo --app link-shortener --reset</span> ·
+    <span class="pill">--app recipe-box</span> ·
+    <span class="pill">--app habit-tracker</span>.
+    Want your <i>own</i> idea (a flashcards app, a tiny CRM)? Say the word and it becomes a template.
   </div>
 
   <footer>
-    Spade lifecycle tour · seed with <span class="pill">python -m demo --app …</span> from <span class="pill">apps/api</span>,
-    explore at <a href="http://localhost:3000">localhost:3000</a>. Data is real and lives in <span class="pill">~/.spade</span>.
+    Screenshots are of the real app on this seed. Seed from <span class="pill">apps/api</span> ·
+    explore at <a href="http://localhost:3000">localhost:3000</a> · data lives in <span class="pill">~/.spade</span>.
   </footer>
 </div>
 <script>
