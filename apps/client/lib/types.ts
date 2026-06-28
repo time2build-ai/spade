@@ -187,3 +187,14 @@ export type Sprint = {
   queued: number;
   total: number;
 };
+
+// Phase 3: real meeting records (outcomes/transcript are a follow-up — seeded).
+export type Meeting = {
+  id: string;
+  project_id: string;
+  title: string;
+  date: string | null;
+  summary: string | null;
+  attendees: string[];
+  created_at: string | null;
+};

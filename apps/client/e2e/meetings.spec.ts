@@ -25,3 +25,23 @@ test.describe("meetings", () => {
     await expect(d.getByTestId("mtg-hl").first()).toBeVisible(); // highlighted evidence line
   });
 });
+
+test.describe("meetings (real API)", () => {
+  test("real meetings win over the seed (Phase 3)", async ({ page }) => {
+    await page.route("**/api/projects", (r) =>
+      r.fulfill({ json: { projects: [{ id: "p1", name: "Demo", path: "/d", account_strategy: "round_robin", model_ceiling: null, autopilot: 0, created_at: "" }] } }),
+    );
+    await page.route("**/api/meetings**", (r) =>
+      r.fulfill({ json: { meetings: [
+        { id: "mtg-real-1", project_id: "p1", title: "Quarterly roadmap sync", date: "2026-04-01", summary: "Locked the Q2 roadmap and owners.", attendees: ["Sam", "Lee"], created_at: "" },
+      ] } }),
+    );
+    await page.goto("/meetings");
+    await expect(page.getByTestId("meetings")).toBeVisible();
+    // Real title/summary win; outcomes/transcript fall back to the seed.
+    await expect(page.getByTestId("mtg-item")).toHaveCount(1);
+    await expect(page.locator(".mtg-title")).toHaveText("Quarterly roadmap sync");
+    await expect(page.getByTestId("mtg-detail")).toContainText("Locked the Q2 roadmap");
+    await expect(page.getByTestId("mtg-detail").getByTestId("mtg-outcome").first()).toBeVisible(); // seeded
+  });
+});

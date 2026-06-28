@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { useProject } from "@/lib/useProject";
+import { api } from "@/lib/api";
 import { DEMO_MEETINGS } from "@/lib/demo";
 
 const OUTCOME_COLOR: Record<string, string> = {
@@ -9,8 +12,31 @@ const OUTCOME_COLOR: Record<string, string> = {
 };
 
 export default function MeetingsPage() {
-  const meetings = DEMO_MEETINGS;
-  const [activeId, setActiveId] = React.useState(meetings[0].id);
+  const { project } = useProject();
+  const { data } = useSWR(
+    project ? ["meetings", project.id] : null,
+    () => api.meetings(project!.id),
+  );
+  // Real-wins: real meeting title/date/summary/attendees show through; the seed
+  // fills outcomes/transcript (no real extraction yet) and the whole list when
+  // there are no real meetings, so the page always looks full.
+  const real = data?.meetings ?? [];
+  const meetings = real.length > 0
+    ? real.map((mt, i) => {
+        const seed = DEMO_MEETINGS[i % DEMO_MEETINGS.length];
+        return {
+          id: mt.id,
+          title: mt.title,
+          date: mt.date ?? seed.date,
+          attendees: mt.attendees.length ? mt.attendees : seed.attendees,
+          summary: mt.summary ?? seed.summary,
+          outcomes: seed.outcomes,
+          transcript: seed.transcript,
+        };
+      })
+    : DEMO_MEETINGS;
+
+  const [activeId, setActiveId] = React.useState<string | null>(null);
   const m = meetings.find((x) => x.id === activeId) ?? meetings[0];
 
   return (
@@ -22,7 +48,7 @@ export default function MeetingsPage() {
           {meetings.map((mt) => (
             <button
               key={mt.id}
-              className={"mtg-item" + (mt.id === activeId ? " on" : "")}
+              className={"mtg-item" + (mt.id === m.id ? " on" : "")}
               data-testid="mtg-item"
               onClick={() => setActiveId(mt.id)}
             >

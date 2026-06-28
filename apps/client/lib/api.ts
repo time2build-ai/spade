@@ -5,6 +5,7 @@ import type {
   BrainNode,
   Comment,
   LinkRel,
+  Meeting,
   PipelineRun,
   Project,
   Session,
@@ -133,6 +134,10 @@ export const api = {
   sprints: (projectId: string) =>
     http<{ sprints: Sprint[] }>(
       `/sprints?project_id=${encodeURIComponent(projectId)}`,
+    ),
+  meetings: (projectId: string) =>
+    http<{ meetings: Meeting[] }>(
+      `/meetings?project_id=${encodeURIComponent(projectId)}`,
     ),
   startPipeline: (runId: string) =>
     http<PipelineRun>(`/pipelines/${runId}/start`, { method: "POST" }),
