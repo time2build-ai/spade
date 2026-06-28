@@ -45,4 +45,19 @@ test.describe("agent pool accounts", () => {
     await expect(codex.locator(".acct-state")).toHaveAttribute("data-state", "idle");
     await expect(codex.locator(".acct-state")).toContainText("idle");
   });
+
+  test("rich account card shows a role pill, usage meter, and model·plan", async ({ page }) => {
+    const card = page.locator(".acct-card.rich").first();
+    await expect(card.getByTestId("acct-role")).toBeVisible();
+    await expect(card.getByTestId("acct-meter").locator(".fill")).toBeVisible();
+    await expect(card.locator(".acct-sub")).toContainText("·"); // model · plan
+  });
+
+  test("'Executions in progress' table lists AI-ISS rows with node chips", async ({ page }) => {
+    const table = page.getByTestId("exec-table");
+    await expect(table).toBeVisible();
+    await expect(table.getByTestId("exec-row").first()).toBeVisible();
+    await expect(table).toContainText("AI-ISS-241");
+    await expect(table.locator(".node-chip").first()).toBeVisible();
+  });
 });

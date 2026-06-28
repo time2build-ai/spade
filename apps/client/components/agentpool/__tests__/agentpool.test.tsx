@@ -46,11 +46,12 @@ function session(over: Partial<Session> = {}): Session {
 }
 
 describe("AccountCard", () => {
-  test("renders label, provider glyph avatar, and config_dir", () => {
+  test("renders label, provider glyph avatar, role pill + model·plan sub", () => {
     const { container } = render(<AccountCard account={account()} />);
     expect(screen.getByText("Primary")).toBeTruthy();
     expect(container.querySelector('[data-testid="acct-glyph"]')).toBeTruthy();
-    expect(screen.getByText("/home/u/.claude/primary")).toBeTruthy();
+    expect(container.querySelector('[data-testid="acct-role"]')).toBeTruthy();
+    expect(container.querySelector(".acct-sub")?.textContent).toContain("·");
   });
 
   test("defaults to the idle state when not in use", () => {
@@ -73,10 +74,9 @@ describe("AccountCard", () => {
     expect(screen.queryByText("default")).toBeNull();
   });
 
-  test("does NOT render a usage meter (no data)", () => {
+  test("renders a usage meter (seeded)", () => {
     const { container } = render(<AccountCard account={account()} />);
-    expect(container.querySelector(".meter-bar")).toBeNull();
-    expect(container.querySelector(".acct-meter")).toBeNull();
+    expect(container.querySelector('[data-testid="acct-meter"] .fill')).toBeTruthy();
   });
 });
 

@@ -1,9 +1,10 @@
 import * as React from "react";
+import { accountSeed, ROLE_META } from "@/lib/demo";
 import type { Account } from "@/lib/types";
 
 /**
  * Provider glyph + color (reference providerMeta). Keyed by the real
- * `account.provider`; unknown providers fall back to a neutral dot.
+ * `account.provider`; "claude-code" normalises to "claude".
  */
 export const PROVIDER_META: Record<string, { glyph: string; color: string }> = {
   claude: { glyph: "✦", color: "#c9b8ff" },
@@ -14,41 +15,61 @@ export const PROVIDER_META: Record<string, { glyph: string; color: string }> = {
 };
 
 function providerMeta(provider: string) {
-  return PROVIDER_META[provider?.toLowerCase()] ?? { glyph: "•", color: "var(--text-3)" };
+  const key = (provider ?? "").toLowerCase().replace(/-code$/, ""); // claude-code → claude
+  return PROVIDER_META[key] ?? { glyph: "•", color: "var(--text-3)" };
 }
 
 /**
- * One provider account from the pool. Provider glyph avatar + an in-use state
- * derived from real sessions. No usage meter / % / spend / role (no API data).
+ * Account-centric pool card (reference mod_25): provider glyph avatar, role pill,
+ * usage meter, model · plan, in-use state, and the current AI issue (with brain
+ * node chips). Real label/provider/in-use win; the rest is seeded.
  */
 export function AccountCard({ account, inUse = false }: { account: Account; inUse?: boolean }) {
   const meta = providerMeta(account.provider);
   const color = account.color ?? meta.color;
+  const s = accountSeed(account.id);
+  const roleColor = ROLE_META[s.role]?.color ?? "var(--text-3)";
+
   return (
-    <div className="acct-card" data-provider={account.provider?.toLowerCase()}>
-      <span
-        className="acct-glyph"
-        data-testid="acct-glyph"
-        style={{ background: color + "18", color, borderColor: color + "40" }}
-      >
-        {meta.glyph}
-      </span>
-      <div className="acct-id">
-        <div className="acct-label">
-          {account.label}
-          {account.is_default === 1 && <span className="acct-default-badge">default</span>}
+    <div className="acct-card rich" data-provider={account.provider?.toLowerCase()}>
+      <div className="acct-top">
+        <span className="acct-glyph" data-testid="acct-glyph" style={{ background: color + "18", color, borderColor: color + "40" }}>
+          {meta.glyph}
+        </span>
+        <div className="acct-id">
+          <div className="acct-label">
+            {account.label}
+            {account.is_default === 1 && <span className="acct-default-badge">default</span>}
+          </div>
+          <div className="acct-sub mono">{s.model} · {s.plan}</div>
         </div>
-        <div className="acct-dir mono" title={account.config_dir}>
-          {account.config_dir}
-        </div>
+        <span className="acct-role-pill" data-testid="acct-role" style={{ color: roleColor, borderColor: roleColor + "55", background: roleColor + "14" }}>
+          {s.role}
+        </span>
+        <span className="acct-state" data-state={inUse ? "running" : "idle"} title={inUse ? "In use" : "Idle"}>
+          <span className="acct-state-dot" style={{ background: inUse ? "var(--blue)" : "var(--green)" }} />
+          {inUse ? "in use" : "idle"}
+        </span>
       </div>
-      <span className="acct-state" data-state={inUse ? "running" : "idle"} title={inUse ? "In use" : "Idle"}>
-        <span
-          className="acct-state-dot"
-          style={{ background: inUse ? "var(--blue)" : "var(--green)" }}
-        />
-        {inUse ? "in use" : "idle"}
-      </span>
+
+      <div className="acct-meter" data-testid="acct-meter">
+        <div className="acct-meter-bar"><div className="fill" style={{ width: s.usage + "%" }} /></div>
+        <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{s.usage}%</span>
+      </div>
+
+      {s.currentIssue ? (
+        <div className="acct-issue" data-testid="acct-issue">
+          <span className="acct-issue-id mono">{s.currentIssue.id}</span>
+          <span className="acct-issue-title">{s.currentIssue.title}</span>
+          <div className="acct-issue-chips">
+            {s.currentIssue.nodes.map((n) => (
+              <span className="node-chip mono" key={n}>{n}</span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="acct-issue muted" style={{ fontSize: 11.5 }}>idle · no active execution</div>
+      )}
     </div>
   );
 }

@@ -235,6 +235,57 @@ export const DEMO_ORCH_KPIS = [
   { lbl: "Concurrency cap", val: "8 / 12", sub: "CPU 41%" },
 ];
 
+// ── Agent pool account enrichment + executions ──────────────────────────────
+// Real wins (label/provider/color, in-use from sessions); role/usage/model/plan/
+// current-issue + the executions table are seeded. BACKEND: per-account usage/
+// role/model/plan + executions.
+export const ROLE_META: Record<string, { color: string }> = {
+  Orchestrator: { color: "var(--accent)" },
+  Developer: { color: "var(--blue)" },
+  Reviewer: { color: "var(--pink)" },
+  Integrator: { color: "var(--teal)" },
+  Documentor: { color: "var(--accent)" },
+  Fallback: { color: "var(--text-3)" },
+};
+const DEMO_ROLES = ["Orchestrator", "Developer", "Reviewer", "Integrator", "Documentor", "Fallback"];
+const DEMO_MODELS = ["claude-opus-4", "claude-sonnet-4", "gpt-4o", "gemini-2.0", "claude-haiku"];
+const DEMO_PLANS = ["Max", "Pro", "Team", "Free"];
+const DEMO_ISSUE_TITLES = ["Optimize mobile checkout speed", "Receipt template missing taxes", "Cart drawer flicker on open"];
+
+export type AccountSeed = {
+  role: string;
+  usage: number;
+  model: string;
+  plan: string;
+  currentIssue: { id: string; title: string; nodes: string[] } | null;
+};
+export function accountSeed(id: string): AccountSeed {
+  const h = hashId(id);
+  const idle = h % 3 === 0;
+  return {
+    role: DEMO_ROLES[h % DEMO_ROLES.length],
+    usage: 20 + (h % 75),
+    model: DEMO_MODELS[h % DEMO_MODELS.length],
+    plan: DEMO_PLANS[h % DEMO_PLANS.length],
+    currentIssue: idle
+      ? null
+      : {
+          id: `AI-ISS-${230 + (h % 20)}`,
+          title: DEMO_ISSUE_TITLES[h % DEMO_ISSUE_TITLES.length],
+          nodes: ["f-checkout", "d-031", "b-1142", "m-conv"].slice(0, 1 + (h % 3)),
+        },
+  };
+}
+
+export type Execution = { id: string; role: string; task: string; elapsed: string; nodes: string[] };
+export const DEMO_EXECUTIONS: Execution[] = [
+  { id: "AI-ISS-241", role: "Reviewer", task: "SPD-142", elapsed: "4m 12s", nodes: ["f-checkout", "d-031", "b-1142"] },
+  { id: "AI-ISS-240", role: "Developer", task: "SPD-141", elapsed: "2m 03s", nodes: ["f-email", "d-022"] },
+  { id: "AI-ISS-238", role: "Developer", task: "SPD-137", elapsed: "8m 47s", nodes: ["f-cart", "b-1109"] },
+  { id: "AI-ISS-237", role: "Documentor", task: "SPD-146", elapsed: "1m 21s", nodes: ["f-search", "c-api"] },
+  { id: "AI-ISS-235", role: "Developer", task: "SPD-145", elapsed: "5m 30s", nodes: ["f-checkout", "b-1153"] },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";

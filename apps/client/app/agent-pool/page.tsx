@@ -5,6 +5,7 @@ import { PageHead } from "@/components/ui";
 import { AgentCard } from "@/components/agentpool/AgentCard";
 import { AccountCard } from "@/components/agentpool/AccountCard";
 import { api } from "@/lib/api";
+import { DEMO_EXECUTIONS, ROLE_META } from "@/lib/demo";
 import type { Account, Session } from "@/lib/types";
 
 function StateMessage({ children }: { children: React.ReactNode }) {
@@ -83,6 +84,33 @@ export default function AgentPoolPage() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="ap-executions">
+          <div className="ap-section-h">
+            <div className="ap-section-title">Executions in progress</div>
+            <div className="ap-section-sub muted">AI issues currently being worked</div>
+          </div>
+          <div className="exec-table" data-testid="exec-table">
+            <div className="th">Issue</div>
+            <div className="th">Role</div>
+            <div className="th">Task</div>
+            <div className="th">Elapsed</div>
+            <div className="th">Context</div>
+            {DEMO_EXECUTIONS.map((e) => (
+              <div className="exec-row" data-testid="exec-row" key={e.id}>
+                <div className="td mono">{e.id}</div>
+                <div className="td">
+                  <span className="exec-role" style={{ color: ROLE_META[e.role]?.color ?? "var(--text-3)" }}>{e.role}</span>
+                </div>
+                <div className="td mono">{e.task}</div>
+                <div className="td mono" style={{ color: "var(--text-3)" }}>{e.elapsed}</div>
+                <div className="td">
+                  {e.nodes.map((n) => <span className="node-chip mono" key={n}>{n}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
     );
