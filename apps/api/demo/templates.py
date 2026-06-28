@@ -12,6 +12,48 @@ meetings and feedback. Pure data, no logic.
 # meeting = (title, summary, [attendees])
 
 TEMPLATES = {
+    "todo-app": {
+        "id": "tasker",
+        "name": "Tasker · Todo app",
+        "path": "~/code/tasker",
+        "tagline": "A tiny todo app — React + Vite front, FastAPI + SQLite back.",
+        "features": ["Add a todo", "Complete a todo", "Edit & delete", "Filter by status",
+                     "Due dates", "Persisted storage"],
+        "decisions": [("React + Vite for the frontend", "active"),
+                      ("FastAPI backend", "active"),
+                      ("SQLite via SQLModel", "active"),
+                      ("Add user accounts later", "proposed")],
+        "conventions": ["REST under /api/todos", "{data, error} JSON envelope"],
+        "bugs": ["Toggle flickers on slow network", "Date picker off-by-one in UTC"],
+        "feedback": ["Want keyboard shortcuts", "Need a ‘clear completed’ button"],
+        "metrics": ["Todos completed / day", "API p95 latency"],
+        "tasks": [
+            # backend
+            ("SQLite schema + SQLModel models", "Persisted storage", "shipped", 0),
+            ("POST /api/todos — create", "Add a todo", "shipped", 1),
+            ("GET /api/todos — list + status filter", "Filter by status", "review", 1),
+            ("PATCH /api/todos/:id — toggle & edit", "Complete a todo", "in_progress", 1),
+            ("DELETE /api/todos/:id", "Edit & delete", "ready", 2),
+            # frontend
+            ("Todo list view", "Add a todo", "shipped", 1),
+            ("Add-todo input form", "Add a todo", "review", 1),
+            ("Complete toggle + strikethrough", "Complete a todo", "in_progress", 1),
+            ("Filter tabs (All / Active / Done)", "Filter by status", "ready", 2),
+            ("Due-date picker", "Due dates", "ready", 2),
+            ("‘Clear completed’ button", "Edit & delete", "blocked", 2),
+        ],
+        "meetings": [
+            ("Tasker kickoff", "Scoped a minimal todo app — add / complete / filter. "
+             "Chose React + Vite on the front, FastAPI + SQLite on the back. Deferred accounts.",
+             ["You", "Dev"]),
+        ],
+        "feedback_clusters": [
+            ("Want keyboard shortcuts", 6, [("GitHub", 4), ("Intercom", 2)]),
+            ("Need a clear-completed button", 4, [("Intercom", 4)]),
+        ],
+        "sprint": (1, "day 2/10"),
+    },
+
     "link-shortener": {
         "id": "snip",
         "name": "Snip · Link Shortener",

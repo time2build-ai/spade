@@ -19,6 +19,20 @@ def _fake_spawn(slug: str, account_id: str):
     return spawn
 
 
+def advance_task(project_id: str, task_id: str, to: str = "shipped") -> dict:
+    """Run a task through the pipeline with a fake spawn (no live agents, free) —
+    used by the workshop's 'watch it build' step. `to` ∈ in_progress/review/shipped."""
+    steps = {"in_progress": 1, "review": 2, "shipped": 4}.get(to, 4)
+    run = pipelines.create_run(project_id=project_id, task_id=task_id)
+    rid = run["id"]
+    spawn = _fake_spawn(project_id, "demo")
+    pipelines.start_stage(rid, 0, spawn)
+    for idx in range(steps):
+        pipelines.complete_stage(rid, idx, report=f"stage {idx} done", spawn=spawn)
+    r = pipelines.get(rid)
+    return {"run": rid, "status": r["status"], "progress": r["progress"]}
+
+
 def bring_to_life(app: str, *, reset: bool = False, account_dir: str | None = None) -> dict:
     if app not in TEMPLATES:
         raise KeyError(f"unknown app {app!r}; choose from {sorted(TEMPLATES)}")

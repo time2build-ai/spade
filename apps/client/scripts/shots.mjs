@@ -7,6 +7,8 @@ import { dirname, resolve } from "node:path";
 
 const BASE = process.env.SHOT_BASE ?? "http://localhost:3000";
 const PROJECT = process.env.SHOT_PROJECT ?? "snip";
+const PREFIX = process.env.SHOT_PREFIX ?? "";
+const ONLY = process.env.SHOT_ONLY ? process.env.SHOT_ONLY.split(",") : null;
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/screenshots");
 mkdirSync(OUT, { recursive: true });
 
@@ -32,12 +34,13 @@ await page.addInitScript((p) => {
 }, PROJECT);
 
 for (const [route, name, sel] of SHOTS) {
+  if (ONLY && !ONLY.includes(name)) continue;
   try {
     await page.goto(BASE + route, { waitUntil: "networkidle", timeout: 90000 });
     if (sel) await page.waitForSelector(sel, { timeout: 30000 }).catch(() => {});
     await sleep(1600); // let data + animations settle
-    await page.screenshot({ path: `${OUT}/${name}.png` });
-    console.log(`✓ ${name}  (${route})`);
+    await page.screenshot({ path: `${OUT}/${PREFIX}${name}.png` });
+    console.log(`✓ ${PREFIX}${name}  (${route})`);
   } catch (e) {
     console.log(`✗ ${name}  (${route})  — ${String(e).split("\n")[0]}`);
   }
