@@ -63,7 +63,28 @@ def get(run_id: str) -> dict | None:
         (run_id,),
     )
     run["stages"] = [dict(r) for r in stage_rows]
+    _attach_progress(run)
     return run
+
+
+def _attach_progress(run: dict) -> None:
+    """Derive real run progress from stage states (no extra storage).
+
+    progress is an integer 0..100: a shipped run is 100; otherwise it's the
+    share of done stages, plus a half-step credit for the one currently running
+    (so a run mid-stage-2 of 4 reads ~38%, not 25%). cost/eta/tokens/files are
+    NOT tracked by the pipeline model — those remain client-seeded.
+    """
+    stages = run.get("stages") or []
+    total = len(stages) or len(STAGES)
+    done = sum(1 for s in stages if s.get("state") == "done")
+    running = sum(1 for s in stages if s.get("state") == "running")
+    run["stages_total"] = total
+    run["stages_done"] = done
+    if run.get("status") == "shipped":
+        run["progress"] = 100
+    else:
+        run["progress"] = round((done + 0.5 * running) / total * 100) if total else 0
 
 
 def stage_by_session(session_id: str) -> dict | None:

@@ -25,7 +25,8 @@ const STAGES = [
 }));
 
 const RUNS = [
-  { id: "pl1", project_id: "p1", task_id: "T-1", status: "running", current_stage: 1, created_at: "", stages: STAGES },
+  // progress=73 is the backend-derived real value (Phase 3); it must win over the seed.
+  { id: "pl1", project_id: "p1", task_id: "T-1", status: "running", current_stage: 1, created_at: "", stages: STAGES, progress: 73, stages_done: 1, stages_total: 4 },
 ];
 
 const TASKS = [
@@ -96,5 +97,12 @@ test.describe("orchestrator table", () => {
     await expect(detail.getByTestId("live-log")).toBeVisible();
     // The live-log streams in lines over time.
     await expect(detail.locator('[data-testid="live-log"] .tline')).not.toHaveCount(0);
+  });
+
+  test("real backend progress wins over the seed (Phase 3)", async ({ page }) => {
+    await page.locator('[data-testid="orch-row"][data-run-id="pl1"]').click();
+    const detail = page.getByTestId("orch-detail");
+    await expect(detail.getByTestId("orch-progress-label")).toContainText("73%");
+    await expect(detail.getByTestId("orch-progress-fill")).toHaveAttribute("style", /width:\s*73%/);
   });
 });

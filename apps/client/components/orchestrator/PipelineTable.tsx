@@ -74,6 +74,8 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
         const isOpen = open.has(run.id);
         const acctId = run.stages.find((s) => s.account_id)?.account_id ?? null;
         const seed = orchRunSeed(run.id);
+        // Real-wins: backend-derived progress shows through; seed fills cost/eta/etc.
+        const progress = run.progress ?? seed.progress;
         return (
           <React.Fragment key={run.id}>
             <div
@@ -121,9 +123,9 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                 <div className="orch-detail-inner">
                   {/* Progress bar */}
                   <div className="orch-d-progress">
-                    <div className="orch-d-progress-bar"><div className="fill" style={{ width: seed.progress + "%" }} /></div>
-                    <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 10 }}>
-                      {seed.progress}% · {seed.eta}
+                    <div className="orch-d-progress-bar"><div className="fill" data-testid="orch-progress-fill" style={{ width: progress + "%" }} /></div>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 10 }} data-testid="orch-progress-label">
+                      {progress}% · {seed.eta}
                     </span>
                   </div>
 

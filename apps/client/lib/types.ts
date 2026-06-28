@@ -159,4 +159,9 @@ export type PipelineRun = {
   current_stage: number;
   created_at: string;
   stages: PipelineStage[];
+  // Phase 3: real progress derived from stage states (0..100). cost/eta/tokens/
+  // files remain client-seeded (not tracked by the pipeline model).
+  progress?: number;
+  stages_done?: number;
+  stages_total?: number;
 };

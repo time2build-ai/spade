@@ -137,3 +137,27 @@ def test_shipping_posts_a_system_comment():
         pipelines.complete_stage(run["id"], i, report=f"r{i}", spawn=_spawn)
     system = [c for c in tasks.comments(tid) if c["kind"] == "system"]
     assert any("shipped" in c["body"].lower() for c in system)
+
+
+def test_run_progress_derived_from_stage_states():
+    """Phase 3: GET pipeline runs carry a real progress derived from stages."""
+    tid = _setup()
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+    rid = run["id"]
+
+    # Freshly queued → 0%, 0 of 4 done.
+    fresh = pipelines.get(rid)
+    assert fresh["stages_total"] == 4
+    assert fresh["stages_done"] == 0
+    assert fresh["progress"] == 0
+
+    # Mark stage 0 done and stage 1 running → 1 done + half of the running = 38%.
+    pipelines._set_stage(rid, 0, state="done")
+    pipelines._set_stage(rid, 1, state="running")
+    mid = pipelines.get(rid)
+    assert mid["stages_done"] == 1
+    assert mid["progress"] == 38
+
+    # A shipped run is always 100%.
+    pipelines._set_run(rid, status="shipped")
+    assert pipelines.get(rid)["progress"] == 100
