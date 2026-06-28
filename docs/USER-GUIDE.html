@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spade · Hands-on guide</title>
+<style>
+  :root{--bg:#0b0b0d;--bg1:#141417;--bg2:#1c1c21;--bg3:#26262c;--line:#2a2a30;--line2:#36363d;
+    --text:#e9e9ee;--text2:#bcbcc6;--text3:#85858f;--text4:#5f5f68;--accent:#c9b8ff;--accent2:#8e7dff;
+    --green:#7ad19a;--red:#e88;--amber:#e6b86a;--blue:#9bd1f0;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14.5px/1.6 -apple-system,BlinkMacSystemFont,"Inter",Segoe UI,sans-serif;}
+  a{color:var(--accent);}
+  .wrap{max-width:900px;margin:0 auto;padding:0 24px 90px;}
+  header{padding:44px 0 22px;}
+  header h1{font-size:30px;margin:0 0 6px;letter-spacing:-.025em;font-weight:680;}
+  header h1 .a{color:var(--accent);}
+  header p{color:var(--text3);margin:0;font-size:14px;}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;font-size:12px;color:var(--text3);}
+  .legend b{color:var(--text2);font-weight:600;}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:1px 9px;border-radius:999px;
+    font-size:11px;font-weight:600;border:1px solid;}
+  .chip.ui{color:var(--accent);border-color:rgba(201,184,255,.4);background:rgba(201,184,255,.08);}
+  .chip.term{color:var(--green);border-color:rgba(122,209,154,.4);background:rgba(122,209,154,.08);}
+  .chip.live{color:var(--amber);border-color:rgba(230,184,106,.4);background:rgba(230,184,106,.08);}
+  /* tabs */
+  nav.tabs{position:sticky;top:0;background:rgba(11,11,13,.92);backdrop-filter:blur(8px);
+    z-index:10;display:flex;gap:4px;flex-wrap:wrap;padding:10px 0;margin-bottom:6px;
+    border-bottom:1px solid var(--line);}
+  nav.tabs button{background:none;border:1px solid transparent;border-radius:8px;color:var(--text3);
+    font:inherit;font-size:13px;padding:6px 12px;cursor:pointer;white-space:nowrap;}
+  nav.tabs button:hover{color:var(--text2);background:var(--bg1);}
+  nav.tabs button.on{color:var(--text);background:var(--bg2);border-color:var(--line2);}
+  section.tab{display:none;padding-top:18px;}
+  section.tab.on{display:block;animation:fade .2s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;}}
+  h2{font-size:21px;letter-spacing:-.02em;margin:0 0 4px;}
+  .sub{color:var(--text3);font-size:13.5px;margin:0 0 22px;}
+  /* step */
+  .step{display:grid;grid-template-columns:30px 1fr;gap:14px;margin-bottom:18px;}
+  .step .n{width:30px;height:30px;border-radius:50%;background:var(--bg2);border:1px solid var(--line2);
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:650;
+    color:var(--accent);font-family:"JetBrains Mono",monospace;}
+  .step .body{padding-top:2px;}
+  .step h4{margin:3px 0 6px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:9px;}
+  .step p{margin:0 0 8px;color:var(--text2);}
+  .step .see{font-size:13px;color:var(--text3);border-left:2px solid var(--green);padding-left:11px;margin:8px 0 0;}
+  .step .see b{color:var(--green);font-weight:600;}
+  /* code */
+  pre{position:relative;background:#08080a;border:1px solid var(--line);border-radius:9px;
+    padding:13px 14px;overflow-x:auto;margin:8px 0;font:12.5px/1.55 "JetBrains Mono",ui-monospace,monospace;}
+  pre code{color:#cdd3da;white-space:pre;}
+  pre .c{color:var(--text4);}      /* comment */
+  pre .k{color:var(--accent);}     /* command */
+  pre .s{color:var(--green);}      /* string-ish */
+  .copy{position:absolute;top:8px;right:8px;background:var(--bg2);border:1px solid var(--line2);
+    color:var(--text3);font:inherit;font-size:11px;border-radius:6px;padding:2px 9px;cursor:pointer;}
+  .copy:hover{color:var(--text);border-color:var(--accent);}
+  .note{background:var(--bg1);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:8px;padding:11px 14px;margin:14px 0;font-size:13.5px;color:var(--text2);}
+  .note.warn{border-left-color:var(--amber);}
+  .note b{color:var(--text);}
+  kbd{background:var(--bg3);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;
+    font:12px "JetBrains Mono",monospace;color:var(--text);}
+  .pill{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--accent);
+    background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;}
+  footer{margin-top:40px;color:var(--text4);font-size:12px;border-top:1px solid var(--line);padding-top:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="a">Spade</span> — hands-on guide</h1>
+    <p>Stand up the app, then walk a real project from nothing → planned → executing. Follow the tabs in order.</p>
+    <div class="legend">
+      <span><span class="chip ui">In the app</span> click in the browser UI</span>
+      <span><span class="chip term">In a terminal</span> copy-paste a command</span>
+      <span><span class="chip live">Live agent</span> spawns a real <span class="pill">claude</span> · costs tokens</span>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <!-- ============================ SETUP ============================ -->
+  <section class="tab" data-tab="Setup">
+    <h2>Start the app</h2>
+    <p class="sub">Two processes: the Python API (the brain + fleet) and the Next.js UI. Leave both running in their own terminal tabs.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Start the API <span class="chip term">In a terminal</span></h4>
+      <p>Serves everything at <span class="pill">127.0.0.1:8765</span>.</p>
+      <pre><code><span class="c"># from the repo root</span>
+<span class="k">cd</span> apps/api
+<span class="k">../../.venv/bin/python</span> -m uvicorn tui_pilot.server:app --port 8765</code></pre>
+      <p class="see"><b>You should see</b> uvicorn report <i>“Uvicorn running on http://127.0.0.1:8765”.</i></p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Start the UI <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">cd</span> apps/client
+<span class="k">npm</span> run dev</code></pre>
+      <p class="see"><b>You should see</b> Next on <a href="http://localhost:3000">http://localhost:3000</a> — open it. You land on the cross-project <b>Home</b> dashboard.</p>
+    </div></div>
+
+    <div class="note">The UI talks to the API through a <span class="pill">/api</span> proxy. The commands in this guide call the API <b>directly</b> at <span class="pill">127.0.0.1:8765</span> (no <span class="pill">/api</span> prefix) so you can also drive every feature from the terminal — handy for the parts that don’t have a button yet.</div>
+  </section>
+
+  <!-- ========================= 1 · PROJECT ========================= -->
+  <section class="tab" data-tab="1 · Create a project">
+    <h2>Create a project</h2>
+    <p class="sub">A project is the container for everything — its brain, backlog, accounts and pipelines.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Open the project switcher <span class="chip ui">In the app</span></h4>
+      <p>Top-left of the sidebar, click the project name (or “Select a project”). A menu drops down.</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Fill in “New project”<span class="chip ui">In the app</span></h4>
+      <p>Enter a <b>Name</b> (e.g. <i>Acme Storefront</i>) and a <b>Path</b> — a real folder on your machine the agents will work in (e.g. <span class="pill">~/code/acme</span>). Submit.</p>
+      <p class="see"><b>You should see</b> the sidebar switch into the project, and the project pages (Overview, Backlog, Product brain…) light up.</p>
+    </div></div>
+
+    <div class="step"><div class="n">3</div><div class="body">
+      <h4>Prefer the terminal? <span class="chip term">In a terminal</span></h4>
+      <p>Same thing via the API:</p>
+      <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/projects -H 'content-type: application/json' \
+  -d '<span class="s">{"id":"acme","name":"Acme Storefront","path":"~/code/acme"}</span>'</code></pre>
+      <p class="see"><b>You should see</b> the created project JSON returned. Confirm it’s listed: <span class="pill">curl -s 127.0.0.1:8765/projects</span></p>
+    </div></div>
+  </section>
+
+  <!-- ========================= 2 · ACCOUNT ========================= -->
+  <section class="tab" data-tab="2 · Connect an account">
+    <h2>Connect an account</h2>
+    <p class="sub">An “account” points at a logged-in <span class="pill">claude</span> config dir. The orchestrator (the “Ask the brain” chat) needs at least one to spawn agents.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Import your existing login <span class="chip term">In a terminal</span></h4>
+      <p>The simplest path: register your already-authenticated <span class="pill">~/.claude</span> dir as an account.</p>
+      <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/accounts/import -H 'content-type: application/json' \
+  -d '<span class="s">{"id":"me","label":"My Claude","config_dir":"~/.claude","provider":"claude-code"}</span>'</code></pre>
+      <p class="see"><b>You should see</b> the account appear on the <b>Agent pool</b> page in the UI.</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Add it to the project’s pool <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">curl</span> -s -X PUT 127.0.0.1:8765/projects/acme/accounts \
+  -H 'content-type: application/json' -d '<span class="s">{"account_ids":["me"]}</span>'</code></pre>
+      <p class="see"><b>You should see</b> the account listed under the project on Agent pool / Accounts.</p>
+    </div></div>
+
+    <div class="note warn">No <span class="pill">~/.claude</span> yet? Run <span class="pill">claude</span> once in a terminal and complete its login, then re-run step 1. (A dedicated “Add account” button in the UI is a known gap — for now this import is the reliable path.)</div>
+  </section>
+
+  <!-- ========================= 3 · ASK =========================== -->
+  <section class="tab" data-tab="3 · Ask the brain">
+    <h2>Ask the brain</h2>
+    <p class="sub">This is the real conversational layer — it spins up an orchestrator agent and answers about your project.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Open the Ask dock <span class="chip ui">In the app</span></h4>
+      <p>Press <kbd>⌘</kbd><kbd>K</kbd> (or click the dark <b>“Ask the brain”</b> bubble, bottom-right).</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Ask something <span class="chip ui">In the app</span> <span class="chip live">Live agent</span></h4>
+      <p>Type a real question and send, e.g.:</p>
+      <pre><code><span class="s">"What should we work on first to speed up mobile checkout?"</span></code></pre>
+      <p class="see"><b>You should see</b> a short “starting orchestrator…” state, then a real answer streamed back. The first ask spawns the orchestrator (takes a few seconds).</p>
+    </div></div>
+
+    <div class="note warn"><b>This costs tokens.</b> It runs a real <span class="pill">claude</span> session against your account. If it says <i>“the project may need a connected account”</i>, finish tab&nbsp;2 first.</div>
+
+    <div class="step"><div class="n">3</div><div class="body">
+      <h4>Try a planning ask <span class="chip ui">In the app</span> <span class="chip live">Live agent</span></h4>
+      <p>Ask it to plan, then to act:</p>
+      <pre><code><span class="s">"Plan the work to add a content-based recommender in 3 steps."</span>
+<span class="s">"Spawn a developer to start the first step."</span></code></pre>
+      <p class="see"><b>You should see</b> a numbered plan; the spawn request appears on the <b>Orchestrator</b> page. If it exceeds the model ceiling it pauses at a <b>Human gate</b> for your approval.</p>
+    </div></div>
+  </section>
+
+  <!-- ========================= 4 · PLAN =========================== -->
+  <section class="tab" data-tab="4 · Plan it">
+    <h2>Plan it — decisions, tasks, the brain</h2>
+    <p class="sub">Capture knowledge as a graph: features, the decisions that shape them, and the tasks that deliver them.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Record a decision (ADR) <span class="chip ui">In the app</span></h4>
+      <p>Go to <b>Decisions</b> → click <b>“+ New decision”</b> → type a title (e.g. <i>“Lazy-load product carousels”</i>) → <b>Record</b>.</p>
+      <p class="see"><b>You should see</b> a new ADR row appear with a <b>proposed</b> status pill. Click it to open the full record.</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Add brain nodes <span class="chip term">In a terminal</span></h4>
+      <p>Create a feature and an active decision, and link them:</p>
+      <pre><code><span class="c"># a feature</span>
+<span class="k">F</span>=$(curl -s 127.0.0.1:8765/brain/nodes -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","type":"feature","label":"Mobile checkout"}</span>' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+<span class="c"># an active decision</span>
+<span class="k">D</span>=$(curl -s 127.0.0.1:8765/brain/nodes -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","type":"decision","label":"Use WebP via CDN","status":"active","owner":"You"}</span>' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+<span class="c"># connect them</span>
+<span class="k">curl</span> -s 127.0.0.1:8765/brain/edges -H 'content-type: application/json' \
+  -d "<span class="s">{\"project_id\":\"acme\",\"from_id\":\"$F\",\"to_id\":\"$D\"}</span>"</code></pre>
+      <p class="see"><b>You should see</b> the two nodes on <b>Product brain</b> / <b>Graph &amp; Issues</b>, joined by an edge.</p>
+    </div></div>
+
+    <div class="step"><div class="n">3</div><div class="body">
+      <h4>Create a task and link it to the feature <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">T</span>=$(curl -s 127.0.0.1:8765/tasks -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","title":"Optimize mobile checkout","feature":"Checkout"}</span>' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+<span class="k">curl</span> -s -X PUT 127.0.0.1:8765/tasks/$T/nodes -H 'content-type: application/json' \
+  -d "<span class="s">{\"node_ids\":[\"$F\"]}</span>"</code></pre>
+      <p class="see"><b>You should see</b> the task on the <b>Backlog</b>, linked to the Mobile-checkout feature.</p>
+    </div></div>
+  </section>
+
+  <!-- ========================= 5 · EXECUTE ======================== -->
+  <section class="tab" data-tab="5 · Execute">
+    <h2>Execute — run the work</h2>
+    <p class="sub">A pipeline takes one task through four stages: developer → reviewer → integrator → documentor.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Create a pipeline run for the task <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">R</span>=$(curl -s 127.0.0.1:8765/pipelines -H 'content-type: application/json' \
+  -d "<span class="s">{\"project_id\":\"acme\",\"task_id\":\"$T\"}</span>" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+<span class="k">echo</span> $R</code></pre>
+      <p class="see"><b>You should see</b> a run with 4 queued stages on the <b>Orchestrator</b> page (progress 0%).</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Start it <span class="chip term">In a terminal</span> <span class="chip live">Live agent</span></h4>
+      <p>Starting stage&nbsp;0 spawns a real worker agent in the project folder:</p>
+      <pre><code><span class="k">curl</span> -s -X POST 127.0.0.1:8765/pipelines/$R/start</code></pre>
+      <p class="see"><b>You should see</b> the first stage flip to <b>running</b> and the progress bar move. When a stage finishes the pipeline auto-advances; a failure <b>pauses</b> the run for a human.</p>
+    </div></div>
+
+    <div class="step"><div class="n">3</div><div class="body">
+      <h4>Or drive it from the chat <span class="chip ui">In the app</span> <span class="chip live">Live agent</span></h4>
+      <p>Back in <b>Ask the brain</b>, just say what you want — the orchestrator turns it into spawns and gates:</p>
+      <pre><code><span class="s">"Run the mobile-checkout task through the pipeline."</span></code></pre>
+    </div></div>
+  </section>
+
+  <!-- ========================= 6 · INPUTS ========================= -->
+  <section class="tab" data-tab="6 · Add inputs">
+    <h2>Feed it real-world inputs</h2>
+    <p class="sub">Meetings, feedback and sprints are first-class — the brain and dashboards react to them.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Log a meeting <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/meetings -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","title":"Sprint Planning","date":"2026-03-25",
+       "summary":"Prioritised mobile checkout.","attendees":["You","Akira"]}</span>'</code></pre>
+      <p class="see"><b>You should see</b> it on the <b>Meetings</b> page with its summary + attendees.</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Add a feedback cluster <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/feedback -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","label":"Checkout slow on mobile","count":12,
+       "sources":[{"name":"Intercom","n":7,"color":"var(--blue)"}]}</span>'</code></pre>
+      <p class="see"><b>You should see</b> it on the <b>Feedback</b> page with a source-breakdown bar.</p>
+    </div></div>
+
+    <div class="step"><div class="n">3</div><div class="body">
+      <h4>Start a sprint <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/sprints -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","number":26,"day_label":"day 1/10"}</span>'</code></pre>
+      <p class="see"><b>You should see</b> the <b>Sprints</b> page show sprint&nbsp;26 — its shipped/queued counts come straight from your real pipeline runs.</p>
+    </div></div>
+  </section>
+
+  <!-- ========================= 7 · INSPECT ======================== -->
+  <section class="tab" data-tab="7 · Inspect">
+    <h2>Inspect &amp; export</h2>
+    <p class="sub">Ask the brain about itself: what it knows, and where the gaps are.</p>
+
+    <div class="step"><div class="n">1</div><div class="body">
+      <h4>Export the brain to MCP <span class="chip ui">In the app</span></h4>
+      <p>On <b>Product brain</b>, click <b>“Export to MCP”</b>.</p>
+      <p class="see"><b>You should see</b> a summary like <i>“Exported N nodes · M edges”</i> — a live manifest of your real graph.</p>
+    </div></div>
+
+    <div class="step"><div class="n">2</div><div class="body">
+      <h4>Find the gaps <span class="chip ui">In the app</span></h4>
+      <p>Click <b>“Find gaps”</b> (jumps to <b>Graph &amp; Issues</b>). Or via the API:</p>
+      <pre><code><span class="k">curl</span> -s '127.0.0.1:8765/brain/gaps?project_id=acme'</code></pre>
+      <p class="see"><b>You should see</b> real findings — orphan nodes, features with no linked decision, and unresolved (proposed) decisions. Resolve one by linking a decision (tab&nbsp;4) and watch it disappear.</p>
+    </div></div>
+
+    <div class="step"><div class="n">3</div><div class="body">
+      <h4>Check for a decision conflict <span class="chip term">In a terminal</span></h4>
+      <pre><code><span class="k">curl</span> -s '127.0.0.1:8765/gate/conflict?project_id=acme'</code></pre>
+      <p class="see"><b>You should see</b> a conflict object once you have a <b>proposed</b> decision alongside an <b>active</b> one — the <b>Human gate</b> page renders it as “existing vs proposed”.</p>
+    </div></div>
+
+    <div class="note">Want to see all of this prove out automatically? Run the workflow evaluations: <span class="pill">cd apps/api &amp;&amp; ../../.venv/bin/python -m evals.run_evals</span> — it drives every workflow above and writes <span class="pill">evals/EVALS-REPORT.html</span>.</div>
+  </section>
+
+  <footer>
+    Spade hands-on guide · the UI runs at <a href="http://localhost:3000">localhost:3000</a>, the API at <span class="pill">127.0.0.1:8765</span>.
+    Commands call the API directly; the UI reaches it through a <span class="pill">/api</span> proxy.
+  </footer>
+</div>
+
+<script>
+  const tabs = [...document.querySelectorAll("section.tab")];
+  const nav = document.getElementById("tabs");
+  tabs.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.textContent = s.dataset.tab;
+    b.onclick = () => show(i);
+    nav.appendChild(b);
+  });
+  function show(i){
+    tabs.forEach((s,j)=>s.classList.toggle("on", i===j));
+    [...nav.children].forEach((b,j)=>b.classList.toggle("on", i===j));
+    window.scrollTo({top:0,behavior:"instant"});
+  }
+  // copy buttons on every <pre>
+  document.querySelectorAll("pre").forEach(pre=>{
+    const btn=document.createElement("button");
+    btn.className="copy";btn.textContent="copy";
+    btn.onclick=()=>{navigator.clipboard.writeText(pre.querySelector("code").innerText);
+      btn.textContent="copied";setTimeout(()=>btn.textContent="copy",1200);};
+    pre.appendChild(btn);
+  });
+  show(0);
+</script>
+</body>
+</html>
