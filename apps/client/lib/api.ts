@@ -2,6 +2,8 @@ import type {
   Account,
   Brake,
   BrainEdge,
+  BrainGap,
+  BrainManifest,
   BrainNode,
   Comment,
   LinkRel,
@@ -108,6 +110,10 @@ export const api = {
     http<{ edges: BrainEdge[] }>(
       `/brain/edges?project_id=${encodeURIComponent(projectId)}`,
     ),
+  brainExport: (projectId: string) =>
+    http<BrainManifest>(`/brain/export?project_id=${encodeURIComponent(projectId)}`),
+  brainGaps: (projectId: string) =>
+    http<{ gaps: BrainGap[] }>(`/brain/gaps?project_id=${encodeURIComponent(projectId)}`),
   tasks: (projectId: string) =>
     http<{ tasks: Task[] }>(
       `/tasks?project_id=${encodeURIComponent(projectId)}`,

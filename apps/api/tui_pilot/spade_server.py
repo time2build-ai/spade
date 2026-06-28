@@ -263,6 +263,18 @@ def list_brain_edges(project_id: str) -> dict:
     return {"edges": brain.list_edges(project_id)}
 
 
+@router.get("/brain/export")
+def export_brain(project_id: str) -> dict:
+    """Real MCP-style manifest derived from the project's brain graph."""
+    return brain.export_manifest(project_id)
+
+
+@router.get("/brain/gaps")
+def brain_gaps(project_id: str) -> dict:
+    """Real gap findings derived from the brain graph."""
+    return {"gaps": brain.find_gaps(project_id)}
+
+
 @router.post("/brain/edges")
 def create_brain_edge(req: EdgeCreate) -> dict:
     try:

@@ -139,3 +139,73 @@ def list_edges(project_id: str) -> list[dict]:
 def delete_edge(id: str) -> None:
     """Delete a brain edge by id."""
     db.execute("DELETE FROM brain_edges WHERE id = ?", (id,))
+
+
+# -- Derived views: MCP export + gap analysis ---------------------------------
+
+def export_manifest(project_id: str) -> dict:
+    """A real MCP-style manifest derived from the project's actual brain graph:
+    per-type counts plus a resource list (one entry per node)."""
+    nodes = list_nodes(project_id)
+    edges = list_edges(project_id)
+    by_type: dict[str, int] = {}
+    for n in nodes:
+        by_type[n["type"]] = by_type.get(n["type"], 0) + 1
+    resources = [
+        {
+            "uri": f"spade://{project_id}/{n['type']}/{n['id']}",
+            "name": n["label"],
+            "type": n["type"],
+        }
+        for n in nodes
+    ]
+    return {
+        "project_id": project_id,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "by_type": by_type,
+        "resources": resources,
+    }
+
+
+def find_gaps(project_id: str) -> list[dict]:
+    """Real gap findings derived from the graph:
+      * orphan — a node with no edges at all;
+      * unresolved-decision — a decision still status='proposed';
+      * undecided-feature — a feature with no linked decision node.
+    Each finding is {id, kind, label, detail}."""
+    nodes = list_nodes(project_id)
+    edges = list_edges(project_id)
+
+    # Adjacency by node id (edges are undirected for connectivity purposes).
+    connected: set[str] = set()
+    neighbours: dict[str, set[str]] = {}
+    for e in edges:
+        connected.add(e["from_id"])
+        connected.add(e["to_id"])
+        neighbours.setdefault(e["from_id"], set()).add(e["to_id"])
+        neighbours.setdefault(e["to_id"], set()).add(e["from_id"])
+
+    by_id = {n["id"]: n for n in nodes}
+    gaps: list[dict] = []
+
+    for n in nodes:
+        if n["id"] not in connected:
+            gaps.append({
+                "id": n["id"], "kind": "orphan", "label": n["label"],
+                "detail": f"This {n['type']} has no connections in the brain graph.",
+            })
+        if n["type"] == "decision" and (n.get("status") == "proposed"):
+            gaps.append({
+                "id": n["id"], "kind": "unresolved-decision", "label": n["label"],
+                "detail": "A proposed decision that hasn't been accepted or superseded.",
+            })
+        if n["type"] == "feature":
+            linked = neighbours.get(n["id"], set())
+            if not any(by_id.get(nb, {}).get("type") == "decision" for nb in linked):
+                gaps.append({
+                    "id": n["id"], "kind": "undecided-feature", "label": n["label"],
+                    "detail": "A feature with no linked architectural decision.",
+                })
+
+    return gaps

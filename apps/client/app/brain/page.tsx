@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -19,6 +20,14 @@ function StateMessage({ children }: { children: React.ReactNode }) {
 
 export default function BrainPage() {
   const { project, loading: projectLoading } = useProject();
+
+  // Real "Export to MCP": fetch the live manifest and show its summary.
+  const [exported, setExported] = React.useState<string | null>(null);
+  const exportMcp = async () => {
+    if (!project) return;
+    const m = await api.brainExport(project.id);
+    setExported(`Exported ${m.node_count} nodes · ${m.edge_count} edges`);
+  };
 
   const {
     data: nodesData,
@@ -113,10 +122,15 @@ export default function BrainPage() {
               <input placeholder="Ask the brain…" aria-label="Search the brain" />
               <span className="badge mono">⌘K</span>
             </div>
-            <button type="button" className="btn">
+            <Link href="/graph-issues" className="btn" data-testid="find-gaps">
               <Icon name="spark" size={13} /> Find gaps
-            </button>
-            <button type="button" className="btn primary">
+            </Link>
+            {exported && (
+              <span className="mono" data-testid="mcp-result" style={{ fontSize: 11, color: "var(--green)" }}>
+                {exported}
+              </span>
+            )}
+            <button type="button" className="btn primary" data-testid="export-mcp" onClick={exportMcp}>
               <Icon name="doc" size={13} /> Export to MCP
             </button>
           </>

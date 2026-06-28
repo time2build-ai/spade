@@ -77,7 +77,8 @@ test.describe("brain explorer", () => {
 
   test("page head has the search + Find gaps + Export to MCP actions", async ({ page }) => {
     await expect(page.locator(".brain-search input")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Find gaps/ })).toBeVisible();
+    // Find gaps is now a link to /graph-issues (Phase 3); Export to MCP is a button.
+    await expect(page.getByTestId("find-gaps")).toHaveAttribute("href", "/graph-issues");
     await expect(page.getByRole("button", { name: /Export to MCP/ })).toBeVisible();
   });
 
@@ -109,5 +110,13 @@ test.describe("brain explorer", () => {
     await expect(page.getByTestId("bx-owner")).toHaveText("Akira Real");
     await expect(page.getByTestId("bx-source")).toHaveText("Sprint Planning Real");
     await expect(page.getByTestId("bx-touched")).toContainText("Mar 25, 2026"); // from updated_at
+  });
+
+  test("Export to MCP fetches the real manifest summary (Phase 3)", async ({ page }) => {
+    await page.route("**/api/brain/export**", (r) =>
+      r.fulfill({ json: { project_id: "p1", node_count: 42, edge_count: 99, by_type: {}, resources: [] } }),
+    );
+    await page.getByTestId("export-mcp").click();
+    await expect(page.getByTestId("mcp-result")).toContainText("Exported 42 nodes · 99 edges");
   });
 });

@@ -104,3 +104,48 @@ def test_node_provenance_source_and_updated_at():
     got = brain.get_node(n["id"])
     assert got["source"] == "Architecture review"
     assert got["updated_at"] >= first_touch
+
+
+def test_export_manifest_real_counts_and_resources():
+    """Phase 3: /brain/export reflects the real graph."""
+    _proj()
+    f = brain.create_node(project_id="acme", type="feature", label="Checkout")
+    brain.create_node(project_id="acme", type="decision", label="Use Stripe")
+    export = brain.export_manifest("acme")
+    assert export["node_count"] == 2
+    assert export["by_type"] == {"feature": 1, "decision": 1}
+    assert any(r["uri"].endswith(f["id"]) and r["type"] == "feature" for r in export["resources"])
+
+
+def test_find_gaps_orphan_unresolved_undecided():
+    _proj()
+    # Orphan feature with no edges → orphan + undecided-feature.
+    f = brain.create_node(project_id="acme", type="feature", label="Search")
+    # A proposed decision → unresolved-decision (also orphan until linked).
+    d = brain.create_node(project_id="acme", type="decision", label="Adopt X", status="proposed")
+    gaps = brain.find_gaps("acme")
+    kinds = {(g["id"], g["kind"]) for g in gaps}
+    assert (f["id"], "orphan") in kinds
+    assert (f["id"], "undecided-feature") in kinds
+    assert (d["id"], "unresolved-decision") in kinds
+
+    # Link the feature to the decision → no longer orphan/undecided for the feature.
+    brain.add_edge(project_id="acme", from_id=f["id"], to_id=d["id"])
+    gaps2 = {(g["id"], g["kind"]) for g in brain.find_gaps("acme")}
+    assert (f["id"], "orphan") not in gaps2
+    assert (f["id"], "undecided-feature") not in gaps2
+    # The decision is still proposed → still flagged unresolved.
+    assert (d["id"], "unresolved-decision") in gaps2
+
+
+def test_brain_export_gaps_http():
+    from fastapi.testclient import TestClient
+    from tui_pilot import server
+
+    _proj()
+    brain.create_node(project_id="acme", type="feature", label="Lonely")
+    client = TestClient(server.app)
+    exp = client.get("/brain/export", params={"project_id": "acme"}).json()
+    assert exp["node_count"] == 1
+    gaps = client.get("/brain/gaps", params={"project_id": "acme"}).json()["gaps"]
+    assert any(g["kind"] == "orphan" for g in gaps)

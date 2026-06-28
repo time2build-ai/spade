@@ -244,3 +244,13 @@ export type ChatMessageReal = {
   } | null;
   created_at: string | null;
 };
+
+// Phase 3: derived brain views — MCP export manifest + gap-analysis findings.
+export type BrainManifest = {
+  project_id: string;
+  node_count: number;
+  edge_count: number;
+  by_type: Record<string, number>;
+  resources: { uri: string; name: string; type: string }[];
+};
+export type BrainGap = { id: string; kind: string; label: string; detail: string };

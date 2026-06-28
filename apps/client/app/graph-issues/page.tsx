@@ -27,9 +27,30 @@ export default function GraphIssuesPage() {
     api.brainEdges(project!.id),
   );
 
+  const { data: gapsData } = useSWR(project ? ["brain-gaps", project.id] : null, () =>
+    api.brainGaps(project!.id),
+  );
+
   const nodes = nodesData?.nodes ?? [];
   const edges = edgesData?.edges ?? [];
-  const issues = DEMO_AI_ISSUES;
+
+  // Real-wins: real gap-analysis findings drive the AI-issues pane; the seed fills
+  // it when the graph has no gaps. Map each gap → the issue card shape.
+  const GAP_ROLE: Record<string, string> = {
+    orphan: "Integrator", "unresolved-decision": "Reviewer", "undecided-feature": "Reviewer",
+  };
+  const realGaps = gapsData?.gaps ?? [];
+  const issues = realGaps.length > 0
+    ? realGaps.map((g, i) => ({
+        id: `GAP-${String(i + 1).padStart(3, "0")}`,
+        title: g.label,
+        role: GAP_ROLE[g.kind] ?? "Reviewer",
+        status: "pending" as const,
+        confidence: 80,
+        summary: g.detail,
+        agent: `Spade · gap-analysis (${g.kind})`,
+      }))
+    : DEMO_AI_ISSUES;
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [visibleTypes, setVisibleTypes] = React.useState<Set<BrainNodeType>>(() => new Set(ALL_TYPES));

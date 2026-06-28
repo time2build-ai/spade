@@ -14,6 +14,8 @@ async function mock(page: Page) {
   );
   await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes: NODES } }));
   await page.route("**/api/brain/edges**", (r) => r.fulfill({ json: { edges: [] } }));
+  // Default: no real gaps → the AI-issues pane falls back to the seed.
+  await page.route("**/api/brain/gaps**", (r) => r.fulfill({ json: { gaps: [] } }));
 }
 
 test.describe("graph & issues", () => {
@@ -41,5 +43,23 @@ test.describe("graph & issues", () => {
     await expect(page.locator(".page-head")).toContainText("Graph & Issues");
     await expect(page.getByRole("button", { name: /Re-analyze subgraph/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /New manual issue/ })).toBeVisible();
+  });
+});
+
+test.describe("graph & issues (real gaps)", () => {
+  test("real gap-analysis findings drive the AI-issues pane (Phase 3)", async ({ page }) => {
+    await mock(page);
+    // Override the empty gaps with real findings.
+    await page.route("**/api/brain/gaps**", (r) =>
+      r.fulfill({ json: { gaps: [
+        { id: "n0", kind: "orphan", label: "Lonely feature", detail: "This feature has no connections." },
+        { id: "n1", kind: "unresolved-decision", label: "Adopt X", detail: "A proposed decision not yet accepted." },
+      ] } }),
+    );
+    await page.goto("/graph-issues");
+    const pane = page.getByTestId("gi-issues");
+    await expect(pane.locator(".gi-issue")).toHaveCount(2); // 2 real gaps, not the 7 seeds
+    await expect(pane).toContainText("Lonely feature");
+    await expect(pane).toContainText("gap-analysis (orphan)");
   });
 });
