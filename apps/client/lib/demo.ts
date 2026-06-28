@@ -666,6 +666,46 @@ export const DEMO_CLI_RUNS: CliRun[] = [
   },
 ];
 
+// ── Settings (per-project automation) ────────────────────────────────────────
+// Real autopilot/strategy/ceiling win where mapped; the rest is seeded.
+// BACKEND: project-settings update endpoint (toggles are local-only for now).
+export type SettingRow = { key: string; label: string; desc: string; on: boolean; real?: "autopilot" };
+export type SettingGroup = { title: string; rows: SettingRow[] };
+export const DEMO_SETTINGS_GROUPS: SettingGroup[] = [
+  {
+    title: "Automation",
+    rows: [
+      { key: "autopilot", label: "Autopilot", desc: "Let the orchestrator pick up and ship tasks without prompting", on: false, real: "autopilot" },
+      { key: "autospawn", label: "Auto-spawn orchestrator", desc: "Start an orchestrator when a sprint runs", on: true },
+      { key: "autoship", label: "Auto-ship on green", desc: "Merge when all gates pass and tests are green", on: false },
+      { key: "gate-conflict", label: "Gate on ADR conflict", desc: "Pause when a change conflicts with an active decision", on: true },
+    ],
+  },
+  {
+    title: "Accounts",
+    rows: [
+      { key: "round-robin", label: "Round-robin dispatch", desc: "Spread work evenly across the account pool", on: true },
+      { key: "cost-fallback", label: "Cost-aware fallback", desc: "Fall back to a cheaper account when rate-limited", on: true },
+    ],
+  },
+  {
+    title: "Brain",
+    rows: [
+      { key: "auto-cluster", label: "Auto-cluster feedback", desc: "Group incoming feedback into themes", on: true },
+      { key: "auto-link", label: "Auto-link decisions", desc: "Connect tasks to relevant ADRs on ingest", on: true },
+      { key: "mcp-export", label: "Export to MCP", desc: "Keep the MCP server in sync with the brain", on: false },
+    ],
+  },
+  {
+    title: "Notifications",
+    rows: [
+      { key: "notify-gate", label: "Notify on gate", desc: "Ping when a pipeline needs a human call", on: true },
+      { key: "notify-ship", label: "Notify on ship", desc: "Ping when a task ships", on: false },
+      { key: "daily-digest", label: "Daily digest", desc: "A morning summary of triage + gates", on: true },
+    ],
+  },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
