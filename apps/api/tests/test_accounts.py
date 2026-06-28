@@ -99,3 +99,44 @@ def test_import_existing_registers_without_moving(tmp_path):
     src = tmp_path / ".claude-t2b"; src.mkdir()
     a = accounts.import_existing(id="t2b", label="Time2Build", config_dir=str(src))
     assert a["config_dir"] == str(src)
+
+
+def test_create_persists_role_model_plan():
+    """Phase 3: accounts carry real role/model/plan columns."""
+    a = accounts.create(id="rm", label="rmurphy", config_dir="/x/rm",
+                        role="Reviewer", model="claude-opus-4", plan="Max")
+    assert a["role"] == "Reviewer"
+    assert a["model"] == "claude-opus-4"
+    assert a["plan"] == "Max"
+    assert accounts.get("rm")["role"] == "Reviewer"
+
+
+def test_get_accounts_http_returns_role_and_active_sessions(monkeypatch):
+    """GET /accounts returns the real role/model/plan + a live-session count."""
+    from fastapi.testclient import TestClient
+    from tui_pilot import server, sessions_store
+
+    accounts.create(id="rm", label="rmurphy", config_dir="/x/rm",
+                    role="Developer", model="gpt-4o", plan="Pro")
+    accounts.create(id="lab", label="lab", config_dir="/x/lab")
+    # Two live sessions on rm, none on lab.
+    monkeypatch.setattr(sessions_store, "all_live", lambda: [
+        {"id": "s1", "account_id": "rm"}, {"id": "s2", "account_id": "rm"},
+    ])
+    client = TestClient(server.app)
+    rows = {a["id"]: a for a in client.get("/accounts").json()["accounts"]}
+    assert rows["rm"]["role"] == "Developer" and rows["rm"]["model"] == "gpt-4o"
+    assert rows["rm"]["active_sessions"] == 2
+    assert rows["lab"]["active_sessions"] == 0
+
+
+def test_patch_account_updates_role(monkeypatch):
+    from fastapi.testclient import TestClient
+    from tui_pilot import server
+
+    accounts.create(id="rm", label="rmurphy", config_dir="/x/rm")
+    client = TestClient(server.app)
+    r = client.patch("/accounts/rm", json={"role": "Integrator", "plan": "Team"})
+    assert r.status_code == 200
+    assert accounts.get("rm")["role"] == "Integrator"
+    assert accounts.get("rm")["plan"] == "Team"

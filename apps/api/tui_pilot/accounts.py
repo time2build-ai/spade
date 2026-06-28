@@ -31,12 +31,15 @@ def create(
     config_dir: str,
     color: str | None = None,
     provider: str = "claude-code",
+    role: str | None = None,
+    model: str | None = None,
+    plan: str | None = None,
 ) -> dict:
     """Insert a new account and return the created row as a dict."""
     db.execute(
-        "INSERT INTO accounts (id, label, config_dir, color, provider, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (id, label, config_dir, color, provider, _now()),
+        "INSERT INTO accounts (id, label, config_dir, color, provider, role, model, plan, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (id, label, config_dir, color, provider, role, model, plan, _now()),
     )
     return get(id)
 

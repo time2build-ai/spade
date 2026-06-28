@@ -38,8 +38,25 @@ def get_conn() -> sqlite3.Connection:
             _conn.execute("PRAGMA foreign_keys=ON")
             _conn.execute("PRAGMA journal_mode=WAL")
             _conn.executescript(_SCHEMA.read_text())
+            _migrate(_conn)
             _conn.commit()
         return _conn
+
+
+# Additive, idempotent column migrations for existing DBs. The base schema uses
+# CREATE TABLE IF NOT EXISTS, so pre-existing tables never gain new columns from
+# the script alone — add them here (nullable, backward-compatible).
+_ADDED_COLUMNS: dict[str, dict[str, str]] = {
+    "accounts": {"role": "TEXT", "model": "TEXT", "plan": "TEXT"},
+}
+
+
+def _migrate(conn) -> None:
+    for table, cols in _ADDED_COLUMNS.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for col, decl in cols.items():
+            if col not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
 @contextlib.contextmanager

@@ -119,6 +119,11 @@ export type Account = {
   config_dir: string;
   is_default: number;
   created_at: string;
+  // Phase 3: real per-account columns (may be null) + derived live-session count.
+  role?: string | null;
+  model?: string | null;
+  plan?: string | null;
+  active_sessions?: number;
 };
 
 export type Session = {

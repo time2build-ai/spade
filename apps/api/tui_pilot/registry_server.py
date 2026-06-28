@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import accounts, db, projects, settings
+from . import accounts, db, projects, settings, sessions_store
 from .identity import new_agent_id
 from .session import TmuxSession
 
@@ -29,12 +29,18 @@ class AccountCreate(BaseModel):
     config_dir: str
     color: str | None = None
     provider: str = "claude-code"
+    role: str | None = None
+    model: str | None = None
+    plan: str | None = None
 
 
 class AccountPatch(BaseModel):
     label: str | None = None
     color: str | None = None
     config_dir: str | None = None
+    role: str | None = None
+    model: str | None = None
+    plan: str | None = None
 
 
 class AccountImport(BaseModel):
@@ -98,7 +104,17 @@ class RolePatch(BaseModel):
 
 @router.get("/accounts")
 def list_accounts() -> dict:
-    return {"accounts": accounts.list_all()}
+    # Real usage signal: how many live sessions each account is currently driving.
+    live = sessions_store.all_live()
+    active: dict[str, int] = {}
+    for s in live:
+        aid = s.get("account_id")
+        if aid:
+            active[aid] = active.get(aid, 0) + 1
+    rows = accounts.list_all()
+    for a in rows:
+        a["active_sessions"] = active.get(a["id"], 0)
+    return {"accounts": rows}
 
 
 @router.post("/accounts")
@@ -106,6 +122,7 @@ def create_account(req: AccountCreate) -> dict:
     return accounts.create(
         id=req.id, label=req.label, config_dir=req.config_dir,
         color=req.color, provider=req.provider,
+        role=req.role, model=req.model, plan=req.plan,
     )
 
 

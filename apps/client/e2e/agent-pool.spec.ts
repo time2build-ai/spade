@@ -60,4 +60,16 @@ test.describe("agent pool accounts", () => {
     await expect(table).toContainText("AI-ISS-241");
     await expect(table.locator(".node-chip").first()).toBeVisible();
   });
+
+  test("real account role/model win over the seed (Phase 3)", async ({ page }) => {
+    // Re-mock with real role/model/plan columns populated.
+    await page.route("**/api/accounts", (r) =>
+      r.fulfill({ json: { accounts: [{ ...ACCOUNTS[0], role: "Integrator", model: "claude-real-x", plan: "Enterprise" }, ACCOUNTS[1]] } }),
+    );
+    await page.goto("/agent-pool");
+    const card = page.locator('.acct-card[data-provider="claude"]');
+    await expect(card.getByTestId("acct-role")).toHaveText("Integrator");
+    await expect(card.locator(".acct-sub")).toContainText("claude-real-x");
+    await expect(card.locator(".acct-sub")).toContainText("Enterprise");
+  });
 });

@@ -28,7 +28,11 @@ export function AccountCard({ account, inUse = false }: { account: Account; inUs
   const meta = providerMeta(account.provider);
   const color = account.color ?? meta.color;
   const s = accountSeed(account.id);
-  const roleColor = ROLE_META[s.role]?.color ?? "var(--text-3)";
+  // Real-wins: real account columns show through; the seed only fills gaps.
+  const role = account.role ?? s.role;
+  const model = account.model ?? s.model;
+  const plan = account.plan ?? s.plan;
+  const roleColor = ROLE_META[role]?.color ?? "var(--text-3)";
 
   return (
     <div className="acct-card rich" data-provider={account.provider?.toLowerCase()}>
@@ -41,10 +45,10 @@ export function AccountCard({ account, inUse = false }: { account: Account; inUs
             {account.label}
             {account.is_default === 1 && <span className="acct-default-badge">default</span>}
           </div>
-          <div className="acct-sub mono">{s.model} · {s.plan}</div>
+          <div className="acct-sub mono">{model} · {plan}</div>
         </div>
         <span className="acct-role-pill" data-testid="acct-role" style={{ color: roleColor, borderColor: roleColor + "55", background: roleColor + "14" }}>
-          {s.role}
+          {role}
         </span>
         <span className="acct-state" data-state={inUse ? "running" : "idle"} title={inUse ? "In use" : "Idle"}>
           <span className="acct-state-dot" style={{ background: inUse ? "var(--blue)" : "var(--green)" }} />
