@@ -408,6 +408,41 @@ export const DEMO_HANDOFFS: Handoff[] = [
   { from: "maya@acme", to: "rmurphy@acme", reason: "account exhausted", when: "2h ago" },
 ];
 
+// ── Gate conflict (bespoke conflict screen) ─────────────────────────────────
+// Seeded conflict; the task card hydrates from a real brake when present.
+// BACKEND: structured Brake conflict payload.
+export const DEMO_GATE = {
+  taskId: "SPD-144",
+  taskTitle: "Improve recommendation click-through",
+  taskDetail: "Developer session sess_4f12 proposed switching from collaborative filtering to a content-based recommender to lift CTR.",
+  worker: "sess_4f12",
+  existing: {
+    title: "ADR-014 · Use collaborative filtering for recommendations",
+    meta: "Jan 14, 2026 · Architecture review · Status active",
+    quote: "We chose collaborative filtering over content-based to avoid building a content embedding pipeline this quarter.",
+    owner: "Akira, decision owner",
+  },
+  proposed: {
+    title: "Switch to content-based recommender",
+    meta: "From sess_4f12 · 11m ago",
+    quote: "CTR is 2.1%. A content-based model using product titles + tags should outperform on the cold-start segment driving most homepage misses.",
+    owner: "Reviewer rationale",
+  },
+  diff: [
+    { t: "ctx", ln: "12", text: 'import { embed } from "@/lib/reco/collab";' },
+    { t: "del", ln: "−", text: "  const candidates = await collabFilter.candidates(userId, 50);" },
+    { t: "add", ln: "+", text: "  const candidates = await contentBased.candidates(userId, 50);" },
+    { t: "ctx", ln: "14", text: "  const ranked = ranker.rank(candidates, ctx);" },
+    { t: "ctx", ln: "15", text: "  return ranked.slice(0, limit);" },
+  ],
+  signals: [
+    { label: "User feedback", big: "8", sub: "reports about weak recs · 30d", color: "var(--blue)" },
+    { label: "Metric impact", big: "2.1%", sub: "recommendation CTR · target 5%", color: "var(--teal)" },
+    { label: "Decision age", big: "101 d", sub: "since ADR-014 was recorded", color: "var(--amber)" },
+  ],
+  suggestion: "approve as a scoped experiment behind a feature flag, then re-evaluate ADR-014 after 14 days. Spade will draft ADR-046 (proposed) if you accept.",
+};
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
