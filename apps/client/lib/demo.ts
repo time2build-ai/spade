@@ -91,6 +91,33 @@ export type BrainNodeSeed = {
   activity: [string, string, string][];
 };
 
+// ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
+// Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
+export type AiIssueStatus = "validated" | "pending" | "rejected";
+export type AiIssue = {
+  id: string;
+  title: string;
+  role: string;
+  status: AiIssueStatus;
+  confidence: number;
+  summary: string;
+  agent: string;
+};
+export const AI_ISSUE_STATUS: Record<AiIssueStatus, { color: string; glyph: string; label: string }> = {
+  validated: { color: "var(--green)", glyph: "●", label: "validated" },
+  pending: { color: "var(--amber)", glyph: "○", label: "awaiting validation" },
+  rejected: { color: "var(--red)", glyph: "✕", label: "rejected" },
+};
+export const DEMO_AI_ISSUES: AiIssue[] = [
+  { id: "AI-ISS-241", title: "Lazy-loaded carousel violates ADR-031 on slow 3G", role: "Reviewer", status: "validated", confidence: 92, summary: "Hero image still blocks LCP despite lazy-load policy. Cluster of 12 feedback reports correlates with conversion drop.", agent: "Claude · Reviewer" },
+  { id: "AI-ISS-240", title: "Receipt template missing line-item taxes", role: "Developer", status: "validated", confidence: 88, summary: "5 customer reports of incomplete receipts. PaymentIntent already exposes tax breakdown — only the template needs the field.", agent: "Claude · Developer" },
+  { id: "AI-ISS-239", title: "Recommendations CTR regression — experiment ready", role: "Developer", status: "pending", confidence: 71, summary: "Reco CTR at 2.1% (target 4%). 8 feedback items echo “feels random”. ADR-014 may conflict — proposes scoped A/B.", agent: "Claude · Developer" },
+  { id: "AI-ISS-238", title: "Cart drawer flicker on first open", role: "Developer", status: "validated", confidence: 84, summary: "Drawer mounts before hydration completes. 4 user reports, all on first session of the day.", agent: "Claude · Developer" },
+  { id: "AI-ISS-237", title: "Document {data,error,meta} envelope in search", role: "Documentor", status: "pending", confidence: 64, summary: "Search endpoints still return bare arrays. Convention is enforced elsewhere; ADR docs should reflect the gap.", agent: "Gemini · Documentor" },
+  { id: "AI-ISS-235", title: "Apple Pay sheet causes layout shift on iOS Safari", role: "Developer", status: "pending", confidence: 78, summary: "Bug filed but no root cause linked. Pattern matches a known PaymentRequest bug on iOS 17.4.", agent: "Codex · Developer" },
+  { id: "AI-ISS-236", title: "Promote design-token usage to onboarding", role: "Integrator", status: "rejected", confidence: 52, summary: "Onboarding still uses hex literals. Cross-cut refactor flagged out-of-scope for sprint 26.", agent: "Cursor · Integrator" },
+];
+
 export function brainNodeSeed(id: string, detail?: string | null): BrainNodeSeed {
   const h = hashId(id);
   const fileCount = 4 + (h % 3);

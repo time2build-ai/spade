@@ -98,12 +98,8 @@ test.describe("brain explorer", () => {
     await expect(page.locator(".bx-anchor-label")).toHaveText("Checkout");
   });
 
-  test("Explorer↔Graph subtabs switch the view", async ({ page }) => {
-    await expect(page.locator(".subtab.active")).toHaveText("Explorer");
-    await page.locator(".subtab", { hasText: "Graph" }).click();
-    await expect(page.locator(".brain-wrap")).toBeVisible();
-    await expect(page.locator(".brain-explorer")).toHaveCount(0);
-    await page.locator(".subtab", { hasText: "Explorer" }).click();
+  test("Brain is Explorer-only — no Graph subtab (graph lives at /graph-issues)", async ({ page }) => {
+    await expect(page.locator(".subtab", { hasText: "Graph" })).toHaveCount(0);
     await expect(page.locator(".brain-explorer")).toBeVisible();
   });
 });

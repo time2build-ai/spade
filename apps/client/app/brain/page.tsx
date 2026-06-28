@@ -4,23 +4,10 @@ import * as React from "react";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { BrainLegend } from "@/components/brain/BrainLegend";
 import { BrainExplorer } from "@/components/brain/BrainExplorer";
-import { GraphCanvas } from "@/components/brain/GraphCanvas";
-import { NodeInfo } from "@/components/brain/NodeInfo";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
 import { indexNodesById } from "@/lib/adapters";
-import type { BrainNodeType } from "@/lib/types";
-
-const ALL_TYPES: BrainNodeType[] = [
-  "feature",
-  "decision",
-  "convention",
-  "feedback",
-  "bug",
-  "metric",
-];
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return (
@@ -49,31 +36,11 @@ export default function BrainPage() {
     api.brainEdges(project!.id),
   );
 
-  // Tasks are only needed to show "grounded in" links in the info panel, so a
-  // failure here shouldn't block the graph — we just omit those links.
-  const { data: tasksData } = useSWR(project ? ["tasks", project.id] : null, () =>
-    api.tasks(project!.id),
-  );
-
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [view, setView] = React.useState<"explorer" | "graph">("explorer");
-  const [visibleTypes, setVisibleTypes] = React.useState<Set<BrainNodeType>>(
-    () => new Set(ALL_TYPES),
-  );
-
-  const toggleType = React.useCallback((type: BrainNodeType) => {
-    setVisibleTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  }, []);
 
   const nodes = nodesData?.nodes ?? [];
   const edges = edgesData?.edges ?? [];
   const byId = indexNodesById(nodes);
-  const selectedNode = selectedId ? (byId[selectedId] ?? null) : null;
 
   const error = nodesError || edgesError;
   const dataLoading = nodesLoading || edgesLoading;
@@ -105,11 +72,11 @@ export default function BrainPage() {
         connected graph.
       </StateMessage>
     );
-  } else if (view === "explorer") {
-    // Default selection: the first feature (else the first node).
+  } else {
+    // Product brain is the Explorer only — the node graph lives at /graph-issues.
     const firstFeatureId =
       nodes.find((n) => n.type === "feature")?.id ?? nodes[0]?.id ?? null;
-    const explorerSelected = (selectedId && byId[selectedId] ? selectedId : firstFeatureId);
+    const explorerSelected = selectedId && byId[selectedId] ? selectedId : firstFeatureId;
     body = (
       <BrainExplorer
         nodes={nodes}
@@ -117,32 +84,6 @@ export default function BrainPage() {
         selectedId={explorerSelected}
         onSelect={setSelectedId}
       />
-    );
-  } else {
-    body = (
-      <div className="brain-wrap">
-        <BrainLegend
-          nodes={nodes}
-          visibleTypes={visibleTypes}
-          onToggle={toggleType}
-        />
-        <div className="brain-canvas">
-          <GraphCanvas
-            nodes={nodes}
-            edges={edges}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            visibleTypes={visibleTypes}
-          />
-        </div>
-        <NodeInfo
-          node={selectedNode}
-          nodes={nodes}
-          edges={edges}
-          tasks={tasksData?.tasks ?? []}
-          onSelect={setSelectedId}
-        />
-      </div>
     );
   }
 
@@ -181,22 +122,6 @@ export default function BrainPage() {
           </>
         }
       />
-      {nodes.length > 0 && (
-        <div className="subtabs">
-          <div
-            className={"subtab" + (view === "explorer" ? " active" : "")}
-            onClick={() => setView("explorer")}
-          >
-            Explorer
-          </div>
-          <div
-            className={"subtab" + (view === "graph" ? " active" : "")}
-            onClick={() => setView("graph")}
-          >
-            Graph
-          </div>
-        </div>
-      )}
       {body}
     </div>
   );

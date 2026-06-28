@@ -69,9 +69,8 @@ async function mockBrain(page: Page) {
 test.describe("brain node styling", () => {
   test.beforeEach(async ({ page }) => {
     await mockBrain(page);
-    await page.goto("/brain");
-    // The legend + graph nodes live in the Graph subtab (Explorer is default).
-    await page.locator(".subtab", { hasText: "Graph" }).click();
+    // The legend + graph nodes now live on the Graph & Issues route.
+    await page.goto("/graph-issues");
     await expect(page.locator(".legend-dot").first()).toBeVisible();
   });
 
