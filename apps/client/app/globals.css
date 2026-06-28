@@ -1410,6 +1410,28 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
 
+/* === Meetings — V2 === */
+.mtg-wrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+.mtg-list { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; background: var(--bg); }
+.mtg-item { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 10px 12px; border-radius: 8px; margin-bottom: 4px; }
+.mtg-item:hover { background: var(--bg-1); }
+.mtg-item.on { background: linear-gradient(90deg, rgba(201,184,255,.1), transparent); }
+.mtg-item-title { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.mtg-item-sub { font-size: 10.5px; color: var(--text-4); margin-top: 2px; }
+.mtg-detail { overflow-y: auto; padding: 22px 28px 40px; }
+.mtg-title { font-size: 20px; font-weight: 600; letter-spacing: -.02em; color: var(--text); }
+.mtg-attendees { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 4px; }
+.mtg-att { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.mtg-summary { font-size: 15px; line-height: 1.5; color: var(--text); padding-left: 12px; border-left: 2px solid var(--accent); }
+.mtg-outcomes { display: flex; flex-direction: column; gap: 6px; }
+.mtg-outcome { display: flex; gap: 10px; align-items: baseline; font-size: 12.5px; color: var(--text-2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; background: var(--bg-1); }
+.mtg-outcome-kind { font-size: 9.5px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em; min-width: 58px; }
+.mtg-transcript { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.mtg-line { display: grid; grid-template-columns: 70px 1fr; gap: 12px; padding: 8px 14px; font-size: 12.5px; color: var(--text-2); border-bottom: 1px solid var(--line); }
+.mtg-line:last-child { border-bottom: none; }
+.mtg-line.hl { background: linear-gradient(90deg, rgba(201,184,255,.08), transparent); border-left: 2px solid var(--accent); }
+.mtg-speaker { color: var(--text-4); font-size: 11px; }
+
 /* === Sprints — V2 === */
 .sprint-wrap { overflow-y: auto; padding: 18px 22px 30px; }
 .sprint-hero { background: linear-gradient(180deg, rgba(201,184,255,.05), var(--bg-1)); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin-bottom: 18px; }

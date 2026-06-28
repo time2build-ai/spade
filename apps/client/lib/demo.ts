@@ -527,6 +527,62 @@ export const DEMO_SPRINTS = {
   ],
 };
 
+// ── Meetings ─────────────────────────────────────────────────────────────────
+// Seeded — no Meetings API. BACKEND: meeting ingest + extraction.
+export type Meeting = {
+  id: string;
+  title: string;
+  date: string;
+  attendees: string[];
+  summary: string;
+  outcomes: { kind: "task" | "decision" | "feedback"; text: string }[];
+  transcript: { speaker: string; text: string; hl?: boolean }[];
+};
+export const DEMO_MEETINGS: Meeting[] = [
+  {
+    id: "m-1", title: "Sprint Planning · Mar 25", date: "Mar 25, 2026 · 10:00", attendees: ["Priya S.", "Akira K.", "Robert M.", "Dan R."],
+    summary: "Prioritised mobile checkout performance for sprint 26. Agreed to ship the lazy-load carousel change behind a flag and re-evaluate ADR-014 for recommendations.",
+    outcomes: [
+      { kind: "task", text: "SPD-142 · Optimize mobile checkout speed" },
+      { kind: "task", text: "SPD-144 · Improve recommendation click-through" },
+      { kind: "decision", text: "ADR-031 · Use lazy loading for product carousels" },
+      { kind: "feedback", text: "Clustered 12 reports into “checkout slow on mobile”" },
+    ],
+    transcript: [
+      { speaker: "Priya", text: "Mobile conversion is our headline metric this sprint." },
+      { speaker: "Robert", text: "Users are complaining that checkout takes too long on mobile.", hl: true },
+      { speaker: "Akira", text: "The carousel images aren't lazy-loaded — that's blocking LCP." },
+      { speaker: "Dan", text: "We can ship lazy-load behind a flag and measure." },
+      { speaker: "Robert", text: "Let's do that and re-check ADR-014 for recs separately." },
+    ],
+  },
+  {
+    id: "m-2", title: "Architecture review · Jan 14", date: "Jan 14, 2026 · 14:00", attendees: ["Akira K.", "Maya P.", "Dan R."],
+    summary: "Reviewed the recommendation approach. Chose collaborative filtering over content-based to avoid building a content-embedding pipeline this quarter.",
+    outcomes: [
+      { kind: "decision", text: "ADR-014 · Use collaborative filtering for recommendations" },
+      { kind: "task", text: "SPD-090 · Wire collaborative filter into the reco service" },
+    ],
+    transcript: [
+      { speaker: "Akira", text: "Content-based needs an embedding pipeline we can't staff this quarter.", hl: true },
+      { speaker: "Maya", text: "Collaborative filtering is good enough for the warm segment." },
+      { speaker: "Dan", text: "Agreed — record it as an ADR so reviewers can catch conflicts." },
+    ],
+  },
+  {
+    id: "m-3", title: "Customer feedback sync · Mar 21", date: "Mar 21, 2026 · 11:30", attendees: ["Robert M.", "Priya S."],
+    summary: "Triaged the week's Intercom + App Store feedback. The dominant theme is mobile image performance on checkout.",
+    outcomes: [
+      { kind: "feedback", text: "4 new feedback items clustered into “checkout slow on mobile”" },
+      { kind: "task", text: "SPD-145 · Address book autofill on iOS Safari" },
+    ],
+    transcript: [
+      { speaker: "Robert", text: "Three people abandoned carts this week over slow image loads.", hl: true },
+      { speaker: "Priya", text: "Tie it to the checkout LCP work in sprint 26." },
+    ],
+  },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
