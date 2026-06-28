@@ -105,7 +105,7 @@ describe("PipelineCard", () => {
 });
 
 describe("KpiStrip", () => {
-  test("renders the 4 KPI numbers from a mixed run list", () => {
+  test("renders 6 KPI cells (3 real counts + 3 seeded) with sub-lines", () => {
     const runs = [
       run({ id: "r1", status: "running" }),
       run({ id: "r2", status: "shipped" }),
@@ -113,12 +113,12 @@ describe("KpiStrip", () => {
       run({ id: "r4", status: "paused" }),
     ];
     const { container } = render(<KpiStrip runs={runs} />);
-    const cells = container.querySelectorAll(".stat-cell");
-    expect(cells).toHaveLength(4);
-    // Active=1, Gated=1 (paused), Shipped=1, Queued=1
-    cells.forEach((cell) => {
-      expect(within(cell as HTMLElement).getByText("1")).toBeTruthy();
-    });
+    expect(container.querySelectorAll(".stat-cell")).toHaveLength(6);
+    // Real cells present: Active, Shipped today, Awaiting human.
+    expect(within(container).getByText("Active")).toBeTruthy();
+    expect(within(container).getByText("Shipped today")).toBeTruthy();
+    expect(within(container).getByText("Tokens · 24h")).toBeTruthy();
+    expect(container.querySelectorAll(".stat-cell .sub").length).toBeGreaterThan(0);
   });
 });
 

@@ -189,6 +189,52 @@ export function taskDetailSeed(id: string): TaskDetailSeed {
   };
 }
 
+// ── Orchestrator run enrichment + KPI subs ──────────────────────────────────
+// Real wins (task/stages/status/account); cost/eta/progress/tokens/files/logs
+// + KPI sub-lines are seeded. BACKEND: pipeline cost/eta/progress/tokens/files/
+// logs columns + tables.
+export type OrchLogLine = { lvl: "info" | "tool" | "warn" | "ok"; t: string; msg: string };
+export type OrchRunSeed = {
+  cost: string;
+  eta: string;
+  progress: number;
+  tokens: string;
+  files: [string, string][];
+  logs: OrchLogLine[];
+};
+const ORCH_LOGS: OrchLogLine[] = [
+  { lvl: "info", t: "09:42:11", msg: "orchestrator: pipeline run --sprint started by rmurphy" },
+  { lvl: "tool", t: "09:42:12", msg: "task.next → SPD-142  Optimize mobile checkout speed" },
+  { lvl: "info", t: "09:42:12", msg: "session.spawn role=Developer task=SPD-142 → sess_8d2c" },
+  { lvl: "tool", t: "09:42:14", msg: "sess_8d2c product.context → 4.2 KB · feature=Checkout" },
+  { lvl: "info", t: "09:43:24", msg: "sess_8d2c edit lib/image/loader.ts (+34 −6)" },
+  { lvl: "warn", t: "09:43:38", msg: "acct lab@acme: rate-limit · cooling 5h" },
+  { lvl: "info", t: "09:43:39", msg: "handoff lab → rmurphy on session sess_8d2c" },
+  { lvl: "ok", t: "09:44:12", msg: "sess_8d2c PR opened #2118 · +213 −62" },
+];
+export function orchRunSeed(id: string): OrchRunSeed {
+  const h = hashId(id);
+  return {
+    cost: `$${(1 + (h % 800) / 100).toFixed(2)}`,
+    eta: `${1 + (h % 9)}m`,
+    progress: 20 + (h % 70),
+    tokens: `~${60 + (h % 40)}k in / ${8 + (h % 14)}k out`,
+    files: [
+      ["lib/image/loader.ts", "+34 −6"],
+      ["components/CartCarousel.tsx", "+62 −18"],
+      ["app/checkout/page.tsx", "+12 −3"],
+      ["styles/checkout.module.css", "+4 −1"],
+    ],
+    logs: ORCH_LOGS,
+  };
+}
+/** Seeded KPI cells (with sub-lines) for the orchestrator summary strip. */
+export const DEMO_ORCH_KPIS = [
+  { lbl: "Tokens · 24h", val: "2.1M", sub: "≈ $14.20", subMono: true },
+  { lbl: "Throughput", val: "5 / day", sub: "7d avg" },
+  { lbl: "Concurrency cap", val: "8 / 12", sub: "CPU 41%" },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";

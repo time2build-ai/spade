@@ -74,4 +74,27 @@ test.describe("orchestrator table", () => {
     await page.locator(".seg button", { hasText: /^All/ }).click();
     await expect(page.locator('[data-testid="orch-row"]')).toHaveCount(1);
   });
+
+  test("KPI strip has 6 cells with sub-lines", async ({ page }) => {
+    await expect(page.locator(".orch-summary-strip .stat-cell")).toHaveCount(6);
+    await expect(page.locator(".orch-summary-strip")).toContainText("Tokens · 24h");
+    await expect(page.locator(".orch-summary-strip .stat-cell .sub").first()).toBeVisible();
+  });
+
+  test("table has Cost + ETA columns", async ({ page }) => {
+    const heads = await page.locator(".orch-table .th").allTextContents();
+    expect(heads).toContain("Cost");
+    expect(heads).toContain("ETA");
+  });
+
+  test("expanded detail shows progress + context + files + animated live-log", async ({ page }) => {
+    await page.locator('[data-testid="orch-row"][data-run-id="pl1"]').click();
+    const detail = page.getByTestId("orch-detail");
+    await expect(detail.locator(".orch-d-progress-bar .fill")).toBeVisible();
+    await expect(detail).toContainText("Context");
+    await expect(detail).toContainText("Files touched");
+    await expect(detail.getByTestId("live-log")).toBeVisible();
+    // The live-log streams in lines over time.
+    await expect(detail.locator('[data-testid="live-log"] .tline')).not.toHaveCount(0);
+  });
 });

@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { StagesMini } from "./StagesMini";
-import { Terminal } from "./Terminal";
-import { stageVisual, runActiveSession } from "@/lib/adapters";
+import { LiveLog } from "./LiveLog";
+import { stageVisual } from "@/lib/adapters";
+import { orchRunSeed } from "@/lib/demo";
 import type { PipelineRun, RunStatus } from "@/lib/types";
 
 const STATUS_DOT: Record<RunStatus, string> = {
@@ -66,10 +67,13 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
       <div className="th">Pipeline</div>
       <div className="th">Account</div>
       <div className="th">Status</div>
+      <div className="th">Cost</div>
+      <div className="th">ETA</div>
 
       {runs.map((run) => {
         const isOpen = open.has(run.id);
         const acctId = run.stages.find((s) => s.account_id)?.account_id ?? null;
+        const seed = orchRunSeed(run.id);
         return (
           <React.Fragment key={run.id}>
             <div
@@ -107,12 +111,22 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                   <span className="mono" style={{ fontSize: 11 }}>{run.status}</span>
                 </span>
               </div>
-
-              {/* Expanded detail spans the full row width. */}
+              <div className="td mono" style={{ fontSize: 11 }}>{seed.cost}</div>
+              <div className="td mono" style={{ fontSize: 11, color: run.status === "shipped" ? "var(--green)" : run.status === "paused" ? "var(--amber)" : "var(--text-2)" }}>
+                {run.status === "shipped" ? "done" : seed.eta}
+              </div>
             </div>
             {isOpen && (
               <div className="orch-detail" data-testid="orch-detail">
                 <div className="orch-detail-inner">
+                  {/* Progress bar */}
+                  <div className="orch-d-progress">
+                    <div className="orch-d-progress-bar"><div className="fill" style={{ width: seed.progress + "%" }} /></div>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 10 }}>
+                      {seed.progress}% · {seed.eta}
+                    </span>
+                  </div>
+
                   <div className="orch-d-stages">
                     {run.stages.map((s) => {
                       const key = stageVisual(s.state).key;
@@ -129,24 +143,45 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                       );
                     })}
                   </div>
-                  {(onStart || onAdvance) && (
-                    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                      {run.status === "queued" && onStart && (
-                        <button className="btn ghost" onClick={(e) => { e.stopPropagation(); onStart(run.id); }}>
-                          Start pipeline
-                        </button>
-                      )}
-                      {run.status === "running" && onAdvance && (
-                        <button className="btn ghost" onClick={(e) => { e.stopPropagation(); onAdvance(run.id); }}>
-                          Advance stage
-                        </button>
+
+                  {/* Three columns: context · files · live log */}
+                  <div className="orch-d-grid">
+                    <div className="orch-d-card">
+                      <div className="orch-d-card-h">Context</div>
+                      <div className="orch-d-keys">
+                        <div><span className="k">Task</span><span className="mono">{run.task_id}</span></div>
+                        <div><span className="k">Title</span><span>{titleById[run.task_id] ?? "—"}</span></div>
+                        <div><span className="k">Account</span><span className="mono">{acctId ? accountById[acctId] ?? acctId : "—"}</span></div>
+                        <div><span className="k">Tokens</span><span className="mono">{seed.tokens}</span></div>
+                        <div><span className="k">Cost</span><span className="mono">{seed.cost}</span></div>
+                        <div><span className="k">Status</span><span className="mono">{run.status}</span></div>
+                      </div>
+                      {(onStart || onAdvance) && (
+                        <div style={{ marginTop: 10, display: "flex", gap: 6 }}>
+                          {run.status === "queued" && onStart && (
+                            <button className="btn ghost" onClick={(e) => { e.stopPropagation(); onStart(run.id); }}>Start</button>
+                          )}
+                          {run.status === "running" && onAdvance && (
+                            <button className="btn ghost" onClick={(e) => { e.stopPropagation(); onAdvance(run.id); }}>Advance</button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                  {/* Real session output for this run (replaces the reference's
-                      fabricated "live log"). */}
-                  <div style={{ height: 220, display: "flex", flexDirection: "column" }}>
-                    <Terminal sessionId={runActiveSession(run)} />
+
+                    <div className="orch-d-card">
+                      <div className="orch-d-card-h">Files touched</div>
+                      {seed.files.map(([f, d]) => (
+                        <div className="orch-d-file" key={f}>
+                          <span className="mono" style={{ fontSize: 11.5, color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f}</span>
+                          <span className="mono" style={{ fontSize: 10.5, color: "var(--text-3)" }}>{d}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="orch-d-card term-mini">
+                      <div className="orch-d-card-h" style={{ color: "var(--text-3)" }}>Live log</div>
+                      <LiveLog logs={seed.logs} />
+                    </div>
                   </div>
                 </div>
               </div>
