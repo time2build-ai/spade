@@ -706,6 +706,25 @@ export const DEMO_SETTINGS_GROUPS: SettingGroup[] = [
   },
 ];
 
+// ── Integrations ─────────────────────────────────────────────────────────────
+// Seeded — no Integrations API. BACKEND: integration connections.
+export type Integration = {
+  id: string; name: string; cat: string; glyph: string;
+  status: "connected" | "degraded" | "off"; usage: string; connected: boolean;
+};
+export const INT_STATUS_COLOR: Record<string, string> = {
+  connected: "var(--green)", degraded: "var(--amber)", off: "var(--text-4)",
+};
+export const DEMO_INTEGRATIONS: Integration[] = [
+  { id: "github", name: "GitHub", cat: "Source", glyph: "", status: "connected", usage: "6 repos · 1,204 commits / 30d", connected: true },
+  { id: "linear", name: "Linear", cat: "Issues", glyph: "◳", status: "connected", usage: "synced 14 tasks · 2m ago", connected: true },
+  { id: "sentry", name: "Sentry", cat: "Observability", glyph: "◎", status: "degraded", usage: "rate-limited · retry in 4m", connected: true },
+  { id: "intercom", name: "Intercom", cat: "Feedback", glyph: "◍", status: "connected", usage: "312 conversations / 30d", connected: true },
+  { id: "appstore", name: "App Store", cat: "Feedback", glyph: "", status: "connected", usage: "★ 4.1 · 88 reviews / 30d", connected: true },
+  { id: "slack", name: "Slack", cat: "Comms", glyph: "▰", status: "off", usage: "not connected", connected: false },
+  { id: "datadog", name: "Datadog", cat: "Observability", glyph: "◈", status: "off", usage: "not connected", connected: false },
+];
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";

@@ -1410,6 +1410,22 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
 
+/* === Integrations — V2 === */
+.int-wrap { overflow-y: auto; padding: 18px 22px 40px; }
+.int-group { margin-bottom: 22px; }
+.int-group-h { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); font-family: var(--mono); margin-bottom: 10px; }
+.int-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.int-card { background: var(--bg-1); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.int-card:hover { border-color: var(--line-strong); }
+.int-card-top { display: flex; align-items: center; gap: 12px; }
+.int-glyph { width: 30px; height: 30px; border-radius: 7px; background: var(--bg-3); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; flex: none; }
+.int-name { font-size: 13.5px; color: var(--text); font-weight: 500; }
+.int-cat { font-size: 10px; margin-top: 1px; }
+.int-status { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-3); font-family: var(--mono); }
+.int-status-dot { width: 7px; height: 7px; border-radius: 50%; }
+.int-usage { font-size: 11.5px; margin: 10px 0; }
+.int-card-foot { display: flex; align-items: center; gap: 8px; }
+
 /* === Settings — V2 === */
 .set-wrap { overflow-y: auto; padding: 18px 22px 40px; max-width: 760px; }
 .set-group { margin-bottom: 22px; }
