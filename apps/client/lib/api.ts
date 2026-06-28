@@ -6,6 +6,7 @@ import type {
   Comment,
   LinkRel,
   FeedbackClusterReal,
+  Integration,
   Meeting,
   PipelineRun,
   Project,
@@ -144,6 +145,12 @@ export const api = {
     http<{ clusters: FeedbackClusterReal[] }>(
       `/feedback?project_id=${encodeURIComponent(projectId)}`,
     ),
+  integrations: (projectId: string) =>
+    http<{ integrations: Integration[] }>(
+      `/integrations?project_id=${encodeURIComponent(projectId)}`,
+    ),
+  setIntegrationConnected: (id: string, connected: boolean) =>
+    http<Integration>(`/integrations/${id}`, { method: "PATCH", body: JSON.stringify({ connected }) }),
   startPipeline: (runId: string) =>
     http<PipelineRun>(`/pipelines/${runId}/start`, { method: "POST" }),
   advancePipeline: (runId: string, report?: string | null) =>

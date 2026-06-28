@@ -120,3 +120,11 @@ CREATE TABLE IF NOT EXISTS feedback_clusters (
   count INTEGER DEFAULT 0, sources TEXT, created_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+-- Integrations: a project's connected external services (GitHub, Intercom, ...).
+CREATE TABLE IF NOT EXISTS integrations (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL,
+  category TEXT, status TEXT DEFAULT 'off', usage TEXT,
+  connected INTEGER DEFAULT 0, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);

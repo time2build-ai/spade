@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import brain, feedback, meetings, pipelines, projects, sprints, tasks
+from . import brain, feedback, integrations, meetings, pipelines, projects, sprints, tasks
 
 router = APIRouter()
 
@@ -462,6 +462,45 @@ def create_feedback(req: FeedbackCreate) -> dict:
         project_id=req.project_id, label=req.label,
         count=req.count, sources=req.sources,
     )
+
+
+# ---- integrations ---------------------------------------------------------
+
+
+class IntegrationCreate(BaseModel):
+    project_id: str
+    name: str
+    category: str | None = None
+    status: str = "off"
+    usage: str | None = None
+    connected: bool = False
+
+
+class IntegrationPatch(BaseModel):
+    connected: bool
+
+
+@router.get("/integrations")
+def list_integrations(project_id: str) -> dict:
+    return {"integrations": integrations.list_for_project(project_id)}
+
+
+@router.post("/integrations")
+def create_integration(req: IntegrationCreate) -> dict:
+    if projects.get(req.project_id) is None:
+        raise HTTPException(404, f"no project {req.project_id!r}")
+    return integrations.create(
+        project_id=req.project_id, name=req.name, category=req.category,
+        status=req.status, usage=req.usage, connected=req.connected,
+    )
+
+
+@router.patch("/integrations/{id}")
+def patch_integration(id: str, req: IntegrationPatch) -> dict:
+    row = integrations.set_connected(id, req.connected)
+    if row is None:
+        raise HTTPException(404, f"no integration {id!r}")
+    return row
 
 
 @router.get("/pipelines/{run_id}")

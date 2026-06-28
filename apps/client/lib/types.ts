@@ -208,3 +208,15 @@ export type FeedbackClusterReal = {
   sources: { name: string; n: number; color: string }[];
   created_at: string | null;
 };
+
+// Phase 3: real integration connections.
+export type Integration = {
+  id: string;
+  project_id: string;
+  name: string;
+  category: string | null;
+  status: string;
+  usage: string | null;
+  connected: number;
+  created_at: string | null;
+};
