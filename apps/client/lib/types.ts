@@ -220,3 +220,27 @@ export type Integration = {
   connected: number;
   created_at: string | null;
 };
+
+// Phase 3: persisted chat threads + messages (/ask). payload carries structured
+// tool output (cites / plan / action cards).
+export type ChatThreadReal = {
+  id: string;
+  project_id: string;
+  title: string | null;
+  pinned: number;
+  updated_at: string | null;
+  created_at: string | null;
+};
+export type ChatMessageReal = {
+  id: string;
+  thread_id: string;
+  role: string;
+  who: string | null;
+  text: string | null;
+  payload: {
+    cites?: string[];
+    plan?: { title: string; steps: string[] };
+    action?: { kind: string; id: string; risk: string; title: string; remove: string[]; add: string[] };
+  } | null;
+  created_at: string | null;
+};

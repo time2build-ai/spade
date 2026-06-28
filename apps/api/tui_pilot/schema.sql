@@ -128,3 +128,16 @@ CREATE TABLE IF NOT EXISTS integrations (
   connected INTEGER DEFAULT 0, created_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+-- Chat threads + messages (the /ask session browser). A message `payload` is a
+-- JSON blob carrying structured tool output (cites / plan / action cards).
+CREATE TABLE IF NOT EXISTS chat_threads (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT,
+  pinned INTEGER DEFAULT 0, updated_at TEXT, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, role TEXT, who TEXT,
+  text TEXT, payload TEXT, created_at TEXT,
+  FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+);

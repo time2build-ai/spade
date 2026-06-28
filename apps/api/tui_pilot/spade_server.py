@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import brain, feedback, integrations, meetings, pipelines, projects, sprints, tasks
+from . import brain, chat, feedback, integrations, meetings, pipelines, projects, sprints, tasks
 
 router = APIRouter()
 
@@ -501,6 +501,49 @@ def patch_integration(id: str, req: IntegrationPatch) -> dict:
     if row is None:
         raise HTTPException(404, f"no integration {id!r}")
     return row
+
+
+# ---- chat threads + messages ----------------------------------------------
+
+
+class ThreadCreate(BaseModel):
+    project_id: str
+    title: str | None = None
+    pinned: bool = False
+
+
+class MessageCreate(BaseModel):
+    role: str
+    text: str
+    who: str | None = None
+    payload: dict | None = None
+
+
+@router.get("/chat/threads")
+def list_chat_threads(project_id: str) -> dict:
+    return {"threads": chat.list_threads(project_id)}
+
+
+@router.post("/chat/threads")
+def create_chat_thread(req: ThreadCreate) -> dict:
+    if projects.get(req.project_id) is None:
+        raise HTTPException(404, f"no project {req.project_id!r}")
+    return chat.create_thread(req.project_id, title=req.title, pinned=req.pinned)
+
+
+@router.get("/chat/threads/{thread_id}/messages")
+def list_chat_messages(thread_id: str) -> dict:
+    if chat.get_thread(thread_id) is None:
+        raise HTTPException(404, f"no thread {thread_id!r}")
+    return {"messages": chat.list_messages(thread_id)}
+
+
+@router.post("/chat/threads/{thread_id}/messages")
+def create_chat_message(thread_id: str, req: MessageCreate) -> dict:
+    if chat.get_thread(thread_id) is None:
+        raise HTTPException(404, f"no thread {thread_id!r}")
+    return chat.add_message(thread_id, role=req.role, text=req.text,
+                            who=req.who, payload=req.payload)
 
 
 @router.get("/pipelines/{run_id}")

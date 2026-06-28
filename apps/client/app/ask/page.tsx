@@ -1,8 +1,25 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 import { Icon } from "@/components/Icon";
+import { useProject } from "@/lib/useProject";
+import { api } from "@/lib/api";
 import { DEMO_THREADS, type ChatMsg, type ChatThread } from "@/lib/demo";
+import type { ChatMessageReal } from "@/lib/types";
+
+// Map a persisted chat message → the Message component's shape (payload carries
+// the structured cites/plan/action cards).
+function toMsg(m: ChatMessageReal): ChatMsg {
+  const t = m.created_at
+    ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "";
+  return {
+    role: m.role === "user" ? "user" : "assistant",
+    who: m.who ?? "", t, text: m.text ?? "",
+    cites: m.payload?.cites, plan: m.payload?.plan, action: m.payload?.action,
+  };
+}
 
 function Message({ m }: { m: ChatMsg }) {
   const isUser = m.role === "user";
@@ -62,8 +79,28 @@ function Message({ m }: { m: ChatMsg }) {
 }
 
 export default function AskPage() {
-  const threads = DEMO_THREADS;
-  const [activeId, setActiveId] = React.useState(threads[0].id);
+  const { project } = useProject();
+  const { data: threadsData } = useSWR(
+    project ? ["chat-threads", project.id] : null,
+    () => api.chatThreads(project!.id),
+  );
+  // Real-wins: real persisted threads drive the list; the seed fills it when empty.
+  const realThreads = threadsData?.threads ?? [];
+  const useReal = realThreads.length > 0;
+  const projName = project?.name ?? "Workspace";
+
+  const threads: ChatThread[] = useReal
+    ? realThreads.map((t) => ({
+        id: t.id,
+        title: t.title ?? "Untitled",
+        project: projName,
+        updated: t.updated_at ? new Date(t.updated_at).toLocaleDateString() : "",
+        pinned: t.pinned === 1,
+        messages: [], // loaded per-thread below
+      }))
+    : DEMO_THREADS;
+
+  const [activeId, setActiveId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
 
   const filtered = threads.filter((t) => t.title.toLowerCase().includes(query.toLowerCase()));
@@ -71,10 +108,19 @@ export default function AskPage() {
   const recent = filtered.filter((t) => !t.pinned);
   const active = threads.find((t) => t.id === activeId) ?? threads[0];
 
+  // Real threads load their messages from the API; seed threads carry them inline.
+  const { data: msgData } = useSWR(
+    useReal && active ? ["chat-messages", active.id] : null,
+    () => api.chatMessages(active.id),
+  );
+  const messages: ChatMsg[] = useReal
+    ? (msgData?.messages ?? []).map(toMsg)
+    : active.messages;
+
   const ThreadItem = (t: ChatThread) => (
     <button
       key={t.id}
-      className={"ask-thread" + (t.id === activeId ? " on" : "")}
+      className={"ask-thread" + (t.id === active?.id ? " on" : "")}
       data-testid="ask-thread"
       onClick={() => setActiveId(t.id)}
     >
@@ -106,11 +152,11 @@ export default function AskPage() {
         <header className="ch-head">
           <div>
             <div className="ch-title">{active.title}</div>
-            <div className="ch-subt mono">{active.messages.length} msgs · {active.project} · updated {active.updated}</div>
+            <div className="ch-subt mono">{messages.length} msgs · {active.project} · updated {active.updated}</div>
           </div>
         </header>
         <div className="ch-stream">
-          {active.messages.map((m, i) => <Message key={i} m={m} />)}
+          {messages.map((m, i) => <Message key={i} m={m} />)}
         </div>
         <div className="ch-composer">
           <textarea rows={1} placeholder="Ask about this project, or @mention an ADR/task/cluster" aria-label="Message" />

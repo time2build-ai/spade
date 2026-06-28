@@ -5,6 +5,8 @@ import type {
   BrainNode,
   Comment,
   LinkRel,
+  ChatMessageReal,
+  ChatThreadReal,
   FeedbackClusterReal,
   Integration,
   Meeting,
@@ -151,6 +153,12 @@ export const api = {
     ),
   setIntegrationConnected: (id: string, connected: boolean) =>
     http<Integration>(`/integrations/${id}`, { method: "PATCH", body: JSON.stringify({ connected }) }),
+  chatThreads: (projectId: string) =>
+    http<{ threads: ChatThreadReal[] }>(
+      `/chat/threads?project_id=${encodeURIComponent(projectId)}`,
+    ),
+  chatMessages: (threadId: string) =>
+    http<{ messages: ChatMessageReal[] }>(`/chat/threads/${threadId}/messages`),
   startPipeline: (runId: string) =>
     http<PipelineRun>(`/pipelines/${runId}/start`, { method: "POST" }),
   advancePipeline: (runId: string, report?: string | null) =>
