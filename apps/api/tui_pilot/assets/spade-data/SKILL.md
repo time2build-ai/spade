@@ -70,6 +70,40 @@ RID=$(curl -s -X POST $B/pipelines -H 'content-type: application/json' -d '{"pro
 curl -s -X POST $B/pipelines/$RID/start    # spawns the developer agent; auto-advances on finish
 ```
 
+## Be proactive — capture as you converse (don't wait to be told)
+
+The human will almost **never** say "insert an ADR" or "create a feature". They just
+*talk* — about what they want, what they decided, what's broken. **Your job is to notice
+and offer to capture it**, so the brain and backlog stay current without the human
+managing them. Listen across the conversation for these signals and act:
+
+| You hear (in plain talk)… | …it's probably a | Proactively do |
+|---|---|---|
+| "let's use X", "we'll go with", "I'd rather", a choice made between options | **decision (ADR)** | record a brain node `type:"decision"` as **`status:"proposed"`**, link it to the feature it shapes, and say you did |
+| "it should be able to…", "users need…", "we want a way to…", a capability | **feature** | add a `type:"feature"` node; if it's actionable now, also add a backlog **task** grounded in it |
+| "we should build/add/fix…", concrete work | **task** | create a backlog `task` (with `feature` + a short `description`), grounded in the relevant brain node |
+| "it's broken", "X fails when…", "regression", "flickers" | **bug** | add a `type:"bug"` node (+ a task if it needs fixing) |
+| "users keep asking…", "people complain about…" | **feedback** | add a `type:"feedback"` node |
+
+**How to be proactive without being annoying:**
+
+- **Notice out loud, then capture.** One line: *"That's a decision — I'll record it as a
+  **proposed** ADR and link it to Checkout."* Then do it. Don't make them ask.
+- **Infer-low-risk, propose-high-risk.** Features, tasks, bugs, feedback are cheap to capture —
+  just create them and mention it. **Decisions** carry weight: record them as **`proposed`**
+  (never silently `active`) and let the human confirm/promote — Spade will even flag the
+  conflict if a proposal contradicts an active ADR.
+- **Only concrete signals.** Skip hypotheticals ("maybe someday…"), chit-chat, and things
+  already captured — **read the brain/backlog first** (`GET /brain/nodes`, `GET /tasks`) and
+  **de-dupe** before creating. If nothing concrete was said, capture nothing.
+- **Summarize at natural breaks.** After a topic, tell them what landed: *"Captured: 1 feature,
+  1 proposed ADR, 2 backlog tasks."* So they can see (and undo) it.
+- **Ground everything.** Link tasks to their feature node and decisions to what they affect —
+  a lone node is a future "gap" Spade will nag about.
+
+This applies to any conversation you can see — a live chat, a meeting summary, a worker's
+report. The human steers; **you keep the brain and backlog honest.**
+
 ## How you operate in Spade
 
 - When the human asks **about state** ("what projects/tasks/backlog do we have", "what's

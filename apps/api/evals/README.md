@@ -48,3 +48,17 @@ are coherent and on-task. This costs real tokens; it's off unless `TUI_PILOT_LIV
 
 The deeper live harness (agent emits a mailbox signal → control center → answer →
 finish) is also covered by `tests/test_integration.py` (same `TUI_PILOT_LIVE=1`).
+
+## 3. Proactivity eval (opt-in — the agent captures without being told)
+
+```
+TUI_PILOT_LIVE=1 /Users/thiagolopez/time2build/projects/tui-pilot/.venv/bin/python -m evals.run_proactivity_eval
+```
+
+The product principle: a user never says "insert an ADR" — they just talk, and Spade
+notices. This drives a real `claude` (with the skill's proactive instructions) over
+natural utterances and checks it maps each to the right artifact — **decision /
+feature / bug / feedback / task** — and stays quiet on chit-chat (no over-capture).
+The instruction that drives this lives in `tui_pilot/assets/spade-data/SKILL.md`
+(its "Be proactive — capture as you converse" section); `tests/test_skill_proactive.py`
+is a free, offline guard that the guidance can't silently regress.
