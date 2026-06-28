@@ -417,31 +417,327 @@ def day_in_the_life(ctx: Ctx):
     ctx.eq(c.get("/brain/export", params={"project_id": "acme"}).json()["node_count"], 2, "6. brain export reflects the final graph")
 
 
+# ════════════════════════  EXTRA: ERROR / EDGE CASES  ════════════════════════
+
+# --- Projects ---------------------------------------------------------------
+
+def project_404s_and_env(ctx: Ctx):
+    c = _client()
+    ctx.eq(c.get("/projects/ghost").status_code, 404, "GET unknown project → 404")
+    ctx.eq(c.patch("/projects/ghost", json={"autopilot": 1}).status_code, 404, "PATCH unknown project → 404")
+    ctx.eq(c.delete("/projects/ghost").status_code, 404, "DELETE unknown project → 404")
+    ctx.check("home" in c.get("/env").json(), "GET /env exposes the host home dir")
+
+
+def project_path_expansion(ctx: Ctx):
+    c = _client()
+    r = c.post("/projects", json={"id": "x", "name": "X", "path": "~/spade-eval-proj"})
+    ctx.check(not r.json()["path"].startswith("~"), "leading ~ in project path is expanded")
+
+
+# --- Accounts ---------------------------------------------------------------
+
+def account_404s(ctx: Ctx):
+    c = _client()
+    ctx.eq(c.patch("/accounts/ghost", json={"role": "Dev"}).status_code, 404, "PATCH unknown account → 404")
+    ctx.eq(c.delete("/accounts/ghost").status_code, 404, "DELETE unknown account → 404")
+
+
+def account_auth_status(ctx: Ctx, tmp=None):
+    import json
+    import tempfile
+    from pathlib import Path
+    from tui_pilot import accounts
+    d = Path(tempfile.mkdtemp())
+    ctx.eq(accounts.auth_status(str(d)), "not_logged_in", "empty config dir → not_logged_in")
+    (d / ".credentials.json").write_text(json.dumps({"token": "abc"}))
+    ctx.eq(accounts.auth_status(str(d)), "authed", "non-empty credentials → authed")
+
+
+def account_import_and_managed(ctx: Ctx):
+    import tempfile
+    from pathlib import Path
+    from tui_pilot import accounts
+    src = Path(tempfile.mkdtemp()) / ".claude-x"; src.mkdir()
+    a = accounts.import_existing(id="t2b", label="T2B", config_dir=str(src))
+    ctx.eq(a["config_dir"], str(src), "import_existing registers without moving the dir")
+    m = accounts.create_managed(id="mng", label="Managed")
+    ctx.check(Path(m["config_dir"]).is_dir(), "create_managed makes the account dir")
+
+
+# --- Brain ------------------------------------------------------------------
+
+def brain_delete_cascades_edges(ctx: Ctx):
+    c = _client()
+    _project(c)
+    f = c.post("/brain/nodes", json={"project_id": "acme", "type": "feature", "label": "F"}).json()
+    d = c.post("/brain/nodes", json={"project_id": "acme", "type": "decision", "label": "D"}).json()
+    c.post("/brain/edges", json={"project_id": "acme", "from_id": f["id"], "to_id": d["id"]})
+    c.delete(f"/brain/nodes/{f['id']}")
+    ctx.eq(len(c.get("/brain/edges", params={"project_id": "acme"}).json()["edges"]), 0,
+           "deleting a node cascades its edges away")
+
+
+def brain_export_empty(ctx: Ctx):
+    c = _client()
+    _project(c)
+    m = c.get("/brain/export", params={"project_id": "acme"}).json()
+    ctx.eq(m["node_count"], 0, "export of an empty brain → 0 nodes")
+    ctx.eq(m["resources"], [], "export of an empty brain → no resources")
+
+
+def brain_no_gaps_when_connected(ctx: Ctx):
+    c = _client()
+    _project(c)
+    f = c.post("/brain/nodes", json={"project_id": "acme", "type": "feature", "label": "F"}).json()
+    d = c.post("/brain/nodes", json={"project_id": "acme", "type": "decision", "label": "D", "status": "active"}).json()
+    c.post("/brain/edges", json={"project_id": "acme", "from_id": f["id"], "to_id": d["id"]})
+    gaps = c.get("/brain/gaps", params={"project_id": "acme"}).json()["gaps"]
+    ids_kinds = {(g["id"], g["kind"]) for g in gaps}
+    ctx.check((f["id"], "orphan") not in ids_kinds, "a connected feature is not an orphan")
+    ctx.check((f["id"], "undecided-feature") not in ids_kinds, "a feature with a linked decision is not undecided")
+
+
+def gate_conflict_prefers_linked(ctx: Ctx):
+    from tui_pilot import brain, projects
+    projects.create(id="acme", name="Acme", path="/w")
+    a1 = brain.create_node(project_id="acme", type="decision", label="Unrelated active", status="active")
+    a2 = brain.create_node(project_id="acme", type="decision", label="Linked active", status="active")
+    prop = brain.create_node(project_id="acme", type="decision", label="Proposal", status="proposed")
+    brain.add_edge(project_id="acme", from_id=prop["id"], to_id=a2["id"])
+    conf = brain.find_conflict("acme")
+    ctx.eq(conf["existing"]["id"], a2["id"], "conflict prefers the active decision linked to the proposal")
+
+
+# --- Tasks ------------------------------------------------------------------
+
+def task_404s_and_delete(ctx: Ctx):
+    c = _client()
+    _project(c)
+    ctx.eq(c.get("/tasks/SPD-999").status_code, 404, "GET unknown task → 404")
+    ctx.eq(c.post("/tasks/SPD-999/move", json={"status": "ready"}).status_code, 404, "move unknown task → 404")
+    t = c.post("/tasks", json={"project_id": "acme", "title": "Temp"}).json()
+    ctx.eq(c.delete(f"/tasks/{t['id']}").status_code, 200, "DELETE task succeeds")
+    ctx.eq(c.get(f"/tasks/{t['id']}").status_code, 404, "deleted task is gone (404)")
+
+
+def task_all_statuses(ctx: Ctx):
+    c = _client()
+    _project(c)
+    t = c.post("/tasks", json={"project_id": "acme", "title": "Flow"}).json()
+    for s in ["ready", "in_progress", "review", "shipped", "blocked"]:
+        ctx.eq(c.post(f"/tasks/{t['id']}/move", json={"status": s}).json()["status"], s, f"task moves → {s}")
+
+
+def task_link_validation(ctx: Ctx):
+    c = _client()
+    _project(c)
+    a = c.post("/tasks", json={"project_id": "acme", "title": "A"}).json()
+    b = c.post("/tasks", json={"project_id": "acme", "title": "B"}).json()
+    ctx.eq(c.post(f"/tasks/{a['id']}/links", json={"to_task": b['id'], "rel": "bogus"}).status_code, 400,
+           "invalid link rel → 400")
+    ctx.eq(c.post(f"/tasks/{a['id']}/links", json={"to_task": a['id'], "rel": "blocks"}).status_code, 400,
+           "self-link is rejected → 400")
+
+
+# --- Pipeline ---------------------------------------------------------------
+
+def pipeline_failure_pauses(ctx: Ctx):
+    from tui_pilot import pipelines, projects, tasks
+    projects.create(id="acme", name="Acme", path="/w")
+    tid = tasks.create(project_id="acme", title="X")["id"]
+    rid = pipelines.create_run(project_id="acme", task_id=tid)["id"]
+
+    def boom(idx, report):
+        raise RuntimeError("spawn failed")
+
+    pipelines.start_stage(rid, 0, boom)  # swallowed → stage failed, run paused
+    run = pipelines.get(rid)
+    ctx.eq(run["stages"][0]["state"], "failed", "a spawn failure marks the stage failed")
+    ctx.eq(run["status"], "paused", "a failed stage pauses the run (needs a human)")
+
+
+def pipeline_reentry_and_lookup(ctx: Ctx):
+    from tui_pilot import pipelines, projects, tasks
+    projects.create(id="acme", name="Acme", path="/w")
+    t1 = tasks.create(project_id="acme", title="One")["id"]
+    t2 = tasks.create(project_id="acme", title="Two")["id"]
+    r1 = pipelines.create_run(project_id="acme", task_id=t1)["id"]
+    pipelines.create_run(project_id="acme", task_id=t2)
+    rows = pipelines.list_for_project("acme")
+    ctx.eq(rows[0]["task_id"], t2, "pipeline runs listed newest first")
+
+    def spawn(idx, report): return (f"sess-{idx}", "acct")
+    pipelines.start_stage(r1, 0, spawn)
+    lk = pipelines.stage_by_session("sess-0")
+    ctx.eq(lk["pipeline_run_id"], r1, "a session resolves back to its pipeline stage")
+    # Re-entry: completing an already-done stage doesn't double-advance.
+    pipelines.complete_stage(r1, 0, report="ok", spawn=spawn)
+    before = pipelines.get(r1)["current_stage"]
+    pipelines.complete_stage(r1, 0, report="ok", spawn=spawn)
+    ctx.eq(pipelines.get(r1)["current_stage"], before, "completing a done stage is idempotent (re-entry safe)")
+
+
+# --- Inputs -----------------------------------------------------------------
+
+def sprints_current_and_empty(ctx: Ctx):
+    from tui_pilot import sprints, projects
+    projects.create(id="acme", name="Acme", path="/w")
+    ctx.check(sprints.current("acme") is None, "no current sprint when none exist")
+    sprints.create(project_id="acme", number=24, state="done")
+    sprints.create(project_id="acme", number=25, state="active")
+    ctx.eq(sprints.current("acme")["number"], 25, "current = the active sprint with the highest number")
+
+
+def integrations_disconnect_and_404(ctx: Ctx):
+    c = _client()
+    _project(c)
+    i = c.post("/integrations", json={"project_id": "acme", "name": "Slack", "category": "Comms"}).json()
+    c.patch(f"/integrations/{i['id']}", json={"connected": True})
+    off = c.patch(f"/integrations/{i['id']}", json={"connected": False}).json()
+    ctx.eq(off["status"], "off", "disconnecting flips status back to off")
+    ctx.eq(c.patch("/integrations/ghost", json={"connected": True}).status_code, 404, "PATCH unknown integration → 404")
+
+
+def chat_thread_ordering(ctx: Ctx):
+    from tui_pilot import chat, projects
+    projects.create(id="acme", name="Acme", path="/w")
+    t1 = chat.create_thread("acme", title="first")
+    chat.create_thread("acme", title="pinned", pinned=True)
+    rows = chat.list_threads("acme")
+    ctx.eq(rows[0]["title"], "pinned", "pinned threads sort first")
+    # A new message bumps its thread's updated_at so it floats up among recents.
+    chat.add_message(t1["id"], role="user", text="hi")
+    ctx.check(chat.get_thread(t1["id"])["updated_at"] >= t1["updated_at"], "a new message bumps the thread's updated_at")
+
+
+# --- System -----------------------------------------------------------------
+
+def roles_404_and_idempotent(ctx: Ctx):
+    c = _client()
+    ctx.eq(c.patch("/roles/ghost", json={"label": "X"}).status_code, 404, "PATCH unknown role → 404")
+    ctx.eq(c.delete("/roles/ghost").status_code, 404, "DELETE unknown role → 404")
+    c.post("/roles", json={"id": "qa", "label": "QA"})
+    c.post("/roles", json={"id": "qa", "label": "QA v2"})  # upsert same id
+    qa = [r for r in c.get("/roles").json()["roles"] if r["id"] == "qa"]
+    ctx.eq(len(qa), 1, "upserting the same role id does not duplicate it")
+
+
+# --- Orchestrator -----------------------------------------------------------
+
+def orchestrator_parse_variants(ctx: Ctx):
+    from tui_pilot.orchestration import parse_orchestration_signal
+    s1 = parse_orchestration_signal({"action": "spawn", "role": "plain", "cmd": "cat", "task": "x"})
+    ctx.eq(s1.cmd, "cat", "a custom cmd is parsed onto the spawn signal")
+    s2 = parse_orchestration_signal({"action": "spawn", "role": "developer", "model": "sonnet", "task": "x", "account": "acct-x"})
+    ctx.eq(s2.account, "acct-x", "an account pin is parsed onto the spawn signal")
+    # Unknown actions are rejected up front (strict validation) rather than acted on.
+    raised = False
+    try:
+        parse_orchestration_signal({"action": "wat"})
+    except ValueError:
+        raised = True
+    ctx.check(raised, "an unknown orchestration action is rejected at parse time")
+    s3 = parse_orchestration_signal({"action": "status", "text": "status update"})
+    ctx.eq(s3.action, "status", "a status signal parses (orchestrator can post status)")
+
+
+def mission_autopilot_toggle(ctx: Ctx):
+    c = _client()
+    _project(c)
+    c.put("/current-project", json={"project_id": "acme"})
+    r = c.post("/missions/checkout/autopilot", json={"autopilot": True})
+    ctx.eq(r.json()["autopilot"], True, "POST mission autopilot returns the new flag")
+    found = [m for m in c.get("/missions").json()["missions"] if m["mission"] == "checkout"]
+    ctx.check(found and found[0]["autopilot"] is True, "GET /missions reflects the autopilot flag")
+
+
+def brakes_empty_and_404(ctx: Ctx):
+    c = _client()
+    ctx.eq(c.get("/brakes").json()["brakes"], [], "no brakes pending on a fresh fleet")
+    ctx.eq(c.post("/brakes/ghost/allow").status_code, 404, "allow unknown brake → 404")
+    ctx.eq(c.post("/brakes/ghost/skip").status_code, 404, "skip unknown brake → 404")
+
+
+# --- Cross-cutting ----------------------------------------------------------
+
+def multi_project_isolation(ctx: Ctx):
+    c = _client()
+    _project(c, pid="a", name="A", path="/tmp/a")
+    _project(c, pid="b", name="B", path="/tmp/b")
+    c.post("/brain/nodes", json={"project_id": "a", "type": "feature", "label": "A-feat"})
+    c.post("/tasks", json={"project_id": "a", "title": "A-task"})
+    c.post("/sprints", json={"project_id": "a", "number": 1})
+    ctx.eq(len(c.get("/brain/nodes", params={"project_id": "b"}).json()["nodes"]), 0, "brain nodes are scoped per project")
+    ctx.eq(len(c.get("/tasks", params={"project_id": "b"}).json()["tasks"]), 0, "tasks are scoped per project")
+    ctx.eq(len(c.get("/sprints", params={"project_id": "b"}).json()["sprints"]), 0, "sprints are scoped per project")
+    ctx.eq(len(c.get("/brain/nodes", params={"project_id": "a"}).json()["nodes"]), 1, "project A still sees its own data")
+
+
+def planning_gap_to_resolution(ctx: Ctx):
+    """A real planning loop: an orphan feature is flagged as a gap, then recording
+    + linking a decision clears it."""
+    c = _client()
+    _project(c)
+    f = c.post("/brain/nodes", json={"project_id": "acme", "type": "feature", "label": "Checkout"}).json()
+    g1 = c.get("/brain/gaps", params={"project_id": "acme"}).json()["gaps"]
+    ctx.check(any(x["id"] == f["id"] and x["kind"] == "undecided-feature" for x in g1),
+              "an undecided feature is surfaced as a gap")
+    d = c.post("/brain/nodes", json={"project_id": "acme", "type": "decision", "label": "Lazy-load", "status": "active"}).json()
+    c.post("/brain/edges", json={"project_id": "acme", "from_id": f["id"], "to_id": d["id"]})
+    g2 = c.get("/brain/gaps", params={"project_id": "acme"}).json()["gaps"]
+    ctx.check(not any(x["id"] == f["id"] and x["kind"] == "undecided-feature" for x in g2),
+              "recording + linking a decision clears the gap")
+
+
 ALL = [
     ("Projects", "create → get info → update → current → delete", project_lifecycle),
+    ("Projects", "404s on unknown project + env", project_404s_and_env),
+    ("Projects", "project path ~ expansion", project_path_expansion),
     ("Accounts", "create/patch/default + project pool", accounts_and_pool),
     ("Accounts", "round-robin dispatch cycles the pool", round_robin_dispatch),
+    ("Accounts", "404s on unknown account", account_404s),
+    ("Accounts", "auth status (content-aware)", account_auth_status),
+    ("Accounts", "import existing + managed dir", account_import_and_managed),
     ("Planning · Brain", "all 6 node types + invalid rejected", brain_all_node_types),
     ("Planning · Brain", "edges + relations", brain_edges_and_relations),
     ("Planning · Brain", "decision lifecycle proposed→active", decision_status_workflow),
     ("Planning · Brain", "node provenance (source + updated_at bump)", node_provenance),
     ("Planning · Brain", "MCP export reflects the real graph", brain_mcp_export),
+    ("Planning · Brain", "MCP export of an empty brain", brain_export_empty),
     ("Planning · Brain", "gap analysis (orphan/undecided/unresolved)", brain_gap_analysis),
+    ("Planning · Brain", "no gaps when fully connected", brain_no_gaps_when_connected),
     ("Planning · Brain", "gate conflict derived from decisions", gate_conflict_from_brain),
+    ("Planning · Brain", "conflict prefers the linked active decision", gate_conflict_prefers_linked),
+    ("Planning · Brain", "node delete cascades its edges", brain_delete_cascades_edges),
     ("Planning · Tasks", "task lifecycle (create/patch/move)", task_lifecycle),
     ("Planning · Tasks", "task linked to brain nodes", task_links_to_brain),
     ("Planning · Tasks", "task comments + task-to-task links", task_comments_and_links),
+    ("Planning · Tasks", "404s + delete", task_404s_and_delete),
+    ("Planning · Tasks", "moves through every status", task_all_statuses),
+    ("Planning · Tasks", "link validation (rel + self-link)", task_link_validation),
     ("Execution · Pipeline", "full stage machine create→start→ship", pipeline_execution_state_machine),
     ("Execution · Pipeline", "progress derived from stage states", pipeline_progress_is_derived),
+    ("Execution · Pipeline", "spawn failure pauses the run", pipeline_failure_pauses),
+    ("Execution · Pipeline", "re-entry safe + session lookup", pipeline_reentry_and_lookup),
     ("Inputs", "sprints with counts derived from runs", sprints_with_derived_counts),
+    ("Inputs", "current sprint + empty", sprints_current_and_empty),
     ("Inputs", "meetings ingest", meetings_ingest),
     ("Inputs", "feedback clusters", feedback_clusters),
     ("Inputs", "integrations connect toggle", integrations_toggle),
+    ("Inputs", "integrations disconnect + 404", integrations_disconnect_and_404),
     ("Inputs", "chat thread + message persistence", chat_persistence),
+    ("Inputs", "chat thread ordering + bump", chat_thread_ordering),
     ("System", "settings key/value", settings_kv),
     ("System", "roles CRUD", roles_crud),
+    ("System", "roles 404 + idempotent upsert", roles_404_and_idempotent),
     ("Orchestrator · chat", "plans & spawns within ceiling", orchestrator_plans_and_spawns),
     ("Orchestrator · chat", "gates costly spawns (human-in-loop)", orchestrator_gates_costly_spawn),
     ("Orchestrator · chat", "answer + kill a worker", orchestrator_answer_and_kill),
+    ("Orchestrator · chat", "signal parsing + safe no-op", orchestrator_parse_variants),
+    ("Orchestrator · chat", "mission autopilot toggle", mission_autopilot_toggle),
+    ("Orchestrator · chat", "no brakes pending + 404s", brakes_empty_and_404),
     ("End-to-end", "day in the life (plan → execute → sprint)", day_in_the_life),
+    ("End-to-end", "multi-project data isolation", multi_project_isolation),
+    ("End-to-end", "planning gap → resolution loop", planning_gap_to_resolution),
 ]

@@ -55,9 +55,9 @@ def _fresh_db() -> None:
     db.reset()
 
 
-def run(scenarios: list, *, report_path: str | None = None) -> bool:
-    """Run all scenarios; print a report; optionally write markdown. Returns
-    True iff every scenario passed."""
+def run(scenarios: list, *, report_path: str | None = None, html_path: str | None = None) -> bool:
+    """Run all scenarios; print a report; optionally write markdown + HTML.
+    Returns True iff every scenario passed."""
     results: list[Scenario] = []
     for suite, name, fn in scenarios:
         sc = Scenario(suite, name)
@@ -71,6 +71,8 @@ def run(scenarios: list, *, report_path: str | None = None) -> bool:
     _print_report(results)
     if report_path:
         _write_markdown(results, report_path)
+    if html_path:
+        _write_html(results, html_path)
     return all(s.passed for s in results)
 
 
@@ -140,3 +142,121 @@ def _write_markdown(results: list[Scenario], path: str) -> None:
             lines.append("")
     with open(path, "w") as fh:
         fh.write("\n".join(lines))
+
+
+def _write_html(results: list[Scenario], path: str) -> None:
+    import datetime
+    import html as _html
+
+    by_suite: dict[str, list[Scenario]] = {}
+    for s in results:
+        by_suite.setdefault(s.suite, []).append(s)
+
+    n_scen = len(results)
+    pass_scen = sum(1 for s in results if s.passed)
+    total_checks = sum(len(s.checks) for s in results)
+    pass_checks = sum(1 for s in results for c in s.checks if c.ok)
+    rate = round(100 * pass_scen / n_scen) if n_scen else 0
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    e = _html.escape
+
+    def card(big, label, color="var(--text)"):
+        return (f'<div class="card"><div class="big" style="color:{color}">{big}</div>'
+                f'<div class="lbl">{label}</div></div>')
+
+    suites_html = []
+    for suite, scens in by_suite.items():
+        s_pass = sum(1 for s in scens if s.passed)
+        rows = []
+        for s in scens:
+            cls = "ok" if s.passed else "bad"
+            n_ok = sum(1 for c in s.checks if c.ok)
+            checks = "".join(
+                f'<li class="{"ok" if c.ok else "bad"}"><span class="m">{"✓" if c.ok else "✗"}</span>'
+                f'<span>{e(c.label)}</span>'
+                + (f'<span class="detail">{e(c.detail)}</span>' if not c.ok and c.detail else "")
+                + "</li>"
+                for c in s.checks
+            )
+            err = (f'<div class="err">{e(s.error.strip().splitlines()[-1])}</div>'
+                   if s.error else "")
+            rows.append(
+                f'<details class="scen {cls}"><summary>'
+                f'<span class="dot"></span><span class="nm">{e(s.name)}</span>'
+                f'<span class="count">{n_ok}/{len(s.checks)}</span></summary>'
+                f'<ul class="checks">{checks}</ul>{err}</details>'
+            )
+        badge = "ok" if s_pass == len(scens) else "bad"
+        suites_html.append(
+            f'<section class="suite"><h2>{e(suite)}'
+            f'<span class="suite-badge {badge}">{s_pass}/{len(scens)}</span></h2>'
+            f'{"".join(rows)}</section>'
+        )
+
+    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spade workflow evaluations</title>
+<style>
+  :root {{ --bg:#0b0b0d; --bg1:#141417; --bg2:#1c1c21; --line:#2a2a30;
+    --text:#e9e9ee; --text2:#b9b9c4; --text3:#85858f; --accent:#c9b8ff;
+    --green:#7ad19a; --red:#e88; --amber:#e6b86a; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Inter",Segoe UI,sans-serif; }}
+  .wrap {{ max-width:1080px; margin:0 auto; padding:40px 28px 80px; }}
+  header h1 {{ font-size:26px; margin:0 0 4px; letter-spacing:-.02em; font-weight:650; }}
+  header p {{ color:var(--text3); margin:0 0 28px; font-size:13px; }}
+  .accent {{ color:var(--accent); }}
+  .cards {{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }}
+  .card {{ background:var(--bg1); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }}
+  .card .big {{ font-size:30px; font-weight:680; letter-spacing:-.03em;
+    font-family:"JetBrains Mono",ui-monospace,monospace; }}
+  .card .lbl {{ font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.07em; margin-top:3px; }}
+  .bar {{ height:10px; background:var(--bg2); border-radius:6px; overflow:hidden; margin:6px 0 34px; border:1px solid var(--line); }}
+  .bar > span {{ display:block; height:100%; width:{rate}%;
+    background:linear-gradient(90deg,var(--green),var(--accent)); }}
+  .suite {{ margin-bottom:26px; }}
+  .suite h2 {{ font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--text3);
+    font-family:"JetBrains Mono",monospace; font-weight:600; display:flex; align-items:center;
+    gap:10px; padding-bottom:8px; border-bottom:1px solid var(--line); margin:0 0 8px; }}
+  .suite-badge {{ margin-left:auto; font-size:11px; padding:2px 9px; border-radius:999px; border:1px solid; }}
+  .suite-badge.ok {{ color:var(--green); border-color:rgba(122,209,154,.4); background:rgba(122,209,154,.08); }}
+  .suite-badge.bad {{ color:var(--red); border-color:rgba(238,136,136,.4); background:rgba(238,136,136,.08); }}
+  details.scen {{ background:var(--bg1); border:1px solid var(--line); border-radius:9px; margin-bottom:6px; }}
+  details.scen[open] {{ border-color:var(--line); }}
+  summary {{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:11px;
+    padding:11px 15px; }}
+  summary::-webkit-details-marker {{ display:none; }}
+  .dot {{ width:8px; height:8px; border-radius:50%; flex:none; }}
+  .scen.ok .dot {{ background:var(--green); }}
+  .scen.bad .dot {{ background:var(--red); }}
+  .nm {{ font-size:13.5px; color:var(--text); }}
+  .count {{ margin-left:auto; font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--text3); }}
+  .checks {{ list-style:none; margin:0; padding:2px 15px 13px 34px; }}
+  .checks li {{ display:flex; align-items:baseline; gap:9px; font-size:12.5px; color:var(--text2); padding:3px 0; }}
+  .checks li .m {{ font-family:monospace; }}
+  .checks li.ok .m {{ color:var(--green); }}
+  .checks li.bad .m {{ color:var(--red); }}
+  .checks li .detail {{ color:var(--red); font-family:monospace; font-size:11px; margin-left:6px; }}
+  .err {{ margin:0 15px 13px 34px; color:var(--red); font-family:monospace; font-size:11.5px;
+    background:rgba(238,136,136,.07); border:1px solid rgba(238,136,136,.25); border-radius:7px; padding:8px 10px; }}
+  footer {{ margin-top:40px; color:var(--text3); font-size:12px; text-align:center; }}
+  footer code {{ color:var(--accent); }}
+</style></head><body><div class="wrap">
+  <header>
+    <h1><span class="accent">Spade</span> workflow evaluations</h1>
+    <p>End-to-end workflow checks against the real API &amp; domain · generated {stamp}</p>
+  </header>
+  <div class="cards">
+    {card(f"{pass_scen}/{n_scen}", "scenarios passed", "var(--green)" if pass_scen==n_scen else "var(--amber)")}
+    {card(f"{pass_checks}/{total_checks}", "checks passed", "var(--green)" if pass_checks==total_checks else "var(--amber)")}
+    {card(str(len(by_suite)), "workflow areas")}
+    {card(f"{rate}%", "pass rate", "var(--green)" if rate==100 else "var(--amber)")}
+  </div>
+  <div class="bar"><span></span></div>
+  {"".join(suites_html)}
+  <footer>Each scenario runs against a fresh isolated SQLite DB. Regenerate with
+    <code>python -m evals.run_evals</code>.</footer>
+</div></body></html>"""
+    with open(path, "w") as fh:
+        fh.write(doc)

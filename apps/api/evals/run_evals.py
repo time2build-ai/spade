@@ -16,9 +16,12 @@ from evals.scenarios import ALL
 
 
 def main() -> int:
-    report = os.path.join(os.path.dirname(os.path.abspath(__file__)), "EVALS-REPORT.md")
-    ok = run(ALL, report_path=report)
-    print(f"\nReport written to {report}")
+    here = os.path.dirname(os.path.abspath(__file__))
+    report = os.path.join(here, "EVALS-REPORT.md")
+    html = os.path.join(here, "EVALS-REPORT.html")
+    ok = run(ALL, report_path=report, html_path=html)
+    print(f"\nMarkdown: {report}")
+    print(f"HTML:     {html}")
     return 0 if ok else 1
 
 
