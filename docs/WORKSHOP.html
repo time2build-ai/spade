@@ -13,45 +13,39 @@
   body{margin:0;background:var(--bg);color:var(--text);
     font:15px/1.65 -apple-system,BlinkMacSystemFont,"Inter",Segoe UI,sans-serif;}
   a{color:var(--accent);}
-  .wrap{max-width:780px;margin:0 auto;padding:0 22px 120px;}
+  .wrap{max-width:760px;margin:0 auto;padding:0 22px 120px;}
   header{padding:58px 0 8px;}
   .kicker{font:12px "JetBrains Mono",monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);}
-  header h1{font-size:33px;margin:11px 0 12px;letter-spacing:-.03em;font-weight:720;line-height:1.14;}
+  header h1{font-size:34px;margin:11px 0 12px;letter-spacing:-.03em;font-weight:720;line-height:1.12;}
   header p{color:var(--text2);margin:0;font-size:16px;max-width:600px;}
 
-  .how{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0 6px;}
-  .how div{flex:1;min-width:230px;background:var(--bg1);border:1px solid var(--line);border-radius:11px;padding:13px 15px;font-size:13.5px;color:var(--text2);}
-  .how b{color:var(--text);}
-  .how .ask b{color:var(--accent);}
-  .how .cmd b{color:var(--green);}
+  .before{display:flex;gap:11px;align-items:flex-start;background:var(--bg1);border:1px solid var(--line);
+    border-radius:12px;padding:14px 16px;margin:26px 0 4px;font-size:13.5px;color:var(--text2);}
+  .before b{color:var(--text);}
+  .before .i{color:var(--accent);font-weight:700;}
 
-  /* step */
-  .step{margin:42px 0;padding-top:8px;border-top:1px solid var(--line);}
+  .step{margin:44px 0;padding-top:8px;border-top:1px solid var(--line);}
   .step:first-of-type{border-top:none;}
   .step .num{font:12px "JetBrains Mono",monospace;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;}
   .step h2{font-size:22px;margin:5px 0 6px;letter-spacing:-.015em;}
   .step .lead{color:var(--text2);margin:0 0 14px;font-size:14.5px;}
 
-  .way{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0;background:var(--bg1);}
-  .way.ask{border-left:3px solid var(--accent);}
-  .way.cmd{border-left:3px solid var(--green);}
-  .way .h{font:12px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:9px;}
-  .way.ask .h{color:var(--accent);}
-  .way.cmd .h{color:var(--green);}
-  .way p{margin:0 0 8px;color:var(--text2);font-size:14px;}
-  .quote{font-style:italic;color:var(--text);background:var(--bg2);border:1px solid var(--line);
-    border-radius:9px;padding:10px 13px;font-size:14.5px;}
+  .do{display:flex;gap:12px;align-items:flex-start;margin:12px 0;}
+  .do .b{flex:none;width:26px;height:26px;border-radius:8px;background:var(--bg2);border:1px solid var(--line2);
+    display:flex;align-items:center;justify-content:center;font-size:14px;}
+  .do .t{color:var(--text2);font-size:14.5px;padding-top:2px;}
+  .do .t b{color:var(--text);}
 
-  pre{position:relative;background:#08080a;border:1px solid var(--line);border-radius:9px;
-    padding:13px 14px;overflow-x:auto;margin:8px 0 0;font:12.5px/1.55 "JetBrains Mono",ui-monospace,monospace;}
-  pre code{color:#cdd3da;white-space:pre;}
-  pre .c{color:var(--text4);} pre .k{color:var(--accent);} pre .s{color:var(--green);} pre .v{color:var(--blue);}
-  .copy{position:absolute;top:8px;right:8px;background:var(--bg2);border:1px solid var(--line2);
-    color:var(--text3);font:inherit;font-size:11px;border-radius:6px;padding:2px 9px;cursor:pointer;}
-  .copy:hover{color:var(--text);border-color:var(--accent);}
+  .say{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;
+    padding:15px 17px;margin:14px 0;background:linear-gradient(180deg,rgba(201,184,255,.05),var(--bg1));}
+  .say .h{font:12px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px;}
+  .quote{font-style:italic;color:var(--text);font-size:15.5px;line-height:1.55;}
+  .say .after{font-size:13.5px;color:var(--text2);margin:12px 0 0;}
+  .say ul{margin:8px 0 0;padding-left:18px;color:var(--text2);font-size:13.5px;line-height:1.7;}
+  .say b{color:var(--text);}
 
   .check{margin:16px 0 0;}
-  .check .h{font-size:13px;color:var(--green);font-weight:600;margin-bottom:9px;}
+  .check .h{font-size:13.5px;color:var(--green);font-weight:600;margin-bottom:9px;}
   .check .h::before{content:"→ ";color:var(--green);}
   .shot{display:block;border:1px solid var(--line2);border-radius:11px;overflow:hidden;
     box-shadow:0 16px 44px -24px rgba(0,0,0,.8);background:#000;}
@@ -59,14 +53,11 @@
   .shot:hover{border-color:rgba(201,184,255,.45);}
 
   .note{background:var(--bg1);border:1px solid var(--line);border-left:3px solid var(--accent);
-    border-radius:10px;padding:12px 15px;margin:16px 0;font-size:14px;color:var(--text2);}
-  .note.warn{border-left-color:var(--amber);}
+    border-radius:10px;padding:12px 15px;margin:18px 0;font-size:14px;color:var(--text2);}
   .note b{color:var(--text);}
   .live{font:11px "JetBrains Mono",monospace;color:var(--amber);border:1px solid rgba(230,184,106,.4);
     background:rgba(230,184,106,.08);border-radius:999px;padding:1px 8px;}
   kbd{background:var(--bg3);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;font:12px "JetBrains Mono",monospace;color:var(--text);}
-  .pill{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--accent);background:var(--bg2);
-    border:1px solid var(--line);border-radius:5px;padding:1px 6px;}
   footer{margin-top:54px;color:var(--text4);font-size:12.5px;border-top:1px solid var(--line);padding-top:20px;}
 </style>
 </head>
@@ -74,160 +65,110 @@
 <div class="wrap">
 
   <header>
-    <div class="kicker">Hands-on workshop · ~15 min</div>
-    <h1>Build a todo app —<br>by actually using Spade.</h1>
-    <p>You’ll create a small todo app (React front, FastAPI back) yourself, and learn each part
-       of Spade as you go. Nothing is pre-filled — you build it, you watch it appear.</p>
+    <div class="kicker">Hands-on · ~10 min · no terminal</div>
+    <h1>Build a todo app —<br>just by talking to Spade.</h1>
+    <p>You’ll create a real todo app (a React front, a small API behind it) without writing a line
+       of setup. You describe what you’re building; Spade plans it, fills the backlog, and puts
+       agents on the work. You watch it happen.</p>
   </header>
 
-  <div class="how">
-    <div class="ask"><b>💬 Just talk</b> — the real way you’d use Spade. Press <kbd>⌘</kbd><kbd>K</kbd> and chat normally — you <i>never</i> say “add an ADR”. Spade <b>notices</b> decisions, features, bugs and tasks in what you say and offers to capture them. <span style="color:var(--text3)">(needs an account · uses tokens)</span></div>
-    <div class="cmd"><b>⌘ Run a command</b> — instant and free. Each step has a copy-paste block. Same result, no agent.</div>
-  </div>
-  <div class="note">Every command below talks to your <b>running Spade</b> at <span class="pill">127.0.0.1:8765</span> — start the API + UI first (see the hands-on guide). Use whichever path you like at each step; mix and match.</div>
-
-  <!-- STEP 0 -->
-  <div class="step">
-    <div class="num">Step 0</div>
-    <h2>Create the project — your blank canvas</h2>
-    <p class="lead">Make a project to hold the app. We’ll call it <b>todo</b>.</p>
-
-    <div class="way cmd"><div class="h">⌘ Run</div>
-      <pre><code><span class="k">B</span>=127.0.0.1:8765 ; <span class="k">P</span>=todo
-<span class="k">curl</span> -s $B/projects -H 'content-type: application/json' \
-  -d "<span class="s">{\"id\":\"$P\",\"name\":\"Todo App\",\"path\":\"~/code/todo\"}</span>"
-<span class="k">curl</span> -s -X PUT $B/current-project -H 'content-type: application/json' -d "<span class="s">{\"project_id\":\"$P\"}</span>"</code></pre></div>
-    <div class="way ask" style="border:none;background:none;padding:0;margin:6px 0 0">
-      <p style="font-size:13.5px;color:var(--text3)">Prefer clicking? In the UI, open the project switcher (top-left) → <b>New project</b> → name it, give it a folder.</p></div>
-
-    <div class="check"><div class="h">Open the Backlog (sidebar). It’s empty — four bare columns. That’s your canvas.</div>
-      <a class="shot" href="screenshots/empty-backlog.png" target="_blank"><img src="screenshots/empty-backlog.png" alt="Empty backlog"></a></div>
+  <div class="before">
+    <span class="i">①</span>
+    <div><b>Before you start:</b> have Spade open in your browser, signed in, with at least one
+      account connected (your teammate or whoever set up Spade will have done this — you’ll see
+      accounts on the <b>Agent pool</b> page). That’s the only setup; everything else is in the app.</div>
   </div>
 
   <!-- STEP 1 -->
   <div class="step">
-    <div class="num">Step 1 · Plan</div>
-    <h2>Just say what you’re building</h2>
-    <p class="lead">Don’t enumerate ADRs or features — describe the app like you’d tell a teammate. Spade does the extracting.</p>
-
-    <div class="way ask"><div class="h">💬 Press <kbd>⌘</kbd><kbd>K</kbd> and talk</div>
-      <div class="quote">“Hey, let’s start a little todo app. People jot down todos, check them off when they’re done, edit or delete them, and filter to just the open ones — and down the line, due dates would be nice. I’m picturing a React + Vite front end with a small FastAPI + SQLite back end. Can you set up the brain and a starter backlog?”</div>
-      <p style="font-size:13.5px;color:var(--text2);margin-top:11px">From those few sentences — <b>no “create an ADR”, no lists</b> — Spade extracts and proposes:</p>
-      <ul style="margin:8px 0 0;padding-left:18px;color:var(--text2);font-size:13.5px;line-height:1.7">
-        <li><b>Decisions</b> — React + Vite (front), FastAPI + SQLite (back), recorded as <b>proposed</b> for you to confirm.</li>
-        <li><b>Features</b> — add, complete, edit/delete, filter, due dates, storage.</li>
-        <li><b>A starter backlog</b> — back-end + front-end tasks, each grounded in its feature.</li>
-      </ul>
-      <p style="font-size:13px;color:var(--text3);margin-top:10px">It replies with what it captured, e.g. <i>“Captured 2 decisions, 6 features, 10 tasks — all in the new project. Want me to mark the stack decisions active?”</i></p></div>
-
-    <div class="way cmd"><div class="h">⌘ Or build it by hand — free, no agent</div>
-      <p>Same result with three quick command blocks. <b>Decisions:</b></p>
-      <pre><code><span class="k">for</span> d <span class="k">in</span> "React + Vite for the frontend" "FastAPI backend" "SQLite via SQLModel"; <span class="k">do</span>
-  <span class="k">curl</span> -s $B/brain/nodes -H 'content-type: application/json' \
-    -d "<span class="s">{\"project_id\":\"$P\",\"type\":\"decision\",\"label\":\"$d\",\"status\":\"active\",\"owner\":\"You\"}</span>"; <span class="k">done</span></code></pre>
-      <p style="margin-top:11px"><b>Features:</b></p>
-      <pre><code><span class="k">for</span> f <span class="k">in</span> "Add a todo" "Complete a todo" "Edit & delete" \
-         "Filter by status" "Due dates" "Persisted storage"; <span class="k">do</span>
-  <span class="k">curl</span> -s $B/brain/nodes -H 'content-type: application/json' \
-    -d "<span class="s">{\"project_id\":\"$P\",\"type\":\"feature\",\"label\":\"$f\",\"owner\":\"You\"}</span>"; <span class="k">done</span></code></pre>
-      <p style="margin-top:11px"><b>Backlog (back + front):</b></p>
-      <pre><code><span class="k">add</span>(){ <span class="k">curl</span> -s $B/tasks -H 'content-type: application/json' \
-  -d "<span class="s">{\"project_id\":\"$P\",\"title\":\"$1\",\"feature\":\"$2\",\"priority\":$3}</span>" >/dev/null; }
-<span class="k">add</span> "SQLite schema + SQLModel models"        "Persisted storage" 0
-<span class="k">add</span> "POST /api/todos — create"               "Add a todo"        1
-<span class="k">add</span> "GET /api/todos — list + status filter"  "Filter by status"  1
-<span class="k">add</span> "PATCH /api/todos/:id — toggle & edit"   "Complete a todo"   1
-<span class="k">add</span> "DELETE /api/todos/:id"                  "Edit & delete"     2
-<span class="k">add</span> "Todo list view"                         "Add a todo"        1
-<span class="k">add</span> "Add-todo input form"                    "Add a todo"        1
-<span class="k">add</span> "Complete toggle + strikethrough"        "Complete a todo"   1
-<span class="k">add</span> "Filter tabs (All / Active / Done)"      "Filter by status"  2
-<span class="k">add</span> "Due-date picker"                        "Due dates"         2
-<span class="k">echo</span> "<span class="s">backlog ready ✓</span>"</code></pre></div>
+    <div class="num">Step 1</div>
+    <h2>Create your project</h2>
+    <p class="lead">A project holds everything — its plan, backlog and agents.</p>
+    <div class="do"><div class="b">🖱️</div><div class="t">Top-left of the sidebar, click the <b>project switcher</b> → <b>New project</b>.</div></div>
+    <div class="do"><div class="b">✍️</div><div class="t">Name it <b>Todo App</b> and point it at a folder (e.g. a fresh <b>~/code/todo</b>). Create.</div></div>
+    <div class="check"><div class="h">Open <b>Backlog</b> — four empty columns. Your blank canvas.</div>
+      <a class="shot" href="screenshots/empty-backlog.png" target="_blank"><img src="screenshots/empty-backlog.png" alt="Empty backlog"></a></div>
   </div>
 
   <!-- STEP 2 -->
   <div class="step">
-    <div class="num">Step 2 · See what it captured</div>
-    <h2>Your decisions &amp; your brain — from a paragraph</h2>
-    <p class="lead">Open these and check Spade understood you.</p>
+    <div class="num">Step 2 · the main event</div>
+    <h2>Just say what you’re building</h2>
+    <p class="lead">Don’t list features or decisions — describe the app like you’d tell a teammate. Spade does the extracting.</p>
+    <div class="do"><div class="b">⌘</div><div class="t">Press <kbd>⌘</kbd><kbd>K</kbd> to open <b>Ask the brain</b>, and type it out:</div></div>
 
-    <div class="check"><div class="h"><b>Decisions</b> — the stack choices it pulled out, each a real ADR.</div>
-      <a class="shot" href="screenshots/tasker-decisions.png" target="_blank"><img src="screenshots/tasker-decisions.png" alt="Decisions"></a></div>
-
-    <div class="check" style="margin-top:18px"><div class="h"><b>Product brain</b> — every feature it heard, as a connected node. <b>Graph &amp; Issues</b> already flags any feature with no decision yet.</div>
-      <a class="shot" href="screenshots/tasker-brain.png" target="_blank"><img src="screenshots/tasker-brain.png" alt="Product brain"></a></div>
+    <div class="say">
+      <div class="h">💬 You say</div>
+      <div class="quote">“Hey, let’s start a little todo app. People jot down todos, check them off when they’re done, edit or delete them, and filter to just the open ones — and down the line, due dates would be nice. I’m picturing a React + Vite front end with a small FastAPI + SQLite back end. Can you set up the brain and a starter backlog?”</div>
+      <p class="after">From those few sentences — <b>no “create an ADR”, no lists</b> — Spade pulls out and proposes:</p>
+      <ul>
+        <li><b>Decisions</b> — React + Vite (front) and FastAPI + SQLite (back), recorded as <b>proposed</b> for you to confirm.</li>
+        <li><b>Features</b> — add, complete, edit / delete, filter, due dates, storage.</li>
+        <li><b>A starter backlog</b> — back-end and front-end tasks, each grounded in its feature.</li>
+      </ul>
+      <p class="after">It replies with what it captured — e.g. <i>“Captured 2 decisions, 6 features and 10 tasks. Want me to mark the stack decisions active?”</i></p>
+    </div>
+    <div class="note"><b>That’s the whole idea.</b> You talk about the product; Spade keeps the plan and backlog honest. You never fill in forms.</div>
   </div>
 
   <!-- STEP 3 -->
   <div class="step">
-    <div class="num">Step 3 · Build</div>
-    <h2>The backlog it drafted</h2>
-    <p class="lead">Back-end and front-end work, as cards — each grounded in its feature.</p>
-    <div class="check"><div class="h">Open <b>Backlog</b> — your cards, ready to go. Click one to see its detail and the feature it’s tied to. <span style="color:var(--text3)">(shown with cards already moved across columns)</span></div>
-      <a class="shot" href="screenshots/tasker-backlog.png" target="_blank"><img src="screenshots/tasker-backlog.png" alt="Backlog"></a></div>
+    <div class="num">Step 3</div>
+    <h2>See what it understood</h2>
+    <p class="lead">Open these and check it heard you right.</p>
+    <div class="check"><div class="h"><b>Decisions</b> — the stack choices it pulled from your paragraph, each a real ADR.</div>
+      <a class="shot" href="screenshots/tasker-decisions.png" target="_blank"><img src="screenshots/tasker-decisions.png" alt="Decisions"></a></div>
+    <div class="check" style="margin-top:18px"><div class="h"><b>Product brain</b> — every feature it heard, as a connected node. <b>Graph &amp; Issues</b> already flags any feature with no decision yet.</div>
+      <a class="shot" href="screenshots/tasker-brain.png" target="_blank"><img src="screenshots/tasker-brain.png" alt="Product brain"></a></div>
   </div>
 
   <!-- STEP 4 -->
   <div class="step">
-    <div class="num">Step 4 · Build</div>
-    <h2>Put an agent on a task</h2>
-    <p class="lead">Run one task through the 4-stage pipeline (developer → reviewer → integrator → documentor).</p>
-
-    <div class="way ask"><div class="h">💬 Ask <span class="live">live agent</span></div>
-      <p>Connect an account once (below), then:</p>
-      <div class="quote">“Run the ‘POST /api/todos — create’ task through the pipeline.”</div>
-      <p style="margin-top:9px">Spade spawns a real developer agent in your project folder and tracks it on the Orchestrator.</p></div>
-
-    <div class="way cmd"><div class="h">⌘ Run — free, no agent</div>
-      <pre><code><span class="c"># grab a task id from your backlog</span>
-<span class="k">curl</span> -s "$B/tasks?project_id=$P" | <span class="k">python3</span> -c "import sys,json
-for t in json.load(sys.stdin)['tasks'][:4]: print(t['id'], t['title'])"
-<span class="c"># run it through all 4 stages instantly (fake spawn)</span>
-<span class="c"># NOTE: this helper writes in-process — point it at your server's data dir:</span>
-<span class="v">TUI_PILOT_HOME</span>=~/spade-qa <span class="k">../../.venv/bin/python</span> -m demo --advance <span class="v">SPD-002</span> --project todo --to shipped</code></pre></div>
-
-    <div class="check"><div class="h">Open <b>Orchestrator</b> — your run, moving through its stages. <b>Sprints</b> updates too: its counts come from these real runs.</div>
-      <a class="shot" href="screenshots/tasker-orchestrator.png" target="_blank"><img src="screenshots/tasker-orchestrator.png" alt="Orchestrator"></a></div>
+    <div class="num">Step 4</div>
+    <h2>Your backlog — already drafted</h2>
+    <p class="lead">Back-end and front-end work, as cards, each tied to its feature.</p>
+    <div class="do"><div class="b">🖱️</div><div class="t">Open <b>Backlog</b>, then <b>click any card</b> to see its detail and the feature it’s grounded in.</div></div>
+    <div class="check"><div class="h">Cards ready to go, across the columns. <span style="color:var(--text3)">(shown with a few already moved along)</span></div>
+      <a class="shot" href="screenshots/tasker-backlog.png" target="_blank"><img src="screenshots/tasker-backlog.png" alt="Backlog"></a></div>
   </div>
 
   <!-- STEP 5 -->
   <div class="step">
-    <div class="num">Step 5 · Inspect</div>
-    <h2>See what Spade noticed</h2>
-    <p class="lead">It reasons over your graph — for free.</p>
-    <div class="check"><div class="h">Open <b>Graph &amp; Issues</b> — it flags the <b>undecided feature</b> and (if you added the proposed “user accounts” decision) an <b>unresolved decision</b>. Resolve one by linking a decision and watch it disappear.</div>
+    <div class="num">Step 5</div>
+    <h2>Put an agent on a task <span class="live">live agent</span></h2>
+    <p class="lead">Pick where to start — just say so. Spade runs that task through its pipeline (developer → reviewer → integrator → documentor).</p>
+    <div class="say">
+      <div class="h">💬 You say</div>
+      <div class="quote">“Let’s get started on the create-todo endpoint — put a developer on it.”</div>
+    </div>
+    <div class="check"><div class="h">Open <b>Orchestrator</b> — your run, moving through its stages. <b>Sprints</b> updates too, straight from the real runs.</div>
+      <a class="shot" href="screenshots/tasker-orchestrator.png" target="_blank"><img src="screenshots/tasker-orchestrator.png" alt="Orchestrator"></a></div>
+  </div>
+
+  <!-- STEP 6 -->
+  <div class="step">
+    <div class="num">Step 6</div>
+    <h2>What Spade noticed on its own</h2>
+    <p class="lead">It reasons over your graph and surfaces what’s missing.</p>
+    <div class="do"><div class="b">🖱️</div><div class="t">Open <b>Graph &amp; Issues</b>.</div></div>
+    <div class="check"><div class="h">It flags an <b>undecided feature</b> and any <b>unresolved proposal</b>. Mention the missing decision in chat and watch the flag clear.</div>
       <a class="shot" href="screenshots/tasker-graph-issues.png" target="_blank"><img src="screenshots/tasker-graph-issues.png" alt="Graph and Issues"></a></div>
   </div>
 
   <!-- FINALE -->
   <div class="step">
     <div class="num">That’s the loop</div>
-    <h2>Now do it for real — just talk to it <span class="live">live agent</span></h2>
-    <p class="lead">You’ve seen every surface. Day to day, you don’t curl — you ask. Connect an account once:</p>
-    <pre><code><span class="k">curl</span> -s $B/accounts/import -H 'content-type: application/json' \
-  -d '<span class="s">{"id":"me","label":"My Claude","config_dir":"~/.claude"}</span>'
-<span class="k">curl</span> -s -X PUT $B/projects/todo/accounts -H 'content-type: application/json' -d '<span class="s">{"account_ids":["me"]}</span>'</code></pre>
-    <p style="color:var(--text2);font-size:14.5px;margin:14px 0 0">Then <kbd>⌘</kbd><kbd>K</kbd> and just think out loud:</p>
-    <div class="quote" style="margin-top:9px">“I’m thinking we add dark mode — probably theme it with CSS variables. Users have been asking for it too.”</div>
-    <p style="color:var(--text3);font-size:13.5px;margin-top:11px">You proposed nothing explicitly — but Spade hears a <b>feature</b> (dark mode), a <b>decision</b> (CSS-variable theming, recorded as proposed), and <b>feedback</b> (users asking), and offers to capture all three. Watch the brain and backlog update.</p>
-
-    <div class="note"><b>I pre-loaded a finished copy</b> as <span class="pill">Tasker · Todo app</span> in your running app — open it to compare your build against the goal. Want a different starter (a tiny CRM, a flashcards app)? Tell me the idea and it becomes a one-command template.</div>
+    <h2>Keep talking — it keeps up</h2>
+    <p class="lead">From here you just work out loud. Spade captures as you go.</p>
+    <div class="say">
+      <div class="h">💬 You say</div>
+      <div class="quote">“I’m thinking we add dark mode — probably theme it with CSS variables. Users have been asking for it, too.”</div>
+      <p class="after">You proposed nothing explicitly — but Spade hears a <b>feature</b> (dark mode), a <b>decision</b> (CSS-variable theming, as proposed) and <b>feedback</b> (users asking), and offers to capture all three. Watch the brain and backlog update.</p>
+    </div>
+    <div class="note"><b>A finished copy is already in your app</b> as <span style="color:var(--text)">Tasker · Todo app</span> — open it from the project switcher to see where this goes. Want a different starter to play with (a tiny CRM, a flashcards app)? Just ask.</div>
   </div>
 
-  <footer>
-    Spade workshop · commands hit your running API at <span class="pill">127.0.0.1:8765</span> ·
-    explore at <a href="http://localhost:3000">localhost:3000</a>. The screenshot-tour is in
-    <span class="pill">docs/LIFECYCLE-TOUR.html</span>.
-  </footer>
+  <footer>Spade · everything here happens in the app at <a href="http://localhost:3000">localhost:3000</a>. The screenshot tour is in <span style="color:var(--text3)">LIFECYCLE-TOUR.html</span>.</footer>
 </div>
-<script>
-  document.querySelectorAll("pre").forEach(pre=>{
-    const b=document.createElement("button");b.className="copy";b.textContent="copy";
-    b.onclick=()=>{navigator.clipboard.writeText(pre.querySelector("code").innerText);
-      b.textContent="copied";setTimeout(()=>b.textContent="copy",1200);};
-    pre.appendChild(b);
-  });
-</script>
 </body>
 </html>
