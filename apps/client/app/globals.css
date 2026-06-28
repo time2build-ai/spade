@@ -1239,6 +1239,20 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .brain-explorer .bx-keys .k { font-family: var(--mono); font-size: 10.5px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 .brain-explorer .bx-section-h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); margin: 26px 0 10px; font-family: var(--mono); }
 .brain-explorer .bx-prose { font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
+/* rich record: actions, summary, ADR refs, code-surface, activity (V2) */
+.brain-explorer .bx-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.brain-explorer .bx-summary { margin: 18px 0 6px; padding-left: 14px; border-left: 2px solid var(--accent); font-size: 17px; line-height: 1.5; color: var(--text); letter-spacing: -0.005em; }
+.brain-explorer .bx-ref { color: var(--accent); border-bottom: 1px dotted rgba(201,184,255,.4); cursor: pointer; padding-bottom: 1px; }
+.brain-explorer .bx-ref:hover { background: rgba(201,184,255,.08); }
+.brain-explorer .bx-files { border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin-top: 2px; }
+.brain-explorer .bx-file { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 8px 14px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.brain-explorer .bx-file:last-child { border-bottom: none; }
+.brain-explorer .bx-file:hover { background: var(--bg-1); }
+.brain-explorer .bx-activity { position: relative; padding-left: 6px; }
+.brain-explorer .bx-evt { display: grid; grid-template-columns: 96px 14px 1fr; gap: 10px; align-items: center; padding: 7px 0; font-size: 12.5px; color: var(--text-2); border-bottom: 1px solid var(--line); }
+.brain-explorer .bx-evt:last-child { border-bottom: none; }
+.brain-explorer .bx-evt-time { color: var(--text-4); font-size: 11px; }
+.brain-explorer .bx-evt-dot { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 3px var(--bg); justify-self: center; }
 .brain-explorer .bx-relations { border-left: 1px solid var(--line); background: var(--bg-1); overflow-y: auto; padding: 18px 16px 24px; }
 .brain-explorer .bx-rel-h { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding-bottom: 14px; margin-bottom: 4px; font-family: var(--mono); }
 .brain-explorer .bx-anchor { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px 14px; margin-bottom: 18px; }

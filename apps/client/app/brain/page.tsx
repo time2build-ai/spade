@@ -3,6 +3,7 @@
 import * as React from "react";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 import { BrainLegend } from "@/components/brain/BrainLegend";
 import { BrainExplorer } from "@/components/brain/BrainExplorer";
 import { GraphCanvas } from "@/components/brain/GraphCanvas";
@@ -162,6 +163,21 @@ export default function BrainPage() {
                 · {subtitle}
               </span>
             )}
+          </>
+        }
+        actions={
+          <>
+            <div className="brain-search">
+              <Icon name="search" size={12} />
+              <input placeholder="Ask the brain…" aria-label="Search the brain" />
+              <span className="badge mono">⌘K</span>
+            </div>
+            <button type="button" className="btn">
+              <Icon name="spark" size={13} /> Find gaps
+            </button>
+            <button type="button" className="btn primary">
+              <Icon name="doc" size={13} /> Export to MCP
+            </button>
           </>
         }
       />

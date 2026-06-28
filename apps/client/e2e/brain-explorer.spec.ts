@@ -57,11 +57,27 @@ test.describe("brain explorer", () => {
     await expect(page.locator(".brain-explorer .bx-relations")).toBeVisible();
   });
 
-  test("defaults to the first feature and shows its record", async ({ page }) => {
+  test("defaults to the first feature and shows the rich record", async ({ page }) => {
     await expect(page.locator(".bx-title")).toHaveText("Checkout");
-    // Keys grid shows the 3 honest fields.
-    await expect(page.locator(".bx-keys .k")).toHaveText(["Type", "Created", "Edges"]);
+    // Rich keys grid (Type real + seeded owner/source/confidence/coverage).
+    await expect(page.locator(".bx-keys .k")).toHaveText([
+      "Type", "Owner", "Last touched", "Source", "Confidence", "Coverage",
+    ]);
     await expect(page.locator(".bx-prose")).toContainText("Checkout detail prose.");
+  });
+
+  test("shows the rich record sections (code surface, activity, MCP)", async ({ page }) => {
+    await expect(page.locator(".bx-detail")).toContainText("Code surface");
+    await expect(page.locator(".bx-detail .bx-files .bx-file").first()).toBeVisible();
+    await expect(page.locator(".bx-detail")).toContainText("Activity");
+    await expect(page.locator(".bx-detail .bx-activity .bx-evt").first()).toBeVisible();
+    await expect(page.getByTestId("mcp-block")).toContainText("MCP server");
+  });
+
+  test("page head has the search + Find gaps + Export to MCP actions", async ({ page }) => {
+    await expect(page.locator(".brain-search input")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Find gaps/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Export to MCP/ })).toBeVisible();
   });
 
   test("selecting a tree feature updates the center record", async ({ page }) => {

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { NODE_TYPE_META } from "@/lib/adapters";
+import { brainNodeSeed } from "@/lib/demo";
 import type { BrainNode, BrainEdge, BrainNodeType } from "@/lib/types";
 
 /**
@@ -31,6 +32,17 @@ const PLURAL: Record<BrainNodeType, string> = {
   bug: "Bugs",
   metric: "Metrics",
 };
+
+/** Render prose with `ADR-NNN` tokens as cross-link chips. */
+function renderProse(text: string): React.ReactNode {
+  return text.split(/(ADR-\d+)/g).map((p, i) =>
+    /^ADR-\d+$/.test(p) ? (
+      <a key={i} className="bx-ref">{p}</a>
+    ) : (
+      <React.Fragment key={i}>{p}</React.Fragment>
+    ),
+  );
+}
 
 export interface BrainExplorerProps {
   nodes: BrainNode[];
@@ -147,28 +159,68 @@ export function BrainExplorer({ nodes, edges, selectedId, onSelect }: BrainExplo
                 </div>
                 <h2 className="bx-title">{sel.label}</h2>
               </div>
-            </div>
-
-            {/* Keys grid — only real, derivable fields (3 cells = one clean row). */}
-            <div className="bx-keys">
-              <div>
-                <span className="k">Type</span>
-                <span>{NODE_TYPE_META[sel.type].label}</span>
-              </div>
-              <div>
-                <span className="k">Created</span>
-                <span className="mono">{sel.created_at ? sel.created_at.slice(0, 10) : "—"}</span>
-              </div>
-              <div>
-                <span className="k">Edges</span>
-                <span className="mono">{neighbors.length}</span>
+              <div className="bx-actions">
+                <button className="btn ghost">Edit</button>
+                <button className="btn ghost">⋯</button>
               </div>
             </div>
 
-            <div className="bx-section-h">Description</div>
-            <div className="bx-prose">
-              {sel.detail ? sel.detail : <span className="muted">No description recorded.</span>}
-            </div>
+            {/* Keys grid — real Type + edges + node owner/source/confidence/
+                coverage (seeded; real-wins where the API exposes them). */}
+            {(() => {
+              const s = brainNodeSeed(sel.id, sel.detail);
+              return (
+                <>
+                  <div className="bx-keys">
+                    <div><span className="k">Type</span><span>{NODE_TYPE_META[sel.type].label}</span></div>
+                    <div><span className="k">Owner</span><span>{s.owner}</span></div>
+                    <div><span className="k">Last touched</span><span className="mono">{s.lastTouched}</span></div>
+                    <div><span className="k">Source</span><span>{s.source}</span></div>
+                    <div>
+                      <span className="k">Confidence</span>
+                      <span style={{ color: s.confidence.color }}>● {s.confidence.label}</span>
+                    </div>
+                    <div><span className="k">Coverage</span><span className="mono">{s.coverage}%</span></div>
+                  </div>
+
+                  {sel.type === "feature" && (
+                    <div className="bx-summary serif">{s.summary}</div>
+                  )}
+
+                  <div className="bx-section-h">Description</div>
+                  <div className="bx-prose">
+                    {sel.detail ? renderProse(sel.detail) : renderProse(s.summary)}
+                  </div>
+
+                  <div className="bx-section-h">
+                    Code surface
+                    <span className="muted mono" style={{ fontSize: 11, marginLeft: 8 }}>
+                      {s.codeFiles.length} files · {1200 + s.coverage * 34} LOC · last commit {s.lastTouched}
+                    </span>
+                  </div>
+                  <div className="bx-files">
+                    {s.codeFiles.map(([path, diff, who]) => (
+                      <div className="bx-file" key={path}>
+                        <span className="mono" style={{ color: "var(--text-2)" }}>{path}</span>
+                        <span className="mono" style={{ color: "var(--text-3)", fontSize: 11 }}>{diff}</span>
+                        <span className="muted" style={{ fontSize: 11.5 }}>{who}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bx-section-h">Activity</div>
+                  <div className="bx-activity">
+                    {s.activity.map(([time, color, text], i) => (
+                      <div className="bx-evt" key={i}>
+                        <span className="bx-evt-time mono">{time}</span>
+                        <span className="bx-evt-dot" style={{ background: color }} />
+                        <span>{text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
       </section>
@@ -229,6 +281,20 @@ export function BrainExplorer({ nodes, edges, selectedId, onSelect }: BrainExplo
             </div>
           </React.Fragment>
         ))}
+
+        {/* MCP server block (reference) */}
+        <div className="bx-rel-divider" />
+        <div className="bx-rel-group" data-testid="mcp-block">
+          <div className="bx-rel-group-h">
+            <span style={{ color: "var(--text-3)" }}>∿</span>
+            <span>MCP server</span>
+          </div>
+          <div className="muted mono" style={{ fontSize: 11, lineHeight: 1.7, padding: "4px 0" }}>
+            localhost:8717
+            <br />
+            <span style={{ color: "var(--green)" }}>●</span> connected · 2 sessions reading
+          </div>
+        </div>
       </aside>
     </div>
   );
