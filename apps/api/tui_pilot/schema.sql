@@ -96,3 +96,11 @@ CREATE TABLE IF NOT EXISTS pipeline_stages (
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY, value TEXT
 );
+
+-- Sprints: a project's iteration cadence. Per-sprint task counts are derived
+-- from pipeline runs at read time, not stored on the row.
+CREATE TABLE IF NOT EXISTS sprints (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, number INTEGER NOT NULL,
+  day_label TEXT, state TEXT DEFAULT 'active', started_at TEXT, created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);

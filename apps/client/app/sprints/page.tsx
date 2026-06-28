@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { useProject } from "@/lib/useProject";
+import { api } from "@/lib/api";
 import { DEMO_SPRINTS } from "@/lib/demo";
 
 const SEGS = [
@@ -39,8 +42,32 @@ function BurnSvg({ rem, ideal }: { rem: number[]; ideal: number[] }) {
 }
 
 export default function SprintsPage() {
-  const d = DEMO_SPRINTS;
-  const c = d.current;
+  const { project } = useProject();
+  const { data } = useSWR(
+    project ? ["sprints", project.id] : null,
+    () => api.sprints(project!.id),
+  );
+  // Real-wins: real sprint rows drive the hero + rows (counts derived server-side
+  // from pipeline runs); when there are none we fall back to DEMO_SPRINTS so the
+  // page still looks full. Burn-down has no real source yet → always seeded.
+  const real = data?.sprints ?? [];
+  const useReal = real.length > 0;
+
+  const rows = useReal
+    ? real.map((s) => ({
+        num: s.number,
+        state: s.state === "active" ? "current" : s.state,
+        shipped: s.shipped, review: s.review, progress: s.progress, queued: s.queued,
+        total: s.total, velocity: "—",
+      }))
+    : DEMO_SPRINTS.rows;
+
+  const cur = useReal ? (real.find((s) => s.state === "active") ?? real[0]) : null;
+  const c = cur
+    ? { num: cur.number, day: cur.day_label ?? "", shipped: cur.shipped, review: cur.review, progress: cur.progress, queued: cur.queued }
+    : DEMO_SPRINTS.current;
+  const burndown = DEMO_SPRINTS.burndown;
+  const ideal = DEMO_SPRINTS.ideal;
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <PageHead title="Sprints" />
@@ -65,14 +92,14 @@ export default function SprintsPage() {
         {/* Burn-down */}
         <section className="sprint-burn" data-testid="sprint-burn">
           <div className="sprint-sec-h">Burn-down</div>
-          <BurnSvg rem={d.burndown} ideal={d.ideal} />
+          <BurnSvg rem={burndown} ideal={ideal} />
         </section>
 
         {/* Sprint rows */}
         <section>
           <div className="sprint-sec-h">All sprints</div>
           <div className="sprint-rows">
-            {d.rows.map((r) => (
+            {rows.map((r) => (
               <div className={"sprint-row" + (r.state === "current" ? " current" : "")} data-testid="sprint-row" key={r.num}>
                 <div className="sprint-row-num">
                   Sprint {r.num}

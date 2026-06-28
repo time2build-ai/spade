@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import brain, pipelines, projects, tasks
+from . import brain, pipelines, projects, sprints, tasks
 
 router = APIRouter()
 
@@ -385,6 +385,32 @@ def create_pipeline(req: PipelineCreate) -> dict:
 @router.get("/pipelines")
 def list_pipelines(project_id: str) -> dict:
     return {"pipelines": pipelines.list_for_project(project_id)}
+
+
+# ---- sprints --------------------------------------------------------------
+
+
+class SprintCreate(BaseModel):
+    project_id: str
+    number: int
+    day_label: str | None = None
+    state: str = "active"
+    started_at: str | None = None
+
+
+@router.get("/sprints")
+def list_sprints(project_id: str) -> dict:
+    return {"sprints": sprints.list_for_project(project_id)}
+
+
+@router.post("/sprints")
+def create_sprint(req: SprintCreate) -> dict:
+    if projects.get(req.project_id) is None:
+        raise HTTPException(404, f"no project {req.project_id!r}")
+    return sprints.create(
+        project_id=req.project_id, number=req.number,
+        day_label=req.day_label, state=req.state, started_at=req.started_at,
+    )
 
 
 @router.get("/pipelines/{run_id}")

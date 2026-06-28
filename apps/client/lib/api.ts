@@ -8,6 +8,7 @@ import type {
   PipelineRun,
   Project,
   Session,
+  Sprint,
   Task,
 } from "./types";
 
@@ -129,6 +130,10 @@ export const api = {
       `/pipelines?project_id=${encodeURIComponent(projectId)}`,
     ),
   pipeline: (runId: string) => http<PipelineRun>(`/pipelines/${runId}`),
+  sprints: (projectId: string) =>
+    http<{ sprints: Sprint[] }>(
+      `/sprints?project_id=${encodeURIComponent(projectId)}`,
+    ),
   startPipeline: (runId: string) =>
     http<PipelineRun>(`/pipelines/${runId}/start`, { method: "POST" }),
   advancePipeline: (runId: string, report?: string | null) =>

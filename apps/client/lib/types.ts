@@ -171,3 +171,19 @@ export type PipelineRun = {
   stages_done?: number;
   stages_total?: number;
 };
+
+// Phase 3: real sprint rows. Counts are derived server-side from pipeline runs.
+export type Sprint = {
+  id: string;
+  project_id: string;
+  number: number;
+  day_label: string | null;
+  state: string;
+  started_at: string | null;
+  created_at: string | null;
+  shipped: number;
+  review: number;
+  progress: number;
+  queued: number;
+  total: number;
+};
