@@ -1,19 +1,9 @@
 import * as React from "react";
 import Link from "next/link";
-import { Priority, Chip } from "@/components/ui";
+import { Priority } from "@/components/ui";
 import { groupNodesByType } from "@/lib/adapters";
-import type { BrainNode, BrainNodeType, Task } from "@/lib/types";
-import type { ChipType } from "@/components/ui";
-
-/** Render order + token color per brain-node type, matching .intel-bar / .chip. */
-const NODE_TYPES: { type: BrainNodeType; color: string }[] = [
-  { type: "feature", color: "var(--accent)" },
-  { type: "decision", color: "var(--amber)" },
-  { type: "feedback", color: "var(--blue)" },
-  { type: "bug", color: "var(--red)" },
-  { type: "metric", color: "var(--teal)" },
-  { type: "convention", color: "var(--pink)" },
-];
+import { taskCardSeed } from "@/lib/demo";
+import type { BrainNode, Task } from "@/lib/types";
 
 export interface TaskCardProps {
   task: Task;
@@ -22,9 +12,9 @@ export interface TaskCardProps {
 }
 
 /**
- * Presentational backlog card. Resolves the task's grounded brain-node ids to
- * objects, summarizes them by type into an intel bar + chip meta, and links to
- * the task detail route. No agent endpoint in M1 -> footer shows "unassigned".
+ * Backlog card (reference TaskCard). Intel bar + chips summarise the task's
+ * linked intelligence; feedback/bug/decision/metric counts come from the real
+ * linked brain nodes, meetings + assignee + flag are seeded (real-wins).
  */
 export function TaskCard({ task, nodesById }: TaskCardProps) {
   const resolved: BrainNode[] = [];
@@ -32,12 +22,26 @@ export function TaskCard({ task, nodesById }: TaskCardProps) {
     const node = nodesById[id];
     if (node) resolved.push(node);
   }
-  const grouped = groupNodesByType(resolved);
+  const g = groupNodesByType(resolved);
+  const seed = taskCardSeed(task.id);
 
-  const segments = NODE_TYPES.map((t) => ({
-    ...t,
-    count: grouped[t.type].length,
-  })).filter((s) => s.count > 0);
+  const links = {
+    feedback: g.feedback.length,
+    bugs: g.bug.length,
+    decisions: g.decision.length,
+    meetings: seed.meetings,
+    metrics: g.metric.length,
+  };
+  const segs: { k: string; color: string; n: number }[] = [
+    { k: "feedback", color: "var(--blue)", n: links.feedback },
+    { k: "bug", color: "var(--red)", n: links.bugs },
+    { k: "decision", color: "var(--amber)", n: links.decisions },
+    { k: "meeting", color: "#c9c9c9", n: links.meetings },
+    { k: "metric", color: "var(--teal)", n: links.metrics },
+  ];
+  const total = segs.reduce((acc, s) => acc + s.n, 0);
+  const a = seed.assignee;
+  const building = a?.ai && task.status === "in_progress";
 
   return (
     <Link
@@ -49,55 +53,44 @@ export function TaskCard({ task, nodesById }: TaskCardProps) {
       <div className="tc-head">
         <Priority level={task.priority} />
         <span>{task.id}</span>
-        {task.feature ? (
-          <span style={{ marginLeft: "auto" }}>{task.feature}</span>
-        ) : null}
+        {task.feature ? <span style={{ marginLeft: "auto" }}>{task.feature}</span> : null}
       </div>
 
       <h4>{task.title}</h4>
 
-      <div
-        className="intel-bar"
-        title={
-          resolved.length > 0
-            ? `${resolved.length} linked intelligence items`
-            : "no linked intelligence"
-        }
-      >
-        {segments.length > 0 ? (
-          segments.map((s) => (
-            <span
-              key={s.type}
-              data-intel-type={s.type}
-              style={{ background: s.color, flex: s.count }}
-              title={`${s.count} ${s.type}`}
-            />
-          ))
-        ) : (
-          <span style={{ background: "var(--line)", opacity: 0.5 }} />
-        )}
-      </div>
+      {total > 0 && (
+        <div className="intel-bar" title={`${total} linked intelligence items`}>
+          {segs.filter((s) => s.n > 0).map((s) => (
+            <span key={s.k} data-intel-type={s.k} style={{ background: s.color, flex: s.n }} title={`${s.n} ${s.k}`} />
+          ))}
+        </div>
+      )}
 
       <div className="tc-meta">
-        {segments.map((s) => (
-          <Chip key={s.type} type={s.type as ChipType} data-chip-type={s.type}>
-            {s.count} {s.type}
-          </Chip>
-        ))}
+        {links.feedback > 0 && <span className="chip feedback"><span className="d" />{links.feedback} feedback</span>}
+        {links.bugs > 0 && <span className="chip bug"><span className="d" />{links.bugs} bug</span>}
+        {links.decisions > 0 && <span className="chip decision"><span className="d" />{links.decisions} ADR</span>}
+        {links.meetings > 0 && <span className="chip meeting"><span className="d" />{links.meetings} mtg</span>}
+        {links.metrics > 0 && <span className="chip metric"><span className="d" />metric</span>}
       </div>
 
       <div className="tc-foot">
         <div className="left">
-          {/* no agent endpoint M1 */}
-          <span
-            className="avatar"
-            style={{ background: "transparent", borderStyle: "dashed" }}
-            aria-hidden="true"
-          >
-            ·
-          </span>
-          <span>unassigned</span>
+          {a ? (
+            <span className={"avatar" + (a.ai ? " ai" : "")} title={a.name}>
+              {a.ai ? "◆" : a.name.slice(0, 2).toUpperCase()}
+            </span>
+          ) : (
+            <span className="avatar" style={{ background: "transparent", borderStyle: "dashed" }} aria-hidden="true">·</span>
+          )}
+          {building && (
+            <span className="agent-running">
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
+              building
+            </span>
+          )}
         </div>
+        {seed.flag && <span className="muted" style={{ color: "var(--amber)", marginLeft: "auto" }}>{seed.flag}</span>}
       </div>
     </Link>
   );

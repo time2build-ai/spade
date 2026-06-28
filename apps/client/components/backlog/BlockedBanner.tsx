@@ -33,11 +33,13 @@ export function BlockedBanner({ tasks }: BlockedBannerProps) {
         }}
       >
         <span style={{ fontSize: 14, color: "var(--amber)" }}>⚠</span>
-        <div style={{ fontSize: 12.5 }}>
-          <b>{first.id}</b> <span className="muted">· {first.title}</span> — blocked.
-          {rest.length > 0 && (
-            <span className="muted"> +{rest.length} more blocked</span>
-          )}
+        <div style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span>
+            <b>{first.id}</b> <span className="muted">· {first.title}</span> — paused at review.
+          </span>
+          <span className="muted">Reviewer flagged conflict with</span>
+          <span className="chip decision" data-testid="banner-adr"><span className="d" />ADR-014</span>
+          {rest.length > 0 && <span className="muted">· +{rest.length} more blocked</span>}
         </div>
         <Link href="/gate" className="btn" style={{ marginLeft: "auto" }}>
           Open gate →

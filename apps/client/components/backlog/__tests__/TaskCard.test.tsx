@@ -66,36 +66,38 @@ describe("TaskCard", () => {
     expect(screen.getByText("Billing")).toBeInTheDocument();
   });
 
-  test("resolves 2 node types into 2 chips + 2 intel segments", () => {
+  test("resolves linked node types into chips + intel segments (reference wording)", () => {
     const nodesById = {
       n1: node("n1", "feedback"),
       n2: node("n2", "bug"),
     };
     const task = makeTask({ nodes: ["n1", "n2"] });
-    const { container } = render(
-      <TaskCard task={task} nodesById={nodesById} />,
-    );
+    const { container } = render(<TaskCard task={task} nodesById={nodesById} />);
 
-    expect(container.querySelectorAll("[data-chip-type]")).toHaveLength(2);
-    expect(container.querySelectorAll("[data-intel-type]")).toHaveLength(2);
-    expect(
-      container.querySelector('[data-chip-type="feedback"]'),
-    ).toBeInTheDocument();
-    expect(
-      container.querySelector('[data-chip-type="bug"]'),
-    ).toBeInTheDocument();
+    expect(container.querySelector(".chip.feedback")).toHaveTextContent("1 feedback");
+    expect(container.querySelector(".chip.bug")).toHaveTextContent("1 bug");
+    expect(container.querySelector('[data-intel-type="feedback"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-intel-type="bug"]')).toBeInTheDocument();
   });
 
-  test("shows faint empty intel bar and no chips when no nodes", () => {
+  test("a decision node renders an 'ADR' chip (reference wording)", () => {
+    const nodesById = { d1: node("d1", "decision") };
+    const { container } = render(<TaskCard task={makeTask({ nodes: ["d1"] })} nodesById={nodesById} />);
+    expect(container.querySelector(".chip.decision")).toHaveTextContent("1 ADR");
+  });
+
+  test("no node-derived chips when there are no linked nodes", () => {
     const { container } = render(<TaskCard task={makeTask()} nodesById={{}} />);
-    expect(container.querySelectorAll("[data-chip-type]")).toHaveLength(0);
-    expect(container.querySelectorAll("[data-intel-type]")).toHaveLength(0);
-    expect(container.querySelector(".intel-bar")).toBeInTheDocument();
+    // meetings is seeded, but feedback/bug/decision/metric come from real nodes.
+    expect(container.querySelector(".chip.feedback")).toBeNull();
+    expect(container.querySelector(".chip.bug")).toBeNull();
+    expect(container.querySelector(".chip.decision")).toBeNull();
+    expect(container.querySelector(".chip.metric")).toBeNull();
   });
 
-  test("footer shows unassigned (no agent endpoint M1)", () => {
-    render(<TaskCard task={makeTask()} nodesById={{}} />);
-    expect(screen.getByText("unassigned")).toBeInTheDocument();
+  test("footer shows an assignee avatar", () => {
+    const { container } = render(<TaskCard task={makeTask()} nodesById={{}} />);
+    expect(container.querySelector(".tc-foot .avatar")).toBeInTheDocument();
   });
 });
 

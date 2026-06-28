@@ -91,6 +91,33 @@ export type BrainNodeSeed = {
   activity: [string, string, string][];
 };
 
+// ── Backlog task card enrichment ────────────────────────────────────────────
+// Real-wins: feedback/bug/decision/metric counts come from the task's linked
+// brain nodes; meetings + assignee + flag are seeded. BACKEND: assignee, sprint,
+// meeting links, card flag.
+const DEMO_ASSIGNEES: ({ name: string; ai: boolean } | null)[] = [
+  { name: "Claude · Developer", ai: true },
+  { name: "Robert M.", ai: false },
+  { name: "Maya P.", ai: false },
+  { name: "Claude · Reviewer", ai: true },
+  null,
+];
+const DEMO_FLAGS: (string | null)[] = [null, null, null, "needs spec", "stale 6d", null];
+
+export type TaskCardSeed = {
+  meetings: number;
+  assignee: { name: string; ai: boolean } | null;
+  flag: string | null;
+};
+export function taskCardSeed(id: string): TaskCardSeed {
+  const h = hashId(id);
+  return {
+    meetings: h % 3,
+    assignee: DEMO_ASSIGNEES[h % DEMO_ASSIGNEES.length],
+    flag: DEMO_FLAGS[h % DEMO_FLAGS.length],
+  };
+}
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";

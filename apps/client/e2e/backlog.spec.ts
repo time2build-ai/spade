@@ -23,9 +23,15 @@ const TASKS = [
   origin_source: null,
   description: null,
   created_at: "2026-01-01T00:00:00Z",
-  nodes: [],
+  nodes: id === "T-1" ? ["bn-f", "bn-b", "bn-d"] : [],
   links: [],
 }));
+
+const BRAIN_NODES = [
+  { id: "bn-f", project_id: "p1", type: "feedback", label: "slow checkout", detail: null, x: null, y: null, created_at: null },
+  { id: "bn-b", project_id: "p1", type: "bug", label: "carousel jank", detail: null, x: null, y: null, created_at: null },
+  { id: "bn-d", project_id: "p1", type: "decision", label: "use stripe", detail: null, x: null, y: null, created_at: null },
+];
 
 async function mockBacklog(page: Page) {
   await page.route("**/api/projects", (r) =>
@@ -38,7 +44,7 @@ async function mockBacklog(page: Page) {
     }),
   );
   await page.route("**/api/tasks**", (r) => r.fulfill({ json: { tasks: TASKS } }));
-  await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes: [] } }));
+  await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes: BRAIN_NODES } }));
 }
 
 test.describe("backlog", () => {
@@ -77,5 +83,29 @@ test.describe("backlog", () => {
       const head = page.locator(".col-head", { hasText: label });
       await expect(head.locator(".count")).toHaveText("1");
     }
+  });
+
+  test("columns fill the height (not tightly wrapping the card)", async ({ page }) => {
+    const col = page.locator(".backlog-grid .col").first();
+    const box = (await col.boundingBox())!;
+    // A single short card sits in a column that still stretches tall.
+    expect(box.height).toBeGreaterThan(300);
+  });
+
+  test("rich card shows intel chips from linked nodes with reference wording", async ({ page }) => {
+    const card = page.locator('[data-testid="task-card"]', { hasText: "Ready task" });
+    await expect(card.locator(".intel-bar")).toBeVisible();
+    await expect(card.locator(".chip.feedback")).toContainText("1 feedback");
+    await expect(card.locator(".chip.bug")).toContainText("1 bug");
+    await expect(card.locator(".chip.decision")).toContainText("1 ADR"); // "ADR" not "decision"
+  });
+
+  test("cards show an assignee avatar", async ({ page }) => {
+    await expect(page.locator('[data-testid="task-card"] .tc-foot .avatar').first()).toBeVisible();
+  });
+
+  test("blocked banner names the conflicting ADR", async ({ page }) => {
+    await expect(page.getByTestId("blocked-banner")).toContainText("Reviewer flagged conflict");
+    await expect(page.getByTestId("banner-adr")).toContainText("ADR-014");
   });
 });
