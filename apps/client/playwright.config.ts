@@ -11,8 +11,11 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // The shell fetches several /api endpoints on every page; specs that don't mock
+  // them hit the (down) dev proxy, so cap workers + allow a retry to absorb that
+  // proxy-contention flakiness. A genuine failure still fails both attempts.
+  retries: process.env.CI ? 2 : 1,
+  workers: process.env.CI ? 1 : 4,
   reporter: process.env.CI ? "github" : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://localhost:3000",

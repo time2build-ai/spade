@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { Btn, Kbd, Avatar } from "@/components/ui";
-import { DEMO_SPRINT, DEMO_ACCOUNT_USAGE, DEMO_ACCOUNT_USAGE_DEFAULT } from "@/lib/demo";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { useProject } from "@/lib/useProject";
 import { useShellData } from "@/lib/useShell";
@@ -13,8 +12,11 @@ import { useAskDock } from "@/lib/useAskDock";
 export function Topbar() {
   const { project } = useProject();
   const { setOpen } = useAskDock();
-  const { aliveSessions, defaultAccount } = useShellData(project?.id ?? null);
+  const { aliveSessions, defaultAccount, currentSprint } = useShellData(project?.id ?? null);
   const sessionsLabel = aliveSessions === undefined ? "daemon" : `daemon · ${aliveSessions} sessions`;
+  const sprintLabel = currentSprint
+    ? `sprint ${currentSprint.number}${currentSprint.day_label ? ` · ${currentSprint.day_label}` : ""}`
+    : null;
 
   return (
     <header className="topbar">
@@ -42,19 +44,20 @@ export function Topbar() {
         <span className="topbar-pill" title="Live agent sessions">
           <span className="pulse-dot" /> {sessionsLabel}
         </span>
-        {/* sprint pill — seeded (BACKEND: sprint-counter API); hidden at
-            workspace level via CSS (.workspace-level .topbar-sprint). */}
-        <span className="topbar-pill mono topbar-sprint" title="Current sprint">
-          {DEMO_SPRINT.counter}
-        </span>
-        {/* active default account (GET /accounts) — label real, usage % seeded */}
+        {/* real current sprint (GET /sprints) — hidden when the project has none.
+            Hidden at workspace level via CSS (.workspace-level .topbar-sprint). */}
+        {sprintLabel && (
+          <span className="topbar-pill mono topbar-sprint" title="Current sprint">
+            {sprintLabel}
+          </span>
+        )}
+        {/* active default account (GET /accounts) — real label, no fabricated usage % */}
         {defaultAccount && (
           <span className="topbar-pill mono" title="Active Claude account">
             <span
               style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }}
             />
-            acct: {defaultAccount.label} ·{" "}
-            {DEMO_ACCOUNT_USAGE[defaultAccount.label] ?? DEMO_ACCOUNT_USAGE_DEFAULT}%
+            acct: {defaultAccount.label}
           </span>
         )}
         <Btn variant="ghost" title="Toggle tweaks panel" aria-label="Toggle tweaks panel">

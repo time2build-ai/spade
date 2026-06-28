@@ -6,18 +6,17 @@ import { Icon, type IconName } from "@/components/Icon";
 import { useProject } from "@/lib/useProject";
 import { useShellData } from "@/lib/useShell";
 import { projectColor, projectGlyph, projectSlug } from "@/lib/adapters";
-import { DEMO_SIDEBAR_COUNTS, DEMO_WS_COUNTS } from "@/lib/demo";
-
-type CountKey = "backlog" | "brain" | "decisions" | "orchestrator" | "agentPool" | "gates";
+type CountKey =
+  | "backlog" | "brain" | "graphIssues" | "decisions" | "sprints"
+  | "orchestrator" | "agentPool" | "gates" | "meetings" | "feedback";
 
 interface NavItem {
   label: string;
   icon: IconName;
   href: string;
-  /** Real count key (from the API) — used when present, else falls to `seed`. */
+  /** Real count key (from the API). The badge shows the live number, or nothing
+   *  when it's 0 / still loading — never a fabricated value. */
   countKey?: CountKey;
-  /** Seed badge value (reference literal) when the API has no count. */
-  seed?: number | string;
   /** Badge style: live = green "N live", amber = gate warning, kbd = ⌘K chip. */
   badge?: "live" | "amber" | "kbd";
 }
@@ -41,26 +40,26 @@ const PROJECT_GROUPS: NavGroup[] = [
   {
     label: "Plan",
     items: [
-      { label: "Sprints", icon: "board", href: "/sprints", seed: DEMO_SIDEBAR_COUNTS.sprints },
-      { label: "Backlog", icon: "tasks", href: "/backlog", countKey: "backlog", seed: DEMO_SIDEBAR_COUNTS.backlog },
-      { label: "Product brain", icon: "brain", href: "/brain", countKey: "brain", seed: DEMO_SIDEBAR_COUNTS.brain },
-      { label: "Graph & Issues", icon: "graph", href: "/graph-issues", seed: DEMO_SIDEBAR_COUNTS.graphIssues },
+      { label: "Sprints", icon: "board", href: "/sprints", countKey: "sprints" },
+      { label: "Backlog", icon: "tasks", href: "/backlog", countKey: "backlog" },
+      { label: "Product brain", icon: "brain", href: "/brain", countKey: "brain" },
+      { label: "Graph & Issues", icon: "graph", href: "/graph-issues", countKey: "graphIssues" },
     ],
   },
   {
     label: "Execution",
     items: [
-      { label: "Orchestrator", icon: "orch", href: "/orchestrator", countKey: "orchestrator", seed: DEMO_SIDEBAR_COUNTS.orchestrator, badge: "live" },
-      { label: "Agent pool", icon: "spark", href: "/agent-pool", countKey: "agentPool", seed: DEMO_SIDEBAR_COUNTS.agentPool },
-      { label: "Human gates", icon: "gate", href: "/gate", countKey: "gates", seed: DEMO_SIDEBAR_COUNTS.gates, badge: "amber" },
+      { label: "Orchestrator", icon: "orch", href: "/orchestrator", countKey: "orchestrator", badge: "live" },
+      { label: "Agent pool", icon: "spark", href: "/agent-pool", countKey: "agentPool" },
+      { label: "Human gates", icon: "gate", href: "/gate", countKey: "gates", badge: "amber" },
     ],
   },
   {
     label: "Inputs",
     items: [
-      { label: "Meetings", icon: "mic", href: "/meetings", seed: DEMO_SIDEBAR_COUNTS.meetings },
-      { label: "Feedback", icon: "flag", href: "/feedback", seed: DEMO_SIDEBAR_COUNTS.feedback },
-      { label: "Decisions", icon: "doc", href: "/decisions", countKey: "decisions", seed: DEMO_SIDEBAR_COUNTS.decisions },
+      { label: "Meetings", icon: "mic", href: "/meetings", countKey: "meetings" },
+      { label: "Feedback", icon: "flag", href: "/feedback", countKey: "feedback" },
+      { label: "Decisions", icon: "doc", href: "/decisions", countKey: "decisions" },
     ],
   },
   {
@@ -78,28 +77,24 @@ const WORKSPACE_GROUPS: NavGroup[] = [
     label: "Workspace",
     items: [
       { label: "Settings", icon: "cog", href: "/settings" },
-      { label: "Agents pool", icon: "spark", href: "/accounts", seed: DEMO_WS_COUNTS.agentsPool },
-      { label: "Integrations", icon: "link", href: "/integrations", seed: DEMO_WS_COUNTS.integrations },
+      { label: "Agents pool", icon: "spark", href: "/accounts", countKey: "agentPool" },
+      { label: "Integrations", icon: "link", href: "/integrations" },
       { label: "CLI / logs", icon: "term", href: "/cli" },
     ],
   },
   {
     label: "Projects",
-    items: [{ label: "All projects", icon: "graph", href: "/", seed: DEMO_WS_COUNTS.projects }],
+    items: [{ label: "All projects", icon: "graph", href: "/" }],
   },
 ];
 
 function Badge({ item, counts }: { item: NavItem; counts: Record<CountKey, number | undefined> }) {
   if (item.badge === "kbd") return <span className="badge mono">⌘K</span>;
-  const real = item.countKey ? counts[item.countKey] : undefined;
-  // Real-wins; otherwise the reference seed value.
-  let value: number | string | undefined = real ?? item.seed;
-  if (value === undefined) return null;
-  if (item.badge === "live") {
-    // Real count → "N live"; seed is already "7 live".
-    const text = typeof value === "number" ? `${value} live` : value;
-    return <span className="badge">{text}</span>;
-  }
+  const value = item.countKey ? counts[item.countKey] : undefined;
+  // Real count only — hide the badge while loading (undefined) or when it's 0,
+  // so an empty project shows a clean nav (no fabricated demo numbers).
+  if (!value) return null;
+  if (item.badge === "live") return <span className="badge">{value} live</span>;
   return (
     <span className={["badge", item.badge === "amber" && "amber"].filter(Boolean).join(" ")}>
       {value}
