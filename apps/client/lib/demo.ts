@@ -484,6 +484,35 @@ export function projectMeta(id: string): ProjectMeta {
   };
 }
 
+// ── Overview (per-project landing) ──────────────────────────────────────────
+// Seeded; real project name/counts win where available. BACKEND: per-project
+// KPIs / charts / now-executing aggregation.
+export const DEMO_OVERVIEW = {
+  headline: { value: "34%", label: "Mobile checkout conversion", target: "target 50%", delta: "↓ 4.2pp / 30d", series: [42, 40, 41, 39, 40, 38, 37, 38, 36, 35, 36, 34, 34] },
+  kpis: [
+    { lbl: "Backlog", val: "23", sub: "4 in progress" },
+    { lbl: "Shipped · sprint", val: "8", sub: "of 14", color: "var(--green)" },
+    { lbl: "Gates", val: "1", sub: "SPD-144", color: "var(--amber)" },
+    { lbl: "Brain nodes", val: "847", sub: "2,312 edges" },
+  ],
+  charts: [
+    { label: "Velocity (7d)", series: [3, 4, 2, 5, 4, 6, 5], color: "var(--accent)" },
+    { label: "Open bugs", series: [9, 8, 8, 7, 6, 6, 5], color: "var(--red)" },
+    { label: "Feedback / day", series: [12, 14, 10, 18, 16, 11, 13], color: "var(--blue)" },
+  ],
+  nowExecuting: [
+    { task: "SPD-142", role: "Developer", eta: "4m" },
+    { task: "SPD-138", role: "Reviewer", eta: "2m" },
+    { task: "SPD-145", role: "Developer", eta: "7m" },
+  ],
+  cards: [
+    { title: "Recent decisions", items: ["ADR-031 · lazy-load carousels", "ADR-018 · WebP via CDN", "ADR-022 · Stripe PaymentIntent"] },
+    { title: "Top feedback clusters", items: ["checkout slow on mobile · 12", "recs feel random · 8", "receipts missing taxes · 5"] },
+    { title: "Connected bugs", items: ["BUG-1142 · LCP on 3G", "BUG-1109 · carousel compression", "BUG-1153 · Apple Pay shift"] },
+    { title: "Tracked metrics", items: ["Mobile conv · 34% (target 50%)", "Reco CTR · 2.1% (target 4%)", "P75 LCP · 8.4s"] },
+  ],
+};
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
