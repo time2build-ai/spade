@@ -1410,6 +1410,24 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ac-stage-mini .role-mini { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; text-transform: uppercase; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(2400%); } }
 
+/* === Sprints — V2 === */
+.sprint-wrap { overflow-y: auto; padding: 18px 22px 30px; }
+.sprint-hero { background: linear-gradient(180deg, rgba(201,184,255,.05), var(--bg-1)); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin-bottom: 18px; }
+.sprint-hero-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+.sprint-hero-num { font-size: 24px; font-weight: 600; letter-spacing: -.02em; color: var(--text); }
+.sprint-hero-stats { display: flex; gap: 24px; }
+.sprint-hero-stats .val { font-size: 22px; font-weight: 600; font-family: var(--mono); letter-spacing: -.02em; }
+.sprint-hero-stats .lbl { font-size: 10.5px; color: var(--text-4); text-transform: uppercase; letter-spacing: .04em; }
+.stack-bar { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; }
+.sprint-sec-h { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); font-family: var(--mono); margin: 6px 0 10px; }
+.sprint-burn { background: var(--bg-1); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; }
+.sprint-rows { display: flex; flex-direction: column; gap: 8px; }
+.sprint-row { display: grid; grid-template-columns: 140px 1fr 180px; gap: 16px; align-items: center; background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+.sprint-row.current { border-color: rgba(201,184,255,.4); }
+.sprint-row-num { font-size: 13px; color: var(--text); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.sprint-row-tag { font-size: 9px; font-family: var(--mono); color: var(--accent); background: rgba(201,184,255,.12); border: 1px solid rgba(201,184,255,.3); border-radius: 999px; padding: 1px 7px; }
+.sprint-row-stats { font-size: 11.5px; color: var(--text-3); text-align: right; }
+
 /* === Overview (per-project landing) — V2 === */
 .ov-wrap { overflow-y: auto; padding: 18px 22px 30px; }
 .ov-hero { display: flex; gap: 20px; align-items: center; background: linear-gradient(180deg, rgba(201,184,255,.05), var(--bg-1)); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; }

@@ -513,6 +513,20 @@ export const DEMO_OVERVIEW = {
   ],
 };
 
+// ── Sprints ──────────────────────────────────────────────────────────────────
+// Seeded — no Sprint API. BACKEND: sprint model + endpoint.
+export const DEMO_SPRINTS = {
+  current: { num: 26, day: "day 2/10", shipped: 8, review: 2, progress: 4, queued: 9 },
+  burndown: [23, 22, 21, 19, 18, 16, 15, 13, 11, 9, 7, 4, 2, 0],
+  ideal: [23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 4, 2, 1, 0],
+  rows: [
+    { num: 26, state: "current", shipped: 8, review: 2, progress: 4, queued: 9, total: 23, velocity: "5.0 / day" },
+    { num: 25, state: "done", shipped: 19, review: 0, progress: 0, queued: 2, total: 21, velocity: "4.8 / day" },
+    { num: 24, state: "done", shipped: 16, review: 0, progress: 0, queued: 2, total: 18, velocity: "4.2 / day" },
+    { num: 23, state: "done", shipped: 14, review: 0, progress: 0, queued: 1, total: 15, velocity: "3.9 / day" },
+  ],
+};
+
 // ── AI-generated issues (Graph & Issues pane) ───────────────────────────────
 // Seeded; BACKEND: AI-issue synthesis + lifecycle (validate/reject/open-task).
 export type AiIssueStatus = "validated" | "pending" | "rejected";
