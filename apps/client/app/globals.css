@@ -1003,19 +1003,21 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .ask-float-inner { align-items: stretch !important; }
 
 /* Bottom-right launcher shown when the dock is closed. */
+/* Dark bottom-right bubble (reference) — accent brain icon, light text, ⌘K chip. */
 .ask-trigger {
   position: fixed; z-index: 61; bottom: 18px; right: 18px;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 9px 14px; border-radius: 999px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
-  color: #100b22; font-size: 12.5px; font-weight: 600;
-  border: none; cursor: pointer;
-  box-shadow: 0 8px 28px -8px rgba(142, 125, 255, .6);
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 10px 15px; border-radius: 999px;
+  background: var(--bg-1); color: var(--text);
+  font-size: 12.5px; font-weight: 500;
+  border: 1px solid var(--line-strong); cursor: pointer;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .7);
 }
-.ask-trigger:hover { filter: brightness(1.05); }
+.ask-trigger:hover { background: var(--bg-2); border-color: rgba(201,184,255,.4); }
+.ask-trigger svg { color: var(--accent); }
 .ask-trigger-kbd {
-  font-size: 9.5px; padding: 1px 5px; border-radius: 5px;
-  background: rgba(16, 11, 34, .18); color: #100b22;
+  font-size: 9.5px; padding: 1px 6px; border-radius: 5px; font-family: var(--mono);
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--text-3);
 }
 .ask-float-inner {
   display: flex; flex-direction: column; align-items: center; gap: 9px;
