@@ -168,6 +168,35 @@ def export_manifest(project_id: str) -> dict:
     }
 
 
+def find_conflict(project_id: str) -> dict | None:
+    """Derive a real gate conflict from the decision graph: a proposed decision
+    (the change awaiting a human call) set against an active decision it would
+    override. Prefer an active decision linked to the proposal via an edge; else
+    fall back to the most recent active decision. Returns {existing, proposed}
+    (real nodes) or None when the graph has no such pair. The diff + signal cards
+    have no real source yet and stay client-seeded."""
+    decisions = [n for n in list_nodes(project_id) if n["type"] == "decision"]
+    proposed = next((n for n in decisions if n.get("status") == "proposed"), None)
+    actives = [n for n in decisions if n.get("status") == "active"]
+    if proposed is None or not actives:
+        return None
+
+    # Neighbours of the proposal (edges are undirected for this purpose).
+    neighbours: set[str] = set()
+    for e in list_edges(project_id):
+        if e["from_id"] == proposed["id"]:
+            neighbours.add(e["to_id"])
+        elif e["to_id"] == proposed["id"]:
+            neighbours.add(e["from_id"])
+
+    existing = next((a for a in actives if a["id"] in neighbours), actives[-1])
+
+    def _slim(n: dict) -> dict:
+        return {"id": n["id"], "label": n["label"], "detail": n.get("detail"), "owner": n.get("owner")}
+
+    return {"existing": _slim(existing), "proposed": _slim(proposed)}
+
+
 def find_gaps(project_id: str) -> list[dict]:
     """Real gap findings derived from the graph:
       * orphan — a node with no edges at all;

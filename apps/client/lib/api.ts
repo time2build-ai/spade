@@ -10,6 +10,7 @@ import type {
   ChatMessageReal,
   ChatThreadReal,
   FeedbackClusterReal,
+  GateConflictSide,
   Integration,
   Meeting,
   PipelineRun,
@@ -114,6 +115,10 @@ export const api = {
     http<BrainManifest>(`/brain/export?project_id=${encodeURIComponent(projectId)}`),
   brainGaps: (projectId: string) =>
     http<{ gaps: BrainGap[] }>(`/brain/gaps?project_id=${encodeURIComponent(projectId)}`),
+  gateConflict: (projectId: string) =>
+    http<{ conflict: { existing: GateConflictSide; proposed: GateConflictSide } | null }>(
+      `/gate/conflict?project_id=${encodeURIComponent(projectId)}`,
+    ),
   tasks: (projectId: string) =>
     http<{ tasks: Task[] }>(
       `/tasks?project_id=${encodeURIComponent(projectId)}`,

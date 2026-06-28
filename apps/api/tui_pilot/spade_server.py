@@ -275,6 +275,13 @@ def brain_gaps(project_id: str) -> dict:
     return {"gaps": brain.find_gaps(project_id)}
 
 
+@router.get("/gate/conflict")
+def gate_conflict(project_id: str) -> dict:
+    """A real gate conflict (existing vs proposed decision) derived from the
+    brain, or {conflict: null} when the graph has no proposed/active pair."""
+    return {"conflict": brain.find_conflict(project_id)}
+
+
 @router.post("/brain/edges")
 def create_brain_edge(req: EdgeCreate) -> dict:
     try:

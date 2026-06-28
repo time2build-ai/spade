@@ -32,4 +32,24 @@ test.describe("gate conflict screen", () => {
     await expect(page.getByTestId("gate-conflict")).toContainText("SPD-200 · Ship the new pricing page");
     await expect(page.getByTestId("gate-conflict")).toContainText("sess_xyz");
   });
+
+  test("real brain conflict (proposed vs active decision) wins over the seed (Phase 3)", async ({ page }) => {
+    await mock(page);
+    await page.route("**/api/projects", (r) =>
+      r.fulfill({ json: { projects: [{ id: "p1", name: "Demo", path: "/d", account_strategy: "round_robin", model_ceiling: null, autopilot: 0, created_at: "" }] } }),
+    );
+    await page.route("**/api/gate/conflict**", (r) =>
+      r.fulfill({ json: { conflict: {
+        existing: { id: "d1", label: "Use server-side rendering", detail: "Chosen for SEO.", owner: "Akira" },
+        proposed: { id: "d2", label: "Move to client-side rendering", detail: "Faster iteration.", owner: "Robert" },
+      } } }),
+    );
+    await page.goto("/gate");
+    // Real decision labels drive the two conflict panels.
+    await expect(page.getByTestId("conflict-existing")).toHaveText("Use server-side rendering");
+    await expect(page.getByTestId("conflict-proposed")).toHaveText("Move to client-side rendering");
+    // Diff + signal cards remain (seeded) — the conflict screen is still whole.
+    await expect(page.getByTestId("gate-diff")).toBeVisible();
+    await expect(page.getByTestId("signal-card")).toHaveCount(3);
+  });
 });

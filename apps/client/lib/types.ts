@@ -254,3 +254,6 @@ export type BrainManifest = {
   resources: { uri: string; name: string; type: string }[];
 };
 export type BrainGap = { id: string; kind: string; label: string; detail: string };
+
+// Phase 3: a real gate conflict side (a decision node), from /gate/conflict.
+export type GateConflictSide = { id: string; label: string; detail: string | null; owner: string | null };

@@ -149,3 +149,36 @@ def test_brain_export_gaps_http():
     assert exp["node_count"] == 1
     gaps = client.get("/brain/gaps", params={"project_id": "acme"}).json()["gaps"]
     assert any(g["kind"] == "orphan" for g in gaps)
+
+
+def test_find_conflict_proposed_vs_active():
+    """Phase 3: a real gate conflict is derived from proposed vs active decisions."""
+    _proj()
+    # No decisions → no conflict.
+    assert brain.find_conflict("acme") is None
+
+    active = brain.create_node(project_id="acme", type="decision", label="Use collaborative filtering",
+                               status="active", owner="Akira")
+    # Only an active one → still no conflict (needs a proposal).
+    assert brain.find_conflict("acme") is None
+
+    proposed = brain.create_node(project_id="acme", type="decision", label="Switch to content-based",
+                                 status="proposed", owner="Robert")
+    c = brain.find_conflict("acme")
+    assert c is not None
+    assert c["proposed"]["id"] == proposed["id"] and c["proposed"]["owner"] == "Robert"
+    assert c["existing"]["id"] == active["id"] and c["existing"]["label"] == "Use collaborative filtering"
+
+
+def test_gate_conflict_http():
+    from fastapi.testclient import TestClient
+    from tui_pilot import server
+
+    _proj()
+    client = TestClient(server.app)
+    assert client.get("/gate/conflict", params={"project_id": "acme"}).json()["conflict"] is None
+
+    brain.create_node(project_id="acme", type="decision", label="A", status="active")
+    brain.create_node(project_id="acme", type="decision", label="B", status="proposed")
+    c = client.get("/gate/conflict", params={"project_id": "acme"}).json()["conflict"]
+    assert c["existing"]["label"] == "A" and c["proposed"]["label"] == "B"

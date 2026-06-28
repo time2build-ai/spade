@@ -4,6 +4,7 @@ import * as React from "react";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
 import { DEMO_GATE } from "@/lib/demo";
 
@@ -18,9 +19,30 @@ function SignalCard({ label, big, sub, color }: { label: string; big: string; su
 }
 
 export default function GatePage() {
+  const { project } = useProject();
   const { data, mutate } = useSWR("brakes", () => api.brakes(), { refreshInterval: 4000 });
   const brake = data?.brakes?.[0] ?? null;
   const g = DEMO_GATE;
+
+  // Real-wins: a real conflict (proposed vs active decision) from the brain drives
+  // the two conflict panels; the seed fills the diff/signals (no real source yet).
+  const { data: conflictData } = useSWR(
+    project ? ["gate-conflict", project.id] : null,
+    () => api.gateConflict(project!.id),
+  );
+  const rc = conflictData?.conflict ?? null;
+  const existing = {
+    title: rc ? rc.existing.label : g.existing.title,
+    meta: g.existing.meta,
+    quote: rc?.existing.detail ?? g.existing.quote,
+    owner: rc?.existing.owner ?? g.existing.owner,
+  };
+  const proposed = {
+    title: rc ? rc.proposed.label : g.proposed.title,
+    meta: g.proposed.meta,
+    quote: rc?.proposed.detail ?? g.proposed.quote,
+    owner: rc?.proposed.owner ?? g.proposed.owner,
+  };
 
   // Hydrate the task card from a real brake when present.
   const taskTitle = brake?.mission ?? `${g.taskId} · ${g.taskTitle}`;
@@ -73,21 +95,21 @@ export default function GatePage() {
           </div>
         </div>
 
-        <div className="conflict card">
+        <div className="conflict card" data-testid="gate-conflict-panels">
           <div className="panel left">
             <h6>Existing decision</h6>
-            <h3>{g.existing.title}</h3>
-            <div className="muted" style={{ fontSize: 12.5 }}>{g.existing.meta}</div>
-            <div className="quote">“{g.existing.quote}”</div>
-            <div className="muted" style={{ fontSize: 12 }}>— {g.existing.owner}</div>
+            <h3 data-testid="conflict-existing">{existing.title}</h3>
+            <div className="muted" style={{ fontSize: 12.5 }}>{existing.meta}</div>
+            <div className="quote">“{existing.quote}”</div>
+            <div className="muted" style={{ fontSize: 12 }}>— {existing.owner}</div>
           </div>
           <div className="arrow">⇄</div>
           <div className="panel right">
             <h6>Proposed change</h6>
-            <h3>{g.proposed.title}</h3>
-            <div className="muted" style={{ fontSize: 12.5 }}>{g.proposed.meta}</div>
-            <div className="quote">“{g.proposed.quote}”</div>
-            <div className="muted" style={{ fontSize: 12 }}>— {g.proposed.owner}</div>
+            <h3 data-testid="conflict-proposed">{proposed.title}</h3>
+            <div className="muted" style={{ fontSize: 12.5 }}>{proposed.meta}</div>
+            <div className="quote">“{proposed.quote}”</div>
+            <div className="muted" style={{ fontSize: 12 }}>— {proposed.owner}</div>
           </div>
         </div>
 
