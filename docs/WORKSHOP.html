@@ -132,14 +132,29 @@
       <a class="shot" href="screenshots/tasker-backlog.png" target="_blank"><img src="screenshots/tasker-backlog.png" alt="Backlog"></a></div>
   </div>
 
-  <!-- STEP 5 · meetings → backlog -->
+  <!-- STEP 5 · the Granola integration: meeting → backlog -->
   <div class="step">
-    <div class="num">Step 5 · backlog from a meeting</div>
+    <div class="num">Step 5 · the Granola integration</div>
     <h2>A meeting becomes backlog</h2>
-    <p class="lead">Backlog doesn’t only come from chat. Spade can ingest a meeting and turn its action items into grounded cards — the same way a real notes tool (Granola, Otter, Fireflies) would feed it.</p>
-    <div class="do"><div class="b">🖱️</div><div class="t">Open <b>Meetings</b> → <b>Ingest a meeting</b>, and pick the <b>Todo App — kickoff</b> transcript from a connected source.</div></div>
-    <div class="check"><div class="h">The meeting lands with its summary and transcript — and every action line (the <b>→</b> ones) becomes a backlog card, each grounded back to what was said in the room. They show up on the <b>Backlog</b> board too.</div></div>
-    <div class="note"><b>For the demo</b> the transcripts are canned (no tokens, always the same) — swapping in a live notes integration is just pointing <code>ingest</code> at real text.</div>
+    <p class="lead">Backlog doesn’t only come from chat. Spade connects to your meeting-notes tool — here, <b>Granola</b> — pulls a meeting straight from it, and turns what was actually said into grounded backlog cards. No copy-paste, no re-typing the action items.</p>
+
+    <div class="do"><div class="b">🖱️</div><div class="t">Open <b>Meetings</b> → <b>Ingest a meeting</b>. The dropdown lists your <b>connected sources</b> — pick Granola’s <b>“Todo App — kickoff.”</b></div></div>
+
+    <div class="do"><div class="b">👀</div><div class="t">Watch it work: Spade <b>connects to Granola</b> → fetches the transcript → reads the room → extracts the action items → drafts the cards. It lands on <b>“N backlog items drafted.”</b></div></div>
+
+    <div class="check"><div class="h">The meeting opens with a <b>via Granola</b> badge, its summary, and the full transcript — every action line (the <b>→</b> ones) highlighted. Below it, a <b>Backlog created</b> list: each card grounded back to the exact sentence someone said in the room. The same cards are now on the <b>Backlog</b> board.</div>
+      <a class="shot" href="screenshots/tasker-backlog.png" target="_blank"><img src="screenshots/tasker-backlog.png" alt="Backlog created from a meeting"></a></div>
+
+    <div class="note"><b>How it interacts:</b> the meeting’s <i>source</i> is the integration (Granola), the <i>transcript</i> is what it hands over, and Spade does the rest — extract → ground → file into the backlog. For the demo the transcripts are canned (no tokens, always the same); swapping in the live Granola API is just pointing the same ingest at real notes.</div>
+
+    <div class="note"><b>More sources are coming.</b> The same ingest path generalizes — Spade is built to pull from wherever the work already lives:
+      <ul style="margin:8px 0 0 18px;padding:0;line-height:1.6">
+        <li><b>Meeting notes</b> — Otter, Fireflies, Zoom &amp; Google Meet alongside Granola.</li>
+        <li><b>Issue trackers</b> — import or two-way sync a backlog from Linear, Jira or GitHub Issues.</li>
+        <li><b>Feedback</b> — Intercom, Zendesk and App Store reviews flowing into the Feedback clusters.</li>
+        <li><b>Team chat &amp; code</b> — capture decisions from Slack, and tie GitHub PRs/commits back to the task that drove them.</li>
+      </ul>
+      <span class="muted">Each one lands the same way you just saw: a real source in, grounded brain/backlog out.</span></div>
   </div>
 
   <!-- STEP 6 -->
