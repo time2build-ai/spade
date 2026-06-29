@@ -38,10 +38,19 @@ def _next_task_id(cx) -> str:
     `tasks.id` stays a global PRIMARY KEY. Must be called from inside an existing
     db.tx() block so id allocation and the subsequent INSERT stay atomic in one
     transaction (avoids a count/insert race).
+
+    Derives the next number from the MAX existing SPD-NNN suffix (not COUNT),
+    so deletions that leave gaps can't produce an id that collides with a
+    still-existing higher-numbered task.
     """
-    row = cx.execute("SELECT COUNT(*) AS cnt FROM tasks").fetchone()
-    n = (row["cnt"] if row else 0) + 1
-    return f"SPD-{n:03d}"
+    rows = cx.execute("SELECT id FROM tasks WHERE id LIKE 'SPD-%'").fetchall()
+    mx = 0
+    for r in rows:
+        try:
+            mx = max(mx, int(str(r["id"]).split("-", 1)[1]))
+        except (ValueError, IndexError):
+            continue
+    return f"SPD-{mx + 1:03d}"
 
 
 # -- CRUD ---------------------------------------------------------------------
