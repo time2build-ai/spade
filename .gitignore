@@ -17,3 +17,9 @@ docs/Spade (standalone).html
 
 # Testing-guide PDF (kept locally, not in VCS)
 Spade-MVP-Testing-Guide.pdf
+
+# Presentation / personal guides — kept locally, not in VCS.
+# WORKSHOP.html is the Spanish thesis-demo narration script; USER-GUIDE.html is
+# kept local alongside it. (The demo README stays tracked.)
+docs/WORKSHOP.html
+docs/USER-GUIDE.html
