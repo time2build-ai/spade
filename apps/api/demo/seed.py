@@ -118,7 +118,9 @@ def bring_to_life(app: str, *, reset: bool = False, account_dir: str | None = No
         meetings.create(project_id=pid, title=title, date="2026-03-25", summary=summary, attendees=attendees)
     # Ingest a real transcript so the project shows the meeting → backlog flow:
     # the kickoff meeting and the tasks extracted from it (grounded back to it).
-    ingested = meetings.ingest(pid, sample="todo-kickoff")
+    # Only for the todo app — the canned transcript is todo-specific, so it would
+    # read as a stray meeting on an unrelated app (e.g. a link shortener).
+    ingested = meetings.ingest(pid, sample="todo-kickoff") if app == "todo-app" else None
     for (label, count, sources) in t["feedback_clusters"]:
         feedback.create(project_id=pid, label=label, count=count,
                         sources=[{"name": n, "n": k, "color": "var(--blue)"} for (n, k) in sources])
@@ -126,8 +128,8 @@ def bring_to_life(app: str, *, reset: bool = False, account_dir: str | None = No
     return {
         "project": pid, "name": t["name"],
         "features": len(feat), "decisions": len(dec), "tasks": len(task_ids),
-        "pipelines": runs, "meetings": len(t["meetings"]) + 1,
-        "ingested_tasks": len(ingested["tasks"]),
+        "pipelines": runs, "meetings": len(t["meetings"]) + (1 if ingested else 0),
+        "ingested_tasks": len(ingested["tasks"]) if ingested else 0,
         "feedback_clusters": len(t["feedback_clusters"]),
         "account": account_id if account_dir else None,
     }
