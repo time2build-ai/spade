@@ -11,3 +11,6 @@ __pycache__/
 
 # Large reference mockup (kept locally, not in VCS)
 docs/Spade (standalone).html
+
+# Local-only scratch guides (kept locally, not in VCS)
+*.local.html
