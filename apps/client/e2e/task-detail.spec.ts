@@ -42,7 +42,6 @@ test.describe("task detail", () => {
     await expect(page.getByRole("link", { name: /View in graph/ })).toHaveAttribute("href", "/brain");
     // never run → "Start pipeline" (not "Resume")
     await expect(page.getByTestId("run-pipeline")).toContainText("Start pipeline");
-    await expect(page.getByTestId("run-pipeline")).toHaveAttribute("href", "/orchestrator");
     await expect(page.locator(".breadcrumb").getByRole("link", { name: "Backlog" })).toHaveAttribute("href", "/backlog");
   });
 
@@ -90,6 +89,22 @@ test.describe("task detail", () => {
     await expect(page.locator(".timeline .tl-item.now")).toHaveCount(1);
     // a run exists → the action says "Resume pipeline"
     await expect(page.getByTestId("run-pipeline")).toContainText("Resume pipeline");
+  });
+
+  test("'Start pipeline' creates + starts a run, then goes to the orchestrator", async ({ page }) => {
+    let created = false;
+    let started = false;
+    await mock(page, BASE);
+    await page.route("**/api/pipelines", (r) => {
+      if (r.request().method() === "POST") { created = true; return r.fulfill({ json: { id: "run-x", task_id: "T-1", project_id: "p1", status: "queued", stages: [] } }); }
+      return r.fulfill({ json: { pipelines: [] } });
+    });
+    await page.route("**/api/pipelines/*/start", (r) => { started = true; return r.fulfill({ json: { id: "run-x", task_id: "T-1", project_id: "p1", status: "running", stages: [] } }); });
+    await page.goto("/task/T-1");
+    await page.getByTestId("run-pipeline").click();
+    await expect.poll(() => created).toBe(true);
+    await expect.poll(() => started).toBe(true);
+    await expect(page).toHaveURL(/\/orchestrator$/);
   });
 
   test("properties rail shows real fields only", async ({ page }) => {

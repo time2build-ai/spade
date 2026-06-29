@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import useSWR from "swr";
+import { useParams, useRouter } from "next/navigation";
+import useSWR, { mutate } from "swr";
 import { PageHead, Priority, Chip } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { MetaRow } from "@/components/task/MetaRow";
@@ -83,8 +83,31 @@ export default function TaskPage() {
   const { data: pipeData } = useSWR(task ? ["pipelines", task.project_id] : null, () => api.pipelines(task!.project_id));
   const { data: tasksData } = useSWR(task ? ["tasks", task.project_id] : null, () => api.tasks(task!.project_id));
 
+  const router = useRouter();
+  const [starting, setStarting] = React.useState(false);
+  const [startErr, setStartErr] = React.useState<string | null>(null);
+
   // Has any pipeline ever run on this task? Drives Start vs Resume wording.
   const hasRun = !!task && (pipeData?.pipelines ?? []).some((pl) => pl.task_id === task.id);
+
+  // Actually create + start a pipeline run (spawns the Developer agent), then go
+  // watch it in the Orchestrator. If one already exists, just go watch it.
+  const runPipeline = React.useCallback(async () => {
+    if (!task || starting) return;
+    setStartErr(null);
+    if (hasRun) { router.push("/orchestrator"); return; }
+    setStarting(true);
+    try {
+      const run = await api.createPipeline(task.project_id, task.id);
+      await api.startPipeline(run.id);
+      mutate(["pipelines", task.project_id]);
+      mutate(["task", task.id]);
+      router.push("/orchestrator");
+    } catch (e) {
+      setStartErr(e instanceof Error ? e.message : String(e));
+      setStarting(false);
+    }
+  }, [task, hasRun, starting, router]);
 
   const headerActions = task ? (
     <>
@@ -95,9 +118,9 @@ export default function TaskPage() {
       <Link href="/brain" className="btn">
         <Icon name="graph" size={13} /> View in graph
       </Link>
-      <Link href="/orchestrator" className="btn primary" data-testid="run-pipeline">
-        <Icon name="play" size={13} /> {hasRun ? "Resume pipeline" : "Start pipeline"}
-      </Link>
+      <button type="button" className="btn primary" data-testid="run-pipeline" onClick={runPipeline} disabled={starting}>
+        <Icon name="play" size={13} /> {starting ? "Starting…" : hasRun ? "Resume pipeline" : "Start pipeline"}
+      </button>
     </>
   ) : undefined;
 
@@ -144,6 +167,11 @@ export default function TaskPage() {
     body = (
       <div className="task-detail">
         <div className="td-main">
+          {startErr && (
+            <div data-testid="run-error" style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(238,136,136,.4)", background: "rgba(238,136,136,.06)", color: "var(--red)", fontSize: 12.5 }}>
+              Couldn’t start the pipeline: {startErr}. Make sure this project has a connected, logged-in account in Agent pool.
+            </div>
+          )}
           <div className="td-meta-row">
             <Chip>
               <Priority level={task.priority} style={{ width: 6, height: 6 }} />

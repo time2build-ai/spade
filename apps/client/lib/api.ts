@@ -152,6 +152,12 @@ export const api = {
       `/pipelines?project_id=${encodeURIComponent(projectId)}`,
     ),
   pipeline: (runId: string) => http<PipelineRun>(`/pipelines/${runId}`),
+  // Create a pipeline run for a task (does not start it — call startPipeline).
+  createPipeline: (projectId: string, taskId: string) =>
+    http<PipelineRun>("/pipelines", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, task_id: taskId }),
+    }),
   sprints: (projectId: string) =>
     http<{ sprints: Sprint[] }>(
       `/sprints?project_id=${encodeURIComponent(projectId)}`,
