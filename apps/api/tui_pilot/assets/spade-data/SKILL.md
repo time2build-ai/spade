@@ -63,7 +63,11 @@ curl -s -X DELETE $B/tasks/<A>/links/<link_id>   # remove a link (each task carr
 # `label` = short title. `detail` = a SELF-CONTAINED markdown description (what it
 # is, why it matters, where it came from) — this is what the Product brain panel
 # renders (as markdown) when the human clicks the node, so make it substantive.
-curl -s -X POST $B/brain/nodes -H 'content-type: application/json' -d '{"project_id":"<id>","type":"decision","label":"Adopt OAuth 2.1","detail":"**What:** Use OAuth 2.1 with PKCE for the SPA login flow.\n**Why:** Eliminates implicit-flow token leakage and matches the new auth provider.\n**Source:** 2026-06-23 architecture review."}'
+# For a DECISION you inferred from conversation, ALWAYS set "status":"proposed"
+# and "owner" (the human/you) — never silently "active". A proposed ADR shows the
+# right pill, can be promoted by the human, and is flagged until resolved. Other
+# node types (feature/bug/feedback/metric/convention) don't take a status.
+curl -s -X POST $B/brain/nodes -H 'content-type: application/json' -d '{"project_id":"<id>","type":"decision","label":"Adopt OAuth 2.1","status":"proposed","owner":"Robert","detail":"**What:** Use OAuth 2.1 with PKCE for the SPA login flow.\n**Why:** Eliminates implicit-flow token leakage and matches the new auth provider.\n**Source:** 2026-06-23 architecture review."}'
 curl -s -X POST $B/brain/edges -H 'content-type: application/json' -d '{"project_id":"<id>","from_id":"<a>","to_id":"<b>","rel":"decided_by"}'
 # RUN a task through the 4-stage agent pipeline (Developer→Reviewer→Integrator→Documentor)
 RID=$(curl -s -X POST $B/pipelines -H 'content-type: application/json' -d '{"project_id":"<id>","task_id":"<task_id>"}' | jq -r .id)
