@@ -26,6 +26,12 @@ const task = (id: string, status: string) => ({ id, project_id: "p1", title: `Ta
 const node = (id: string, type: string, label: string) => ({ id, project_id: "p1", type, label, detail: null, x: null, y: null, created_at: "" });
 
 test.describe("overview (real)", () => {
+  test("hero shows where the project lives on disk", async ({ page }) => {
+    await mock(page, {});
+    await page.goto("/overview");
+    await expect(page.getByTestId("ov-path")).toContainText("/d");
+  });
+
   test("empty project → honest empty states, no demo numbers", async ({ page }) => {
     await mock(page, {});
     await page.goto("/overview");

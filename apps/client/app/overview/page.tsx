@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
 
@@ -61,6 +62,12 @@ export default function OverviewPage() {
             <div className="muted mono" style={{ fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase" }}>
               {project?.name ?? "Project"}{sprint ? ` · sprint ${sprint.number}${sprint.day_label ? ` · ${sprint.day_label}` : ""}` : ""}
             </div>
+            {project?.path && (
+              <div className="muted mono" data-testid="ov-path" title={project.path}
+                style={{ fontSize: 11.5, marginTop: 4, display: "flex", alignItems: "center", gap: 5, wordBreak: "break-all" }}>
+                <Icon name="term" size={11} /> {project.path}
+              </div>
+            )}
             {total > 0 ? (
               <>
                 <div className="ov-hero-metric">
