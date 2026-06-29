@@ -33,6 +33,26 @@ def _ensure_tmux_on_path() -> str:
     return tmux
 
 
+def list_session_names() -> list[str]:
+    """All live tmux session names on the default server.
+
+    Returns ``[]`` when there is no server (no sessions) or tmux is unavailable —
+    callers use this to find orphaned agent sessions, so a missing server simply
+    means "nothing to reap" rather than an error.
+    """
+    try:
+        tmux = _ensure_tmux_on_path()
+    except SessionError:
+        return []
+    proc = subprocess.run(
+        [tmux, "list-sessions", "-F", "#{session_name}"],
+        capture_output=True, text=True, check=False,
+    )
+    if proc.returncode != 0:  # no server running → "no sessions exist"
+        return []
+    return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+
+
 class TmuxSession:
     """A single detached tmux session running one command.
 

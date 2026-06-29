@@ -58,6 +58,7 @@ from .session import (
     install_orchestrator_skill,
     install_planning_skill,
     install_spade_data_skill,
+    list_session_names,
 )
 
 logger = logging.getLogger("tui_pilot")
@@ -1080,17 +1081,171 @@ def post_handoff(id: str) -> dict:
     return {"ok": ok}
 
 
+# ---- stale-session reaper -------------------------------------------------
+#
+# Agent sessions outlive their usefulness: e2e runs and finished pipelines leave
+# idle orchestrators/workers behind, and a dev-server ``--reload`` drops the
+# in-memory fleet while the tmux sessions keep running (orphans). A background
+# sweep reaps three kinds:
+#   - dead:   a registry entry whose tmux is gone.
+#   - idle:   a live, IDLE registry entry (no pending menu, not mid-task) that
+#             has been around longer than the idle TTL. Re-spawn is automatic.
+#   - orphan: a tmux session still alive but no longer in the live registry.
+# Workers actively WORKING (THINKING/STREAMING) or AWAITING_* input are never
+# reaped. Cadence + TTL are env-tunable; TTL 0 disables idle reaping entirely.
+
+_REAP_INTERVAL_S = float(os.environ.get("TUI_PILOT_REAP_INTERVAL_S", "60"))
+_SESSION_TTL_S = float(os.environ.get("TUI_PILOT_SESSION_TTL_S", str(2 * 3600)))
+
+
+def _age_seconds(created_at: str | None) -> float | None:
+    """Seconds since an ISO ``created_at`` (naive timestamps assumed UTC); None
+    if unparseable so the caller can treat age as unknown (never reap on age)."""
+    if not created_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(created_at)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - dt).total_seconds()
+
+
+def _is_idle_reapable(aid: str) -> bool:
+    """True if a live registry session is safe to reap on idle: state IDLE, no
+    pending menu, and not mid-boot/prime/work. Anything THINKING/STREAMING (busy)
+    or AWAITING_* (needs the user) is kept so we never tear down real work."""
+    ctrl = _sessions.get(aid)
+    if ctrl is None:
+        return False
+    if _meta.get(aid, {}).get("prep") in ("booting", "priming", "working"):
+        return False
+    if _safe_state(ctrl) != State.IDLE.value:
+        return False
+    try:
+        return parse_menu(ctrl.session.capture()) is None
+    except SessionError:
+        return False  # capture failed → dead; the dead branch handles it
+
+
+def reap_sessions(*, ttl_s: float | None = None, force_idle: bool = False,
+                  is_alive=None, tmux_names=None) -> dict:
+    """Reap stale agent sessions; return the reaped ids grouped by reason.
+
+    ``ttl_s`` defaults to the configured idle TTL (pass 0 to skip idle reaping);
+    ``force_idle`` reaps every idle session regardless of age. ``is_alive`` and
+    ``tmux_names`` are injectable for tests. Safe to call concurrently with the
+    poll loop — it snapshots ids, probes liveness without the registry lock, and
+    mutates via :func:`_drop_session`.
+    """
+    if ttl_s is None:
+        ttl_s = _SESSION_TTL_S
+    if is_alive is None:
+        def is_alive(sid):
+            # Prefer the registry controller's own session handle (same liveness
+            # check _info uses); fall back to a bare lookup for unknown ids.
+            ctrl = _sessions.get(sid)
+            sess = ctrl.session if ctrl is not None else TmuxSession(sid, "")
+            try:
+                return sess.is_alive()
+            except Exception:  # noqa: BLE001
+                return False
+    reaped: dict[str, list[str]] = {"dead": [], "idle": [], "orphan": []}
+
+    with _registry_lock:
+        ids = list(_sessions.keys())
+    for aid in ids:
+        try:
+            if aid not in _sessions:
+                continue
+            if not is_alive(aid):
+                _drop_session(aid, kill=False)
+                reaped["dead"].append(aid)
+            elif (force_idle or ttl_s) and _is_idle_reapable(aid):
+                age = _age_seconds((sessions_store.get(aid) or {}).get("created_at"))
+                if force_idle or (age is not None and age >= ttl_s):
+                    _drop_session(aid, kill=True)
+                    reaped["idle"].append(aid)
+        except Exception:  # noqa: BLE001 - one bad row must not abort the sweep
+            logger.warning("reap check failed for session %s", aid, exc_info=True)
+
+    # Orphan sweep: a tmux session still alive but not in the live registry, with
+    # a (now non-live) store row of ours — left behind by a dropped process.
+    try:
+        names = set(tmux_names() if tmux_names is not None else list_session_names())
+    except Exception:  # noqa: BLE001
+        names = set()
+    if names:
+        with _registry_lock:
+            known = set(_sessions.keys())
+        live_rows = {r["id"] for r in sessions_store.all_live()}
+        for name in names - known:
+            if name in live_rows or sessions_store.get(name) is None:
+                continue  # still tracked as live, or not one of ours — leave it
+            try:
+                TmuxSession(name, "").kill()
+                reaped["orphan"].append(name)
+            except Exception:  # noqa: BLE001
+                logger.warning("orphan reap failed for %s", name, exc_info=True)
+    return reaped
+
+
+def _reap_loop() -> None:
+    """Daemon loop: periodically reap stale sessions (dead + idle-past-TTL +
+    orphan). Each iteration is fully guarded so a transient error never stops
+    the loop."""
+    while True:
+        time.sleep(_REAP_INTERVAL_S)
+        try:
+            reaped = reap_sessions()
+            total = sum(len(v) for v in reaped.values())
+            if total:
+                logger.info("reaped %d stale session(s): %s", total, reaped)
+        except Exception:  # noqa: BLE001
+            logger.warning("session reap loop iteration failed", exc_info=True)
+
+
+def _drop_session(aid: str, *, kill: bool) -> Controller | None:
+    """Remove ``aid`` from the in-memory registry and mark its row exited.
+
+    Pops the Controller/lock/meta/poller under the registry lock, then (outside
+    the lock, since kill shells out to tmux) optionally kills the tmux session.
+    Returns the popped Controller, or None if it was already gone. Marking the
+    store row exited keeps a later reconcile from trying to reattach it.
+    """
+    with _registry_lock:
+        ctrl = _sessions.pop(aid, None)
+        _locks.pop(aid, None)
+        _meta.pop(aid, None)
+        _pollers.pop(aid, None)
+    if ctrl is not None and kill:
+        try:
+            ctrl.session.kill()
+        except Exception:  # noqa: BLE001 - a kill failure must not abort a reap sweep
+            logger.warning("kill failed while dropping session %s", aid, exc_info=True)
+    try:
+        sessions_store.set_status(aid, "exited")
+    except Exception:  # noqa: BLE001 - store write is best-effort
+        pass
+    return ctrl
+
+
 @app.delete("/sessions/{id}")
 def delete_session(id: str) -> dict:
-    with _registry_lock:
-        ctrl = _sessions.pop(id, None)
-        _locks.pop(id, None)
-        _meta.pop(id, None)
-        _pollers.pop(id, None)
-    if ctrl is None:
+    if _drop_session(id, kill=True) is None:
         raise HTTPException(status_code=404, detail=f"no session with id {id!r}")
-    ctrl.session.kill()
     return {"id": id, "status": "killed"}
+
+
+@app.post("/sessions/cleanup")
+def cleanup_sessions(idle: bool = False) -> dict:
+    """Reap stale sessions on demand. Always reaps dead + orphan sessions; with
+    ``?idle=true`` also reaps every idle session regardless of age (otherwise the
+    configured idle TTL applies). Returns the reaped ids grouped by reason plus a
+    ``count`` total."""
+    reaped = reap_sessions(force_idle=idle)
+    return {**reaped, "count": sum(len(v) for v in reaped.values())}
 
 
 # ---- static test UI -------------------------------------------------------
@@ -1142,6 +1297,10 @@ try:
     orchestrator_server.reload_missions()
 except Exception:  # noqa: BLE001 - startup reconcile is best-effort (swallowed)
     logger.warning("startup session reconcile failed", exc_info=True)
+
+# Background stale-session reaper (started after reconcile so the first sweep
+# sees the reattached fleet). Daemon so it never blocks shutdown.
+threading.Thread(target=_reap_loop, daemon=True).start()
 
 
 def main() -> None:
