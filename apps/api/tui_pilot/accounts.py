@@ -7,6 +7,7 @@ db.home()/agents/<provider>/<id>/. Users can also import existing ~/.claude-* di
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,7 +36,10 @@ def create(
     model: str | None = None,
     plan: str | None = None,
 ) -> dict:
-    """Insert a new account and return the created row as a dict."""
+    """Insert a new account and return the created row as a dict. The config_dir
+    is stored absolute (expand a leading ~) so auth checks + CLAUDE_CONFIG_DIR
+    always resolve to the real home."""
+    config_dir = os.path.expanduser(config_dir)
     db.execute(
         "INSERT INTO accounts (id, label, config_dir, color, provider, role, model, plan, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -120,7 +124,9 @@ def auth_status(config_dir: str) -> str:
         the completed-onboarding flag is our best dir-only signal.
     Any parse error / missing file → not_logged_in.
     """
-    d = Path(config_dir)
+    # Expand a leading ~ / ~user — accounts can be imported with "~/.claude" and
+    # that tilde must resolve to the real home, or every check reads not_logged_in.
+    d = Path(os.path.expanduser(config_dir))
 
     creds = _load_json(d / ".credentials.json")
     if isinstance(creds, dict) and len(creds) > 0:
