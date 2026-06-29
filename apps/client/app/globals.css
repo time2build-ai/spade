@@ -518,15 +518,16 @@ body.home-mode .app > main { grid-column: 1 / -1; }
    our PageHead + scrollable <main> so columns size to content) */
 .backlog-grid {
   display: grid; grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: minmax(0, 1fr); /* bound the row so columns scroll inside */
   gap: 14px; padding: 16px 22px 22px; align-items: stretch;
-  flex: 1; min-height: 0; overflow-y: auto;
+  flex: 1; min-height: 0; overflow: hidden;
 }
 .col {
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; min-height: 0;
   background: var(--bg-1); border: 1px solid var(--line); border-radius: 8px;
   overflow: hidden;
 }
-.col-body { flex: 1; }
+.col-body { flex: 1; min-height: 0; overflow-y: auto; }
 .col-head {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; border-bottom: 1px solid var(--line);

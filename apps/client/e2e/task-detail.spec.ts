@@ -40,7 +40,9 @@ test.describe("task detail", () => {
     await expect(page.locator(".td-title")).toHaveText("Optimize mobile checkout speed");
     await expect(page.getByTestId("task-status-chip")).toContainText("in_progress");
     await expect(page.getByRole("link", { name: /View in graph/ })).toHaveAttribute("href", "/brain");
-    await expect(page.getByRole("link", { name: /Resume pipeline/ })).toHaveAttribute("href", "/orchestrator");
+    // never run → "Start pipeline" (not "Resume")
+    await expect(page.getByTestId("run-pipeline")).toContainText("Start pipeline");
+    await expect(page.getByTestId("run-pipeline")).toHaveAttribute("href", "/orchestrator");
     await expect(page.locator(".breadcrumb").getByRole("link", { name: "Backlog" })).toHaveAttribute("href", "/backlog");
   });
 
@@ -86,6 +88,8 @@ test.describe("task detail", () => {
     await page.goto("/task/T-1");
     await expect(page.locator(".timeline .tl-item")).toHaveCount(1);
     await expect(page.locator(".timeline .tl-item.now")).toHaveCount(1);
+    // a run exists → the action says "Resume pipeline"
+    await expect(page.getByTestId("run-pipeline")).toContainText("Resume pipeline");
   });
 
   test("properties rail shows real fields only", async ({ page }) => {

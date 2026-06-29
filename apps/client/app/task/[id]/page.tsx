@@ -83,6 +83,9 @@ export default function TaskPage() {
   const { data: pipeData } = useSWR(task ? ["pipelines", task.project_id] : null, () => api.pipelines(task!.project_id));
   const { data: tasksData } = useSWR(task ? ["tasks", task.project_id] : null, () => api.tasks(task!.project_id));
 
+  // Has any pipeline ever run on this task? Drives Start vs Resume wording.
+  const hasRun = !!task && (pipeData?.pipelines ?? []).some((pl) => pl.task_id === task.id);
+
   const headerActions = task ? (
     <>
       <span className="chip" data-testid="task-status-chip">
@@ -92,8 +95,8 @@ export default function TaskPage() {
       <Link href="/brain" className="btn">
         <Icon name="graph" size={13} /> View in graph
       </Link>
-      <Link href="/orchestrator" className="btn primary">
-        <Icon name="play" size={13} /> Resume pipeline
+      <Link href="/orchestrator" className="btn primary" data-testid="run-pipeline">
+        <Icon name="play" size={13} /> {hasRun ? "Resume pipeline" : "Start pipeline"}
       </Link>
     </>
   ) : undefined;
@@ -237,7 +240,7 @@ export default function TaskPage() {
             </div>
           ) : (
             <div className="muted" style={{ fontSize: 12.5, padding: "2px 2px" }}>
-              Not run yet. Use “Resume pipeline” to put the developer → reviewer → integrator flow on it.
+              Not run yet. Use “Start pipeline” to put the developer → reviewer → integrator flow on it.
             </div>
           )}
         </div>
