@@ -1367,7 +1367,10 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 /* === Orchestrator table (PR-08) — reference inline-expanding pipeline table.
    Columns: chevron · Task · Title · Pipeline · Account · Status (Cost/ETA
    omitted — no real data). === */
-.orch-table { display: grid; grid-template-columns: 24px 96px 1fr 1.2fr 100px 84px 72px 64px; background: var(--bg-1); }
+/* 7 tracks — one per header/cell (chevron · Task · Title · Pipeline · Account ·
+   Status · Progress). Rows use `display: contents`, so the column COUNT must
+   match the cell count exactly or the cells desync by one column every row. */
+.orch-table { display: grid; grid-template-columns: 24px 96px 1fr 1.2fr 100px 84px 72px; background: var(--bg-1); }
 /* expanded detail: progress, 3-col grid (context/files/live-log), terminal */
 .orch-d-progress { display: flex; align-items: center; margin-bottom: 14px; }
 .orch-d-progress-bar { flex: 1; height: 4px; background: var(--bg-3); border-radius: 3px; overflow: hidden; position: relative; }
