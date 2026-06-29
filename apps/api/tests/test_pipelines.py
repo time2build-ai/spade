@@ -38,6 +38,25 @@ def test_create_run_builds_four_ordered_stages():
     assert all(s["state"] == "queued" for s in stages)
 
 
+def test_start_moves_task_to_in_progress_then_review_then_shipped():
+    """Starting a stage reflects on the board: Developer → in_progress, later
+    stages → review, completion → shipped."""
+    tid = _setup()
+    assert tasks.get(tid)["status"] == "ready"
+    run = pipelines.create_run(project_id="acme", task_id=tid)
+
+    def fake_spawn(stage_idx, report):
+        return (f"sess{stage_idx}", "acct")
+
+    pipelines.start_stage(run["id"], 0, fake_spawn)  # developer
+    assert tasks.get(tid)["status"] == "in_progress"
+    pipelines.complete_stage(run["id"], 0, report="r0", spawn=fake_spawn)  # → reviewer
+    assert tasks.get(tid)["status"] == "review"
+    for i in range(1, 4):
+        pipelines.complete_stage(run["id"], i, report=f"r{i}", spawn=fake_spawn)
+    assert tasks.get(tid)["status"] == "shipped"
+
+
 def test_advance_runs_stages_then_ships():
     tid = _setup()
     run = pipelines.create_run(project_id="acme", task_id=tid)

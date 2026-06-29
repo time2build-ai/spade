@@ -148,6 +148,15 @@ def start_stage(run_id: str, idx: int, spawn, report: str | None = None) -> None
         return
     _set_stage(run_id, idx, state="running", session_id=session_id, account_id=account_id)
     _set_run(run_id, status="running", current_stage=idx)
+    # Reflect execution on the board the moment an agent starts working the stage:
+    # the Developer stage moves the task to in_progress; later stages to review.
+    # (The final ship is handled in complete_stage.)
+    run = get(run_id)
+    if run is not None:
+        target = "in_progress" if idx == 0 else "review"
+        task = tasks.get(run["task_id"])
+        if task is not None and task.get("status") != "shipped":
+            tasks.move(run["task_id"], target)
 
 
 def complete_stage(run_id: str, idx: int, report: str | None, spawn) -> None:
