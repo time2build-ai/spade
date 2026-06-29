@@ -95,9 +95,16 @@ describe("TaskCard", () => {
     expect(container.querySelector(".chip.metric")).toBeNull();
   });
 
-  test("footer shows an assignee avatar", () => {
-    const { container } = render(<TaskCard task={makeTask()} nodesById={{}} />);
-    expect(container.querySelector(".tc-foot .avatar")).toBeInTheDocument();
+  test("footer shows the real status (no fabricated assignee)", () => {
+    const { container, getByText } = render(<TaskCard task={makeTask({ status: "ready" })} nodesById={{}} />);
+    // No seeded assignee avatar anymore — the foot reflects real task state.
+    expect(container.querySelector(".tc-foot .avatar")).not.toBeInTheDocument();
+    expect(getByText("ready")).toBeInTheDocument();
+  });
+
+  test("an in-progress task shows the 'building' pill", () => {
+    const { getByText } = render(<TaskCard task={makeTask({ status: "in_progress" })} nodesById={{}} />);
+    expect(getByText("building")).toBeInTheDocument();
   });
 });
 

@@ -7,18 +7,7 @@ import { Icon } from "@/components/Icon";
 import { Markdown } from "@/components/ask/Markdown";
 import { indexNodesById, nodeColor } from "@/lib/adapters";
 import { adrCode } from "./DecisionCard";
-import { decisionSeed } from "@/lib/demo";
 import type { BrainEdge, BrainNode, Task } from "@/lib/types";
-
-const TOC = [
-  ["summary", "Summary"],
-  ["drivers", "Decision drivers"],
-  ["consequences", "Consequences"],
-  ["alternatives", "Alternatives"],
-  ["validation", "Validation"],
-  ["provenance", "Provenance"],
-  ["changelog", "Changelog"],
-];
 
 export interface DecisionDetailProps {
   node: BrainNode;
@@ -121,86 +110,26 @@ export function DecisionDetail({
         <h2 className="dec-modal-title">{node.label}</h2>
         {date && <div className="dec-modal-meta mono">Recorded {date}</div>}
 
-        {/* TOC scroll-spy (anchors into the structured sections) */}
-        <nav className="adr-toc" data-testid="adr-toc">
-          {TOC.map(([anchor, label]) => (
-            <a key={anchor} href={`#adr-${anchor}`} className="adr-toc-link">{label}</a>
-          ))}
-        </nav>
-
         <div className="dec-modal-body">
-          {node.detail ? (
-            <Markdown>{node.detail}</Markdown>
-          ) : (
-            <div className="dec-modal-empty">No description recorded yet.</div>
-          )}
+          {/* Real summary from the node's own columns. */}
+          <section className="adr-section" id="adr-summary">
+            <div className="dec-modal-section-label">Summary</div>
+            <div className="adr-kv">
+              <div><span className="k">Status</span><span>{node.status ?? "proposed"}</span></div>
+              {node.owner ? <div><span className="k">Owner</span><span>{node.owner}</span></div> : null}
+              {date ? <div><span className="k">Recorded</span><span>{date}</span></div> : null}
+            </div>
+          </section>
 
-          {(() => {
-            const seed = decisionSeed(node.id);
-            // Real-wins: real status/owner override the seeded Summary rows; the
-            // long narrative below has no real source yet (seeded + noted).
-            const summary = seed.summary.map((r) =>
-              r.k === "Status" && node.status ? { ...r, v: node.status }
-              : r.k === "Owner" && node.owner ? { ...r, v: node.owner }
-              : r,
-            );
-            return (
-              <>
-                <section className="adr-section" id="adr-summary">
-                  <div className="dec-modal-section-label">Summary</div>
-                  <div className="adr-kv">
-                    {summary.map((r) => (
-                      <div key={r.k}><span className="k">{r.k}</span><span>{r.v}</span></div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="adr-section" id="adr-drivers">
-                  <div className="dec-modal-section-label">Decision drivers</div>
-                  <ul className="adr-list">{seed.drivers.map((d, i) => <li key={i}>{d}</li>)}</ul>
-                </section>
-
-                <section className="adr-section" id="adr-consequences">
-                  <div className="dec-modal-section-label">Consequences</div>
-                  <div className="adr-cons">
-                    <div><div className="adr-cons-h" style={{ color: "var(--green)" }}>Good</div><ul className="adr-list">{seed.consequences.good.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-                    <div><div className="adr-cons-h" style={{ color: "var(--red)" }}>Bad</div><ul className="adr-list">{seed.consequences.bad.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-                    <div><div className="adr-cons-h" style={{ color: "var(--text-3)" }}>Neutral</div><ul className="adr-list">{seed.consequences.neutral.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-                  </div>
-                </section>
-
-                <section className="adr-section" id="adr-alternatives">
-                  <div className="dec-modal-section-label">Alternatives considered</div>
-                  {seed.alternatives.map((a, i) => (
-                    <div className="adr-alt" key={i}>
-                      <div className="adr-alt-title">{a.title}</div>
-                      <div className="adr-alt-note muted">{a.note}</div>
-                    </div>
-                  ))}
-                </section>
-
-                <section className="adr-section" id="adr-validation">
-                  <div className="dec-modal-section-label">Validation</div>
-                  <ul className="adr-list">{seed.validation.map((v, i) => <li key={i}>{v}</li>)}</ul>
-                </section>
-
-                <section className="adr-section" id="adr-provenance">
-                  <div className="dec-modal-section-label">Provenance</div>
-                  <div className="adr-kv">{seed.provenance.map((r) => <div key={r.k}><span className="k">{r.k}</span><span>{r.v}</span></div>)}</div>
-                </section>
-
-                <section className="adr-section" id="adr-changelog">
-                  <div className="dec-modal-section-label">Changelog</div>
-                  {seed.changelog.map((c, i) => (
-                    <div className="adr-change" key={i}>
-                      <span className="mono adr-change-date">{c.date}</span>
-                      <span>{c.text}</span>
-                    </div>
-                  ))}
-                </section>
-              </>
-            );
-          })()}
+          {/* The decision's own self-contained markdown (what / why / source). */}
+          <section className="adr-section">
+            <div className="dec-modal-section-label">Detail</div>
+            {node.detail ? (
+              <Markdown>{node.detail}</Markdown>
+            ) : (
+              <div className="dec-modal-empty">No description recorded yet.</div>
+            )}
+          </section>
 
           {linkedTasks.length > 0 && (
             <section className="dec-modal-section">

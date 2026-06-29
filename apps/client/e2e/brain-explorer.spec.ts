@@ -58,20 +58,27 @@ test.describe("brain explorer", () => {
     await expect(page.locator(".brain-explorer .bx-relations")).toBeVisible();
   });
 
-  test("defaults to the first feature and shows the rich record", async ({ page }) => {
+  test("defaults to the first feature and shows the real record", async ({ page }) => {
     await expect(page.locator(".bx-title")).toHaveText("Checkout");
-    // Rich keys grid (Type real + seeded owner/source/confidence/coverage).
+    // Keys grid is real-only: Type/Owner/Last touched/Source (no confidence/coverage).
     await expect(page.locator(".bx-keys .k")).toHaveText([
-      "Type", "Owner", "Last touched", "Source", "Confidence", "Coverage",
+      "Type", "Owner", "Last touched", "Source",
     ]);
     await expect(page.locator(".bx-prose")).toContainText("Checkout detail prose.");
   });
 
-  test("shows the rich record sections (code surface, activity, MCP)", async ({ page }) => {
-    await expect(page.locator(".bx-detail")).toContainText("Code surface");
-    await expect(page.locator(".bx-detail .bx-files .bx-file").first()).toBeVisible();
-    await expect(page.locator(".bx-detail")).toContainText("Activity");
-    await expect(page.locator(".bx-detail .bx-activity .bx-evt").first()).toBeVisible();
+  test("a node without real fields shows honest empty states (— and no-description)", async ({ page }) => {
+    // d1 (decision) has no detail and no owner/source/updated_at → all em-dashes.
+    // Reach it via f1's relations list.
+    await page.locator('.bx-rel-item[data-id="d1"]').click();
+    await expect(page.locator(".bx-title")).toHaveText("Use Stripe PaymentIntent");
+    await expect(page.locator(".bx-prose")).toContainText("No description recorded yet.");
+    await expect(page.getByTestId("bx-owner")).toHaveText("—");
+    await expect(page.getByTestId("bx-source")).toHaveText("—");
+    await expect(page.getByTestId("bx-touched")).toHaveText("—");
+  });
+
+  test("relations map shows the MCP block", async ({ page }) => {
     await expect(page.getByTestId("mcp-block")).toContainText("MCP server");
   });
 

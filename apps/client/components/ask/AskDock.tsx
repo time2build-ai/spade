@@ -107,7 +107,7 @@ function BubbleHeader({
       <button type="button" className="ch-bub-thread-pick" onClick={() => setPicking((p) => !p)}>
         <Icon name="spark" size={13} />
         <div className="ch-bub-thread-t">{project}</div>
-        <Icon name="chev" size={11} style={{ opacity: 0.6 }} />
+        <span style={{ opacity: 0.6, display: "inline-flex" }}><Icon name="chev" size={11} /></span>
       </button>
       <div className="ch-bub-actions">
         <button type="button" className="icon-btn" title="New thread" onClick={() => { onNew(); setPicking(false); }}>

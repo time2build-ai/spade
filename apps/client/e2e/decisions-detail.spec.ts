@@ -53,13 +53,22 @@ test.describe("decision detail aside", () => {
     await expect(page.getByTestId("decision-aside")).toHaveCount(0);
   });
 
-  test("aside has a TOC + structured sections", async ({ page }) => {
+  test("aside shows a real Summary + Detail (no seeded ADR narrative, no TOC)", async ({ page }) => {
     await page.locator(".decisions-list").getByText("Use Stripe PaymentIntent").click();
     const aside = page.getByTestId("decision-aside");
-    await expect(aside.getByTestId("adr-toc")).toBeVisible();
-    for (const s of ["Summary", "Decision drivers", "Consequences", "Alternatives", "Validation", "Provenance", "Changelog"]) {
-      await expect(aside).toContainText(s);
+    // Real-only sections.
+    await expect(aside).toContainText("Summary");
+    await expect(aside).toContainText("Detail");
+    // Summary KV: status defaults to "proposed", recorded date present.
+    await expect(aside).toContainText("Status");
+    await expect(aside).toContainText("proposed");
+    await expect(aside).toContainText("Recorded");
+    // The node's real markdown detail renders.
+    await expect(aside).toContainText("We standardise on Stripe.");
+    // The removed seed/TOC are gone.
+    await expect(aside.getByTestId("adr-toc")).toHaveCount(0);
+    for (const s of ["Decision drivers", "Consequences", "Alternatives", "Validation", "Provenance", "Changelog"]) {
+      await expect(aside).not.toContainText(s);
     }
-    await expect(aside.locator(".adr-cons")).toBeVisible(); // 3-col consequences
   });
 });

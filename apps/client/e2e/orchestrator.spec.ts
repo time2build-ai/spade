@@ -76,27 +76,30 @@ test.describe("orchestrator table", () => {
     await expect(page.locator('[data-testid="orch-row"]')).toHaveCount(1);
   });
 
-  test("KPI strip has 6 cells with sub-lines", async ({ page }) => {
-    await expect(page.locator(".orch-summary-strip .stat-cell")).toHaveCount(6);
-    await expect(page.locator(".orch-summary-strip")).toContainText("Tokens · 24h");
+  test("KPI strip has 4 real-count cells with sub-lines (no fabricated tokens)", async ({ page }) => {
+    await expect(page.locator(".orch-summary-strip .stat-cell")).toHaveCount(4);
+    await expect(page.locator(".orch-summary-strip")).toContainText("Active");
+    await expect(page.locator(".orch-summary-strip")).toContainText("Awaiting human");
+    await expect(page.locator(".orch-summary-strip")).not.toContainText("Tokens");
     await expect(page.locator(".orch-summary-strip .stat-cell .sub").first()).toBeVisible();
   });
 
-  test("table has Cost + ETA columns", async ({ page }) => {
+  test("table has a real Progress column and no fabricated Cost/ETA", async ({ page }) => {
     const heads = await page.locator(".orch-table .th").allTextContents();
-    expect(heads).toContain("Cost");
-    expect(heads).toContain("ETA");
+    expect(heads).toContain("Progress");
+    expect(heads).not.toContain("Cost");
+    expect(heads).not.toContain("ETA");
   });
 
-  test("expanded detail shows progress + context + files + animated live-log", async ({ page }) => {
+  test("expanded detail shows real progress + context + live output (no fabricated files)", async ({ page }) => {
     await page.locator('[data-testid="orch-row"][data-run-id="pl1"]').click();
     const detail = page.getByTestId("orch-detail");
     await expect(detail.locator(".orch-d-progress-bar .fill")).toBeVisible();
     await expect(detail).toContainText("Context");
-    await expect(detail).toContainText("Files touched");
+    await expect(detail).not.toContainText("Files touched");
     await expect(detail.getByTestId("live-log")).toBeVisible();
-    // The live-log streams in lines over time.
-    await expect(detail.locator('[data-testid="live-log"] .tline')).not.toHaveCount(0);
+    // No live session on this run's running stage → honest empty live output.
+    await expect(detail.getByTestId("live-log")).toContainText("No live output");
   });
 
   test("real backend progress wins over the seed (Phase 3)", async ({ page }) => {

@@ -100,12 +100,22 @@ test.describe("backlog", () => {
     await expect(card.locator(".chip.decision")).toContainText("1 ADR"); // "ADR" not "decision"
   });
 
-  test("cards show an assignee avatar", async ({ page }) => {
-    await expect(page.locator('[data-testid="task-card"] .tc-foot .avatar').first()).toBeVisible();
+  test("card foot shows the real status (building pill when in_progress)", async ({ page }) => {
+    // No assignee avatar anymore — the foot reflects the real task.status.
+    await expect(page.locator('[data-testid="task-card"] .tc-foot .avatar')).toHaveCount(0);
+    // The in_progress WIP task shows the "building" pill.
+    const wip = page.locator('[data-testid="task-card"]', { hasText: "WIP task" });
+    await expect(wip.locator(".tc-foot")).toContainText("building");
+    // The ready task just shows its raw status text.
+    const ready = page.locator('[data-testid="task-card"]', { hasText: "Ready task" });
+    await expect(ready.locator(".tc-foot")).toContainText("ready");
   });
 
-  test("blocked banner names the conflicting ADR", async ({ page }) => {
-    await expect(page.getByTestId("blocked-banner")).toContainText("Reviewer flagged conflict");
-    await expect(page.getByTestId("banner-adr")).toContainText("ADR-014");
+  test("blocked banner surfaces the real blocked task + a gate link (no fabricated ADR)", async ({ page }) => {
+    const banner = page.getByTestId("blocked-banner");
+    await expect(banner).toContainText("Blocked task");
+    await expect(banner).toContainText("needs a human call");
+    await expect(banner).not.toContainText("ADR-014");
+    await expect(banner.getByRole("link", { name: /Open gate/ })).toHaveAttribute("href", "/gate");
   });
 });

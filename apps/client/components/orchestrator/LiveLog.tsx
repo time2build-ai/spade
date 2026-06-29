@@ -1,30 +1,44 @@
 "use client";
 
-import * as React from "react";
-import type { OrchLogLine } from "@/lib/demo";
+import { useRef } from "react";
+import useSWR from "swr";
+import { api } from "@/lib/api";
 
-/** Animated streaming live-log (reference): replays seeded lines via setInterval
- *  with colored lvl-* levels + a blinking cursor. */
-export function LiveLog({ logs }: { logs: OrchLogLine[] }) {
-  const [n, setN] = React.useState(0);
-  React.useEffect(() => {
-    setN(0);
-    const id = setInterval(() => setN((p) => (p < logs.length ? p + 1 : p)), 380);
-    return () => clearInterval(id);
-  }, [logs]);
-  const shown = logs.slice(0, n).slice(-7);
+/**
+ * Live log driven by the REAL agent session screen (GET /sessions/:id/screen),
+ * polled. No scripted lines: when there is no live session for the run we show
+ * an honest idle state instead of replaying a seeded transcript.
+ */
+export function LiveLog({ sessionId }: { sessionId: string | null }) {
+  const lastGood = useRef<string>("");
+  const { data, error } = useSWR(
+    sessionId ? ["live-log-screen", sessionId] : null,
+    () => api.sessionScreen(sessionId!),
+    { refreshInterval: 2500 },
+  );
+
+  if (!sessionId) {
+    return (
+      <div className="term term-mini" data-testid="live-log">
+        <div className="tline">
+          <span className="term-empty">No live output — no agent session for this run.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (typeof data === "string") lastGood.current = data;
+  const text = typeof data === "string" ? data : lastGood.current;
+
   return (
     <div className="term term-mini" data-testid="live-log">
-      {shown.map((l, i) => (
-        <div className="tline" key={i}>
-          <span className="ts">{l.t}</span>
-          <span className={"lvl-" + l.lvl}>{l.lvl.padEnd(4)}</span>
-          <span> {l.msg}</span>
+      {error && !lastGood.current ? (
+        <div className="tline">
+          <span className="term-empty">Live output unavailable.</span>
         </div>
-      ))}
-      <div className="tline">
-        <span className="ts blink">▌</span>
-      </div>
+      ) : (
+        text
+      )}
     </div>
   );
 }

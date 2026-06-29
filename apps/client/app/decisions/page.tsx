@@ -7,7 +7,6 @@ import { DecisionCard } from "@/components/decisions/DecisionCard";
 import { DecisionDetail } from "@/components/decisions/DecisionDetail";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
-import { decisionSeed } from "@/lib/demo";
 import type { BrainNode } from "@/lib/types";
 
 const FILTERS = ["all", "active", "proposed", "superseded"] as const;
@@ -118,7 +117,7 @@ export default function DecisionsPage() {
         </div>
         <div className="decisions-list">
           {decisions.map((node, i) =>
-            filter === "all" || (node.status ?? decisionSeed(node.id).status) === filter ? (
+            filter === "all" || (node.status ?? "proposed") === filter ? (
               <DecisionCard key={node.id} node={node} index={i} onOpen={(n: BrainNode) => setOpenId(n.id)} />
             ) : null,
           )}

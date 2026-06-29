@@ -1,11 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * PR-10 — Agent Pool account cards (honest subset).
- * Provider glyph avatars (colored per real account.provider) + an in-use state
- * derived from real sessions (session.account_id of an alive session).
- * No-fabrication: no usage meters / role pills / % / executions table (no API
- * data for those). Mocks the API.
+ * Agent pool — de-mocked. Provider glyph avatars (colored per real provider) +
+ * an in-use state derived from real sessions. No fabricated usage meters /
+ * always-on role pills / executions: the executions table lists the REAL fleet's
+ * working sessions, with honest empty states. Mocks the API.
  */
 
 const ACCOUNTS = [
@@ -14,14 +13,14 @@ const ACCOUNTS = [
 ];
 
 const SESSION = {
-  id: "sess1", name: "dev", alive: true, cmd: "claude", cwd: "/x", role: "Developer", label: null,
-  emoji: null, mode: null, prep: null, prep_detail: null, task: null, order: null, model: null,
-  mission: null, parent: null, reason: null, state: "idle", harness_state: null, has_menu: false,
+  id: "sess1", name: "dev-1", alive: true, cmd: "claude", cwd: "/x", role: "developer", label: null,
+  emoji: null, mode: null, prep: "working", prep_detail: null, task: "SPD-1", order: null, model: null,
+  mission: null, parent: null, reason: null, state: "running", harness_state: null, has_menu: false,
   account_id: "a1", project_id: "p1",
 };
 
-async function mockPool(page: Page) {
-  await page.route("**/api/sessions", (r) => r.fulfill({ json: { sessions: [SESSION] } }));
+async function mockPool(page: Page, sessions: unknown[] = [SESSION]) {
+  await page.route("**/api/sessions", (r) => r.fulfill({ json: { sessions } }));
   await page.route("**/api/accounts", (r) => r.fulfill({ json: { accounts: ACCOUNTS } }));
 }
 
@@ -46,23 +45,11 @@ test.describe("agent pool accounts", () => {
     await expect(codex.locator(".acct-state")).toContainText("idle");
   });
 
-  test("rich account card shows a role pill, usage meter, and model·plan", async ({ page }) => {
-    const card = page.locator(".acct-card.rich").first();
-    await expect(card.getByTestId("acct-role")).toBeVisible();
-    await expect(card.getByTestId("acct-meter").locator(".fill")).toBeVisible();
-    await expect(card.locator(".acct-sub")).toContainText("·"); // model · plan
+  test("no fabricated usage meter is rendered", async ({ page }) => {
+    await expect(page.locator('[data-testid="acct-meter"]')).toHaveCount(0);
   });
 
-  test("'Executions in progress' table lists AI-ISS rows with node chips", async ({ page }) => {
-    const table = page.getByTestId("exec-table");
-    await expect(table).toBeVisible();
-    await expect(table.getByTestId("exec-row").first()).toBeVisible();
-    await expect(table).toContainText("AI-ISS-241");
-    await expect(table.locator(".node-chip").first()).toBeVisible();
-  });
-
-  test("real account role/model win over the seed (Phase 3)", async ({ page }) => {
-    // Re-mock with real role/model/plan columns populated.
+  test("real account role/model show through when present", async ({ page }) => {
     await page.route("**/api/accounts", (r) =>
       r.fulfill({ json: { accounts: [{ ...ACCOUNTS[0], role: "Integrator", model: "claude-real-x", plan: "Enterprise" }, ACCOUNTS[1]] } }),
     );
@@ -71,5 +58,21 @@ test.describe("agent pool accounts", () => {
     await expect(card.getByTestId("acct-role")).toHaveText("Integrator");
     await expect(card.locator(".acct-sub")).toContainText("claude-real-x");
     await expect(card.locator(".acct-sub")).toContainText("Enterprise");
+  });
+
+  test("'Executions in progress' lists real working sessions", async ({ page }) => {
+    const table = page.getByTestId("exec-table");
+    await expect(table).toBeVisible();
+    const row = table.getByTestId("exec-row").first();
+    await expect(row).toContainText("dev-1");
+    await expect(row).toContainText("SPD-1");
+    await expect(row).toContainText("acct-claude");
+  });
+
+  test("no live executions shows an honest empty state", async ({ page }) => {
+    await mockPool(page, []);
+    await page.goto("/agent-pool");
+    await expect(page.locator(".ap-executions")).toContainText("No executions in progress.");
+    await expect(page.locator(".ap-pool")).toContainText("No agents running.");
   });
 });

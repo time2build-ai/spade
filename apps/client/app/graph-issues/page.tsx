@@ -8,10 +8,14 @@ import { BrainLegend } from "@/components/brain/BrainLegend";
 import { GraphCanvas } from "@/components/brain/GraphCanvas";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
-import { DEMO_AI_ISSUES, AI_ISSUE_STATUS } from "@/lib/demo";
 import type { BrainNodeType } from "@/lib/types";
 
 const ALL_TYPES: BrainNodeType[] = ["feature", "decision", "convention", "feedback", "bug", "metric"];
+
+// Status badge for AI issues. Real gap findings surface as "awaiting validation".
+const ISSUE_STATUS = {
+  pending: { color: "var(--amber)", glyph: "○", label: "awaiting validation" },
+} as const;
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: "40px 22px", color: "var(--text-3)", fontSize: 13 }}>{children}</div>;
@@ -34,23 +38,21 @@ export default function GraphIssuesPage() {
   const nodes = nodesData?.nodes ?? [];
   const edges = edgesData?.edges ?? [];
 
-  // Real-wins: real gap-analysis findings drive the AI-issues pane; the seed fills
-  // it when the graph has no gaps. Map each gap → the issue card shape.
+  // Real gap-analysis findings drive the AI-issues pane. No seed fallback — an
+  // empty graph (or no gaps) shows an honest empty state.
   const GAP_ROLE: Record<string, string> = {
     orphan: "Integrator", "unresolved-decision": "Reviewer", "undecided-feature": "Reviewer",
   };
   const realGaps = gapsData?.gaps ?? [];
-  const issues = realGaps.length > 0
-    ? realGaps.map((g, i) => ({
-        id: `GAP-${String(i + 1).padStart(3, "0")}`,
-        title: g.label,
-        role: GAP_ROLE[g.kind] ?? "Reviewer",
-        status: "pending" as const,
-        confidence: 80,
-        summary: g.detail,
-        agent: `Spade · gap-analysis (${g.kind})`,
-      }))
-    : DEMO_AI_ISSUES;
+  const issues = realGaps.map((g, i) => ({
+    id: `GAP-${String(i + 1).padStart(3, "0")}`,
+    title: g.label,
+    role: GAP_ROLE[g.kind] ?? "Reviewer",
+    status: "pending" as const,
+    confidence: 80,
+    summary: g.detail,
+    agent: `Spade · gap-analysis (${g.kind})`,
+  }));
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [visibleTypes, setVisibleTypes] = React.useState<Set<BrainNodeType>>(() => new Set(ALL_TYPES));
@@ -93,8 +95,11 @@ export default function GraphIssuesPage() {
             AI issues
             <span className="muted mono" style={{ fontSize: 11 }}>{issues.length}</span>
           </div>
+          {issues.length === 0 && (
+            <StateMessage>No graph issues yet.</StateMessage>
+          )}
           {issues.map((iss) => {
-            const st = AI_ISSUE_STATUS[iss.status];
+            const st = ISSUE_STATUS[iss.status];
             return (
               <div className="gi-issue" key={iss.id} data-status={iss.status}>
                 <div className="gi-issue-h">

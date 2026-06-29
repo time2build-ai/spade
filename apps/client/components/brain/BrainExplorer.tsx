@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { NODE_TYPE_META } from "@/lib/adapters";
-import { brainNodeSeed } from "@/lib/demo";
 import type { BrainNode, BrainEdge, BrainNodeType } from "@/lib/types";
 
 /**
@@ -165,66 +164,26 @@ export function BrainExplorer({ nodes, edges, selectedId, onSelect }: BrainExplo
               </div>
             </div>
 
-            {/* Keys grid — real Type + edges + node owner/source/confidence/
-                coverage (seeded; real-wins where the API exposes them). */}
+            {/* Keys grid + description — REAL node columns only (Type/Owner/
+                Source/Last touched + the node's own markdown detail). */}
             {(() => {
-              const s = brainNodeSeed(sel.id, sel.detail);
-              // Real-wins: owner/source/updated_at are real columns now; the seed
-              // fills confidence/coverage/summary/code-surface/activity (no real
-              // source yet). updated_at (ISO) → short date for "Last touched".
-              const owner = sel.owner ?? s.owner;
-              const source = sel.source ?? s.source;
+              const owner = sel.owner ?? null;
+              const source = sel.source ?? null;
               const lastTouched = sel.updated_at
                 ? new Date(sel.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
-                : s.lastTouched;
+                : null;
               return (
                 <>
                   <div className="bx-keys">
                     <div><span className="k">Type</span><span>{NODE_TYPE_META[sel.type].label}</span></div>
-                    <div><span className="k">Owner</span><span data-testid="bx-owner">{owner}</span></div>
-                    <div><span className="k">Last touched</span><span className="mono" data-testid="bx-touched">{lastTouched}</span></div>
-                    <div><span className="k">Source</span><span data-testid="bx-source">{source}</span></div>
-                    <div>
-                      <span className="k">Confidence</span>
-                      <span style={{ color: s.confidence.color }}>● {s.confidence.label}</span>
-                    </div>
-                    <div><span className="k">Coverage</span><span className="mono">{s.coverage}%</span></div>
+                    <div><span className="k">Owner</span><span data-testid="bx-owner">{owner ?? "—"}</span></div>
+                    <div><span className="k">Last touched</span><span className="mono" data-testid="bx-touched">{lastTouched ?? "—"}</span></div>
+                    <div><span className="k">Source</span><span data-testid="bx-source">{source ?? "—"}</span></div>
                   </div>
-
-                  {sel.type === "feature" && (
-                    <div className="bx-summary serif">{s.summary}</div>
-                  )}
 
                   <div className="bx-section-h">Description</div>
                   <div className="bx-prose">
-                    {sel.detail ? renderProse(sel.detail) : renderProse(s.summary)}
-                  </div>
-
-                  <div className="bx-section-h">
-                    Code surface
-                    <span className="muted mono" style={{ fontSize: 11, marginLeft: 8 }}>
-                      {s.codeFiles.length} files · {1200 + s.coverage * 34} LOC · last commit {s.lastTouched}
-                    </span>
-                  </div>
-                  <div className="bx-files">
-                    {s.codeFiles.map(([path, diff, who]) => (
-                      <div className="bx-file" key={path}>
-                        <span className="mono" style={{ color: "var(--text-2)" }}>{path}</span>
-                        <span className="mono" style={{ color: "var(--text-3)", fontSize: 11 }}>{diff}</span>
-                        <span className="muted" style={{ fontSize: 11.5 }}>{who}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="bx-section-h">Activity</div>
-                  <div className="bx-activity">
-                    {s.activity.map(([time, color, text], i) => (
-                      <div className="bx-evt" key={i}>
-                        <span className="bx-evt-time mono">{time}</span>
-                        <span className="bx-evt-dot" style={{ background: color }} />
-                        <span>{text}</span>
-                      </div>
-                    ))}
+                    {sel.detail ? renderProse(sel.detail) : <span className="muted">No description recorded yet.</span>}
                   </div>
                 </>
               );

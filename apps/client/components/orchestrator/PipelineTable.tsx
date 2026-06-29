@@ -3,8 +3,7 @@
 import * as React from "react";
 import { StagesMini } from "./StagesMini";
 import { LiveLog } from "./LiveLog";
-import { stageVisual } from "@/lib/adapters";
-import { orchRunSeed } from "@/lib/demo";
+import { stageVisual, runActiveSession } from "@/lib/adapters";
 import type { PipelineRun, RunStatus } from "@/lib/types";
 
 const STATUS_DOT: Record<RunStatus, string> = {
@@ -31,6 +30,15 @@ function stepLabel(run: PipelineRun): string {
   return `step ${step}/${total}`;
 }
 
+/** Real progress 0..100: backend-derived when present, else from stage states. */
+function runProgress(run: PipelineRun): number {
+  if (typeof run.progress === "number") return run.progress;
+  const total = run.stages.length || 0;
+  if (!total) return 0;
+  const done = run.stages.filter((s) => stageVisual(s.state).key === "done").length;
+  return Math.round((done / total) * 100);
+}
+
 export interface PipelineTableProps {
   runs: PipelineRun[];
   /** task_id → title (real, joined from the tasks list). */
@@ -45,9 +53,9 @@ export interface PipelineTableProps {
 /**
  * Reference orchestrator layout: a table of pipeline runs with inline-expanding
  * detail. No-fabrication: columns + detail show only real fields (task, title,
- * stages, account, status). The reference's Cost / ETA columns and the
- * files-touched / tokens / fake live-log cards are omitted — instead the
- * expanded row embeds our REAL session Terminal for that run.
+ * stages, account, status, backend-derived progress). The reference's Cost / ETA
+ * columns and the files-touched / tokens / scripted live-log cards are dropped —
+ * the expanded row embeds the REAL session output for the run's running stage.
  */
 export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance }: PipelineTableProps) {
   const [open, setOpen] = React.useState<Set<string>>(() => new Set());
@@ -67,15 +75,13 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
       <div className="th">Pipeline</div>
       <div className="th">Account</div>
       <div className="th">Status</div>
-      <div className="th">Cost</div>
-      <div className="th">ETA</div>
+      <div className="th">Progress</div>
 
       {runs.map((run) => {
         const isOpen = open.has(run.id);
         const acctId = run.stages.find((s) => s.account_id)?.account_id ?? null;
-        const seed = orchRunSeed(run.id);
-        // Real-wins: backend-derived progress shows through; seed fills cost/eta/etc.
-        const progress = run.progress ?? seed.progress;
+        const progress = runProgress(run);
+        const liveSession = runActiveSession(run);
         return (
           <React.Fragment key={run.id}>
             <div
@@ -113,19 +119,18 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                   <span className="mono" style={{ fontSize: 11 }}>{run.status}</span>
                 </span>
               </div>
-              <div className="td mono" style={{ fontSize: 11 }}>{seed.cost}</div>
-              <div className="td mono" style={{ fontSize: 11, color: run.status === "shipped" ? "var(--green)" : run.status === "paused" ? "var(--amber)" : "var(--text-2)" }}>
-                {run.status === "shipped" ? "done" : seed.eta}
+              <div className="td mono" style={{ fontSize: 11, color: run.status === "shipped" ? "var(--green)" : "var(--text-2)" }}>
+                {run.status === "shipped" ? "done" : `${progress}%`}
               </div>
             </div>
             {isOpen && (
               <div className="orch-detail" data-testid="orch-detail">
                 <div className="orch-detail-inner">
-                  {/* Progress bar */}
+                  {/* Progress bar — real (backend-derived or stage-derived) */}
                   <div className="orch-d-progress">
                     <div className="orch-d-progress-bar"><div className="fill" data-testid="orch-progress-fill" style={{ width: progress + "%" }} /></div>
                     <span className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 10 }} data-testid="orch-progress-label">
-                      {progress}% · {seed.eta}
+                      {progress}% · {run.stages_done ?? run.stages.filter((s) => stageVisual(s.state).key === "done").length}/{run.stages_total ?? run.stages.length} stages
                     </span>
                   </div>
 
@@ -146,7 +151,7 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                     })}
                   </div>
 
-                  {/* Three columns: context · files · live log */}
+                  {/* Two columns: real context · real live output */}
                   <div className="orch-d-grid">
                     <div className="orch-d-card">
                       <div className="orch-d-card-h">Context</div>
@@ -154,9 +159,8 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                         <div><span className="k">Task</span><span className="mono">{run.task_id}</span></div>
                         <div><span className="k">Title</span><span>{titleById[run.task_id] ?? "—"}</span></div>
                         <div><span className="k">Account</span><span className="mono">{acctId ? accountById[acctId] ?? acctId : "—"}</span></div>
-                        <div><span className="k">Tokens</span><span className="mono">{seed.tokens}</span></div>
-                        <div><span className="k">Cost</span><span className="mono">{seed.cost}</span></div>
                         <div><span className="k">Status</span><span className="mono">{run.status}</span></div>
+                        <div><span className="k">Progress</span><span className="mono">{progress}%</span></div>
                       </div>
                       {(onStart || onAdvance) && (
                         <div style={{ marginTop: 10, display: "flex", gap: 6 }}>
@@ -170,19 +174,9 @@ export function PipelineTable({ runs, titleById, accountById, onStart, onAdvance
                       )}
                     </div>
 
-                    <div className="orch-d-card">
-                      <div className="orch-d-card-h">Files touched</div>
-                      {seed.files.map(([f, d]) => (
-                        <div className="orch-d-file" key={f}>
-                          <span className="mono" style={{ fontSize: 11.5, color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f}</span>
-                          <span className="mono" style={{ fontSize: 10.5, color: "var(--text-3)" }}>{d}</span>
-                        </div>
-                      ))}
-                    </div>
-
                     <div className="orch-d-card term-mini">
-                      <div className="orch-d-card-h" style={{ color: "var(--text-3)" }}>Live log</div>
-                      <LiveLog logs={seed.logs} />
+                      <div className="orch-d-card-h" style={{ color: "var(--text-3)" }}>Live output</div>
+                      <LiveLog sessionId={liveSession} />
                     </div>
                   </div>
                 </div>

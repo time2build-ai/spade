@@ -105,7 +105,7 @@ describe("PipelineCard", () => {
 });
 
 describe("KpiStrip", () => {
-  test("renders 6 KPI cells (3 real counts + 3 seeded) with sub-lines", () => {
+  test("renders 4 KPI cells, all from real counts, with sub-lines", () => {
     const runs = [
       run({ id: "r1", status: "running" }),
       run({ id: "r2", status: "shipped" }),
@@ -113,12 +113,33 @@ describe("KpiStrip", () => {
       run({ id: "r4", status: "paused" }),
     ];
     const { container } = render(<KpiStrip runs={runs} />);
-    expect(container.querySelectorAll(".stat-cell")).toHaveLength(6);
-    // Real cells present: Active, Shipped today, Awaiting human.
+    expect(container.querySelectorAll(".stat-cell")).toHaveLength(4);
+    // Every cell is a real count — no fabricated tokens/throughput/concurrency.
     expect(within(container).getByText("Active")).toBeTruthy();
-    expect(within(container).getByText("Shipped today")).toBeTruthy();
-    expect(within(container).getByText("Tokens · 24h")).toBeTruthy();
+    expect(within(container).getByText("Queued")).toBeTruthy();
+    expect(within(container).getByText("Shipped")).toBeTruthy();
+    expect(within(container).getByText("Awaiting human")).toBeTruthy();
+    expect(within(container).queryByText(/Tokens/)).toBeNull();
     expect(container.querySelectorAll(".stat-cell .sub").length).toBeGreaterThan(0);
+  });
+
+  test("counts reflect run statuses", () => {
+    const runs = [
+      run({ id: "r1", status: "running" }),
+      run({ id: "r2", status: "shipped" }),
+      run({ id: "r3", status: "queued" }),
+      run({ id: "r4", status: "paused" }),
+    ];
+    const { container } = render(<KpiStrip runs={runs} />);
+    const cells = Array.from(container.querySelectorAll(".stat-cell")).map((c) => ({
+      lbl: c.querySelector(".lbl")?.textContent,
+      val: c.querySelector(".val")?.textContent,
+    }));
+    const val = (lbl: string) => cells.find((c) => c.lbl === lbl)?.val;
+    expect(val("Active")).toBe("1");
+    expect(val("Queued")).toBe("1");
+    expect(val("Shipped")).toBe("1");
+    expect(val("Awaiting human")).toBe("1");
   });
 });
 

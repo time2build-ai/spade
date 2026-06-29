@@ -5,11 +5,22 @@ import useSWR from "swr";
 import { Icon } from "@/components/Icon";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
-import { DEMO_THREADS, type ChatMsg, type ChatThread } from "@/lib/demo";
 import type { ChatMessageReal } from "@/lib/types";
 
+type Cite = string;
+type ChatMsg = {
+  role: "user" | "assistant";
+  who: string;
+  t: string;
+  text: string;
+  cites?: Cite[];
+  plan?: { title: string; steps: string[] };
+  action?: { kind: string; id: string; risk: string; title: string; remove: string[]; add: string[] };
+};
+type ChatThread = { id: string; title: string; project: string; updated: string; pinned: boolean };
+
 // Map a persisted chat message → the Message component's shape (payload carries
-// the structured cites/plan/action cards).
+// the structured cites/plan/action cards, when the agent emitted them).
 function toMsg(m: ChatMessageReal): ChatMsg {
   const t = m.created_at
     ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -65,12 +76,6 @@ function Message({ m }: { m: ChatMsg }) {
               {m.action.remove.map((l, i) => <div className="ch-diff-line del" key={"r" + i}>- {l}</div>)}
               {m.action.add.map((l, i) => <div className="ch-diff-line add" key={"a" + i}>+ {l}</div>)}
             </div>
-            <div className="ch-action-btns">
-              <button className="btn ghost">Reject</button>
-              <button className="btn ghost">Modify</button>
-              <button className="btn">Send to gates</button>
-              <button className="btn primary">Apply</button>
-            </div>
           </div>
         )}
       </div>
@@ -80,25 +85,19 @@ function Message({ m }: { m: ChatMsg }) {
 
 export default function AskPage() {
   const { project } = useProject();
-  const { data: threadsData } = useSWR(
+  const { data: threadsData, isLoading } = useSWR(
     project ? ["chat-threads", project.id] : null,
     () => api.chatThreads(project!.id),
   );
-  // Real-wins: real persisted threads drive the list; the seed fills it when empty.
-  const realThreads = threadsData?.threads ?? [];
-  const useReal = realThreads.length > 0;
   const projName = project?.name ?? "Workspace";
 
-  const threads: ChatThread[] = useReal
-    ? realThreads.map((t) => ({
-        id: t.id,
-        title: t.title ?? "Untitled",
-        project: projName,
-        updated: t.updated_at ? new Date(t.updated_at).toLocaleDateString() : "",
-        pinned: t.pinned === 1,
-        messages: [], // loaded per-thread below
-      }))
-    : DEMO_THREADS;
+  const threads: ChatThread[] = (threadsData?.threads ?? []).map((t) => ({
+    id: t.id,
+    title: t.title ?? "Untitled",
+    project: projName,
+    updated: t.updated_at ? new Date(t.updated_at).toLocaleDateString() : "",
+    pinned: t.pinned === 1,
+  }));
 
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
@@ -106,16 +105,13 @@ export default function AskPage() {
   const filtered = threads.filter((t) => t.title.toLowerCase().includes(query.toLowerCase()));
   const pinned = filtered.filter((t) => t.pinned);
   const recent = filtered.filter((t) => !t.pinned);
-  const active = threads.find((t) => t.id === activeId) ?? threads[0];
+  const active = threads.find((t) => t.id === activeId) ?? threads[0] ?? null;
 
-  // Real threads load their messages from the API; seed threads carry them inline.
   const { data: msgData } = useSWR(
-    useReal && active ? ["chat-messages", active.id] : null,
-    () => api.chatMessages(active.id),
+    active ? ["chat-messages", active.id] : null,
+    () => api.chatMessages(active!.id),
   );
-  const messages: ChatMsg[] = useReal
-    ? (msgData?.messages ?? []).map(toMsg)
-    : active.messages;
+  const messages: ChatMsg[] = (msgData?.messages ?? []).map(toMsg);
 
   const ThreadItem = (t: ChatThread) => (
     <button
@@ -128,6 +124,9 @@ export default function AskPage() {
       <div className="ask-thread-sub mono">{t.project} · {t.updated}</div>
     </button>
   );
+
+  // No saved threads yet — point people at the floating Ask companion (the live chat).
+  const emptyThreads = !isLoading && threads.length === 0;
 
   return (
     <div className="ask-page" data-testid="ask-page">
@@ -143,21 +142,40 @@ export default function AskPage() {
             {pinned.map(ThreadItem)}
           </>
         )}
-        <div className="ask-threads-group">Recent</div>
+        {recent.length > 0 && <div className="ask-threads-group">Recent</div>}
         {recent.map(ThreadItem)}
+        {emptyThreads && (
+          <div className="muted" data-testid="ask-threads-empty" style={{ padding: "14px 12px", fontSize: 12.5, lineHeight: 1.6 }}>
+            {project ? "No saved threads yet. Use the Ask companion (⌘K) to start a conversation." : "Select a project to see its threads."}
+          </div>
+        )}
       </aside>
 
       {/* CENTER — chat panel */}
       <section className="ch-panel">
-        <header className="ch-head">
-          <div>
-            <div className="ch-title">{active.title}</div>
-            <div className="ch-subt mono">{messages.length} msgs · {active.project} · updated {active.updated}</div>
+        {active ? (
+          <>
+            <header className="ch-head">
+              <div>
+                <div className="ch-title">{active.title}</div>
+                <div className="ch-subt mono">{messages.length} msgs · {active.project} · updated {active.updated}</div>
+              </div>
+            </header>
+            <div className="ch-stream">
+              {messages.length ? messages.map((m, i) => <Message key={i} m={m} />)
+                : <div className="muted" style={{ padding: 24, fontSize: 12.5 }}>No messages in this thread yet.</div>}
+            </div>
+          </>
+        ) : (
+          <div className="ch-stream">
+            <div className="muted" style={{ padding: 40, fontSize: 13, textAlign: "center" }}>
+              <Icon name="brain" size={20} />
+              <div style={{ marginTop: 10 }}>
+                {project ? "No thread selected. Start one with the Ask companion (⌘K)." : "Select a project to ask about it."}
+              </div>
+            </div>
           </div>
-        </header>
-        <div className="ch-stream">
-          {messages.map((m, i) => <Message key={i} m={m} />)}
-        </div>
+        )}
         <div className="ch-composer">
           <textarea rows={1} placeholder="Ask about this project, or @mention an ADR/task/cluster" aria-label="Message" />
           <div className="ch-composer-row">
@@ -167,15 +185,12 @@ export default function AskPage() {
         </div>
       </section>
 
-      {/* RIGHT — context rail */}
+      {/* RIGHT — context rail (real project) */}
       <aside className="ask-rail">
         <div className="ask-rail-h">Context</div>
-        <div className="ask-rail-row"><span className="k">Project</span><span>{active.project}</span></div>
-        <div className="ask-rail-row"><span className="k">Model</span><span className="mono">claude-opus-4</span></div>
-        <div className="ask-rail-row"><span className="k">Sprint</span><span className="mono">26</span></div>
-        <div className="ask-rail-h" style={{ marginTop: 18 }}>Recent actions</div>
-        <div className="ask-rail-action">↳ ADR-031 edit drafted</div>
-        <div className="ask-rail-action">↳ 12 feedback items clustered</div>
+        <div className="ask-rail-row"><span className="k">Project</span><span>{projName}</span></div>
+        {active ? <div className="ask-rail-row"><span className="k">Thread</span><span className="mono">{active.id.slice(0, 8)}</span></div> : null}
+        <div className="ask-rail-row"><span className="k">Updated</span><span className="mono">{active?.updated ?? "—"}</span></div>
       </aside>
     </div>
   );

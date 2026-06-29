@@ -5,12 +5,23 @@ import useSWR from "swr";
 import { PageHead } from "@/components/ui";
 import { AccountCard } from "@/components/agentpool/AccountCard";
 import { api } from "@/lib/api";
-import { DEMO_STRATEGIES, DEMO_HANDOFFS } from "@/lib/demo";
+import { useProject } from "@/lib/useProject";
 import type { Account, Session } from "@/lib/types";
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: "32px 24px", color: "var(--text-3)", fontSize: 13 }}>{children}</div>;
 }
+
+/**
+ * Dispatch strategies the orchestrator supports. These are fixed product labels
+ * (not fabricated data); the active one is the project's real `account_strategy`.
+ */
+const STRATEGIES = [
+  { id: "round_robin", label: "Round-robin", desc: "Even spread across the pool" },
+  { id: "cost_aware", label: "Cost-aware", desc: "Cheapest capable account first" },
+  { id: "capability", label: "Capability-match", desc: "Route by role strengths" },
+  { id: "manual", label: "Manual", desc: "Pin tasks to accounts" },
+] as const;
 
 /** Simple PM → worker fan (curved SVG connectors). */
 function OrchGraph({ workers }: { workers: { label: string; color: string }[] }) {
@@ -44,13 +55,15 @@ function OrchGraph({ workers }: { workers: { label: string; color: string }[] })
 }
 
 export default function AccountsPage() {
+  const { project } = useProject();
   const accounts = useSWR("accounts", () => api.accounts());
   const sessions = useSWR("sessions", () => api.sessions(), { refreshInterval: 5000 });
   const pool: Account[] = accounts.data?.accounts ?? [];
   const fleet: Session[] = sessions.data?.sessions ?? [];
   const inUse = new Set(fleet.filter((s) => s.alive && s.account_id).map((s) => s.account_id as string));
 
-  const [strategy, setStrategy] = React.useState(DEMO_STRATEGIES[0].id);
+  // Active dispatch strategy is the real project setting (read-only here).
+  const activeStrategy = project?.account_strategy ?? null;
   const [provider, setProvider] = React.useState("all");
   const providers = ["all", ...Array.from(new Set(pool.map((a) => a.provider?.toLowerCase()).filter(Boolean)))];
   const shown = pool.filter((a) => provider === "all" || a.provider?.toLowerCase() === provider);
@@ -78,19 +91,23 @@ export default function AccountsPage() {
             </div>
 
             <div className="acc-section-h">Dispatch strategy</div>
-            <div className="acc-strategies">
-              {DEMO_STRATEGIES.map((s) => (
-                <button
-                  key={s.id}
-                  className={"acc-strat" + (strategy === s.id ? " on" : "")}
-                  data-testid="acc-strat"
-                  onClick={() => setStrategy(s.id)}
-                >
-                  <div className="acc-strat-label">{s.label}</div>
-                  <div className="acc-strat-desc muted">{s.desc}</div>
-                </button>
-              ))}
-            </div>
+            {project ? (
+              <div className="acc-strategies">
+                {STRATEGIES.map((s) => (
+                  <div
+                    key={s.id}
+                    className={"acc-strat" + (activeStrategy === s.id ? " on" : "")}
+                    data-testid="acc-strat"
+                    data-active={activeStrategy === s.id ? "true" : undefined}
+                  >
+                    <div className="acc-strat-label">{s.label}</div>
+                    <div className="acc-strat-desc muted">{s.desc}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <StateMessage>Select a project to see its dispatch strategy.</StateMessage>
+            )}
 
             <div className="acc-section-h" style={{ display: "flex", alignItems: "center" }}>
               Accounts
@@ -104,22 +121,14 @@ export default function AccountsPage() {
             </div>
             <div className="acct-list">
               {shown.map((a) => <AccountCard key={a.id} account={a} inUse={inUse.has(a.id)} />)}
-              {shown.length === 0 && <StateMessage>No accounts for this provider.</StateMessage>}
+              {pool.length === 0 && <StateMessage>No accounts connected yet.</StateMessage>}
+              {pool.length > 0 && shown.length === 0 && <StateMessage>No accounts for this provider.</StateMessage>}
             </div>
           </section>
 
           <aside className="acc-handoffs" data-testid="handoff-log">
             <div className="acc-section-h">Handoff log</div>
-            {DEMO_HANDOFFS.map((h, i) => (
-              <div className="acc-handoff" key={i}>
-                <div className="acc-handoff-line">
-                  <span className="mono">{h.from}</span>
-                  <span className="acc-handoff-arrow">→</span>
-                  <span className="mono">{h.to}</span>
-                </div>
-                <div className="acc-handoff-meta muted">{h.reason} · {h.when}</div>
-              </div>
-            ))}
+            <StateMessage>No handoffs recorded yet.</StateMessage>
           </aside>
         </div>
       )}

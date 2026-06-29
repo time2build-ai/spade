@@ -46,12 +46,26 @@ function session(over: Partial<Session> = {}): Session {
 }
 
 describe("AccountCard", () => {
-  test("renders label, provider glyph avatar, role pill + model·plan sub", () => {
+  test("renders label + provider glyph avatar; sub falls back to provider when no model/plan", () => {
     const { container } = render(<AccountCard account={account()} />);
     expect(screen.getByText("Primary")).toBeTruthy();
     expect(container.querySelector('[data-testid="acct-glyph"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="acct-role"]')).toBeTruthy();
-    expect(container.querySelector(".acct-sub")?.textContent).toContain("·");
+    // No fabricated role pill / model·plan when the real account carries none.
+    expect(container.querySelector('[data-testid="acct-role"]')).toBeNull();
+    expect(container.querySelector(".acct-sub")?.textContent).toBe("claude-code");
+  });
+
+  test("shows a real role pill + model · plan sub when the account carries them", () => {
+    const { container } = render(
+      <AccountCard account={account({ role: "Developer", model: "claude-opus-4", plan: "Max" })} />,
+    );
+    expect(container.querySelector('[data-testid="acct-role"]')?.textContent).toBe("Developer");
+    expect(container.querySelector(".acct-sub")?.textContent).toBe("claude-opus-4 · Max");
+  });
+
+  test("does not fabricate a usage meter", () => {
+    const { container } = render(<AccountCard account={account()} />);
+    expect(container.querySelector('[data-testid="acct-meter"]')).toBeNull();
   });
 
   test("defaults to the idle state when not in use", () => {
@@ -72,11 +86,6 @@ describe("AccountCard", () => {
   test("hides the default badge when is_default === 0", () => {
     render(<AccountCard account={account({ is_default: 0 })} />);
     expect(screen.queryByText("default")).toBeNull();
-  });
-
-  test("renders a usage meter (seeded)", () => {
-    const { container } = render(<AccountCard account={account()} />);
-    expect(container.querySelector('[data-testid="acct-meter"] .fill')).toBeTruthy();
   });
 });
 

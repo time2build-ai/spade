@@ -2,7 +2,6 @@ import * as React from "react";
 import Link from "next/link";
 import { Priority } from "@/components/ui";
 import { groupNodesByType } from "@/lib/adapters";
-import { taskCardSeed } from "@/lib/demo";
 import type { BrainNode, Task } from "@/lib/types";
 
 export interface TaskCardProps {
@@ -13,8 +12,8 @@ export interface TaskCardProps {
 
 /**
  * Backlog card (reference TaskCard). Intel bar + chips summarise the task's
- * linked intelligence; feedback/bug/decision/metric counts come from the real
- * linked brain nodes, meetings + assignee + flag are seeded (real-wins).
+ * linked intelligence — feedback/bug/decision/metric counts come from the REAL
+ * linked brain nodes; the "building" pill reflects the real task status.
  */
 export function TaskCard({ task, nodesById }: TaskCardProps) {
   const resolved: BrainNode[] = [];
@@ -23,25 +22,21 @@ export function TaskCard({ task, nodesById }: TaskCardProps) {
     if (node) resolved.push(node);
   }
   const g = groupNodesByType(resolved);
-  const seed = taskCardSeed(task.id);
 
   const links = {
     feedback: g.feedback.length,
     bugs: g.bug.length,
     decisions: g.decision.length,
-    meetings: seed.meetings,
     metrics: g.metric.length,
   };
   const segs: { k: string; color: string; n: number }[] = [
     { k: "feedback", color: "var(--blue)", n: links.feedback },
     { k: "bug", color: "var(--red)", n: links.bugs },
     { k: "decision", color: "var(--amber)", n: links.decisions },
-    { k: "meeting", color: "#c9c9c9", n: links.meetings },
     { k: "metric", color: "var(--teal)", n: links.metrics },
   ];
   const total = segs.reduce((acc, s) => acc + s.n, 0);
-  const a = seed.assignee;
-  const building = a?.ai && task.status === "in_progress";
+  const building = task.status === "in_progress";
 
   return (
     <Link
@@ -70,27 +65,20 @@ export function TaskCard({ task, nodesById }: TaskCardProps) {
         {links.feedback > 0 && <span className="chip feedback"><span className="d" />{links.feedback} feedback</span>}
         {links.bugs > 0 && <span className="chip bug"><span className="d" />{links.bugs} bug</span>}
         {links.decisions > 0 && <span className="chip decision"><span className="d" />{links.decisions} ADR</span>}
-        {links.meetings > 0 && <span className="chip meeting"><span className="d" />{links.meetings} mtg</span>}
         {links.metrics > 0 && <span className="chip metric"><span className="d" />metric</span>}
       </div>
 
       <div className="tc-foot">
         <div className="left">
-          {a ? (
-            <span className={"avatar" + (a.ai ? " ai" : "")} title={a.name}>
-              {a.ai ? "◆" : a.name.slice(0, 2).toUpperCase()}
-            </span>
-          ) : (
-            <span className="avatar" style={{ background: "transparent", borderStyle: "dashed" }} aria-hidden="true">·</span>
-          )}
-          {building && (
+          {building ? (
             <span className="agent-running">
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
               building
             </span>
+          ) : (
+            <span className="muted mono" style={{ fontSize: 10.5 }}>{task.status}</span>
           )}
         </div>
-        {seed.flag && <span className="muted" style={{ color: "var(--amber)", marginLeft: "auto" }}>{seed.flag}</span>}
       </div>
     </Link>
   );

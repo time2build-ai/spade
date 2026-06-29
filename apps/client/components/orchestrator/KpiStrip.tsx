@@ -1,18 +1,18 @@
 import { pipelineKpis } from "@/lib/adapters";
-import { DEMO_ORCH_KPIS } from "@/lib/demo";
 import type { PipelineRun } from "@/lib/types";
 
 type Cell = { lbl: string; val: number | string; sub?: string; subMono?: boolean; color?: string };
 
-/** 6-cell KPI strip with sub-lines (reference). Active/Shipped/Awaiting-human
- *  use real counts; Tokens/Throughput/Concurrency are seeded. */
+/** KPI strip — every cell is a real count derived from the pipeline runs. No
+ *  fabricated tokens / cost / throughput / concurrency (the pipeline model
+ *  doesn't track those). */
 export function KpiStrip({ runs }: { runs: PipelineRun[] }) {
   const k = pipelineKpis(runs);
   const cells: Cell[] = [
-    { lbl: "Active", val: k.active, sub: `${k.active + k.queued} sessions` },
-    { lbl: "Shipped today", val: k.shipped, sub: "since 06:00", color: "var(--green)" },
-    { lbl: "Awaiting human", val: k.gated, sub: k.gated > 0 ? "needs review" : "—", color: "var(--amber)" },
-    ...DEMO_ORCH_KPIS,
+    { lbl: "Active", val: k.active, sub: `${k.active + k.queued} in flight` },
+    { lbl: "Queued", val: k.queued, sub: k.queued > 0 ? "waiting to start" : "—" },
+    { lbl: "Shipped", val: k.shipped, sub: `of ${runs.length} runs`, color: k.shipped ? "var(--green)" : undefined },
+    { lbl: "Awaiting human", val: k.gated, sub: k.gated > 0 ? "needs review" : "none pending", color: k.gated ? "var(--amber)" : undefined },
   ];
   return (
     <div className="orch-summary-strip">

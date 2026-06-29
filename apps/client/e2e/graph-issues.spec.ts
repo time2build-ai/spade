@@ -1,8 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * V2 Phase 1 — Graph & Issues route: the node graph (moved out of /brain) plus
- * a seeded AI-issues pane. Mocks the brain API.
+ * Graph & Issues is REAL — the node graph plus an AI-issues pane driven by real
+ * gap-analysis findings. No gaps → honest empty state (no seeded AI-ISS list).
  */
 const NODES = ["feature", "decision", "bug", "feedback"].map((type, i) => ({
   id: `n${i}`, project_id: "p1", type, label: `${type} node`, detail: null, x: 0.2 + i * 0.2, y: 0.3, created_at: null,
@@ -14,11 +14,10 @@ async function mock(page: Page) {
   );
   await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes: NODES } }));
   await page.route("**/api/brain/edges**", (r) => r.fulfill({ json: { edges: [] } }));
-  // Default: no real gaps → the AI-issues pane falls back to the seed.
   await page.route("**/api/brain/gaps**", (r) => r.fulfill({ json: { gaps: [] } }));
 }
 
-test.describe("graph & issues", () => {
+test.describe("graph & issues (real)", () => {
   test.beforeEach(async ({ page }) => {
     await mock(page);
     await page.goto("/graph-issues");
@@ -31,12 +30,11 @@ test.describe("graph & issues", () => {
     await expect(page.getByTestId("gi-issues")).toBeVisible();
   });
 
-  test("issues pane lists seeded AI issues with status", async ({ page }) => {
+  test("no gaps → honest empty state (no seeded AI issues)", async ({ page }) => {
     const pane = page.getByTestId("gi-issues");
-    await expect(pane.locator(".gi-issue").first()).toBeVisible();
-    await expect(pane).toContainText("AI-ISS-241");
-    await expect(pane.locator('.gi-issue[data-status="validated"]').first()).toBeVisible();
-    await expect(pane.locator('.gi-issue[data-status="rejected"]').first()).toBeVisible();
+    await expect(pane).toContainText("No graph issues yet.");
+    await expect(pane.locator(".gi-issue")).toHaveCount(0);
+    await expect(pane).not.toContainText("AI-ISS-241");
   });
 
   test("page head shows counts + actions", async ({ page }) => {
@@ -47,9 +45,8 @@ test.describe("graph & issues", () => {
 });
 
 test.describe("graph & issues (real gaps)", () => {
-  test("real gap-analysis findings drive the AI-issues pane (Phase 3)", async ({ page }) => {
+  test("real gap-analysis findings drive the AI-issues pane", async ({ page }) => {
     await mock(page);
-    // Override the empty gaps with real findings.
     await page.route("**/api/brain/gaps**", (r) =>
       r.fulfill({ json: { gaps: [
         { id: "n0", kind: "orphan", label: "Lonely feature", detail: "This feature has no connections." },
@@ -58,7 +55,7 @@ test.describe("graph & issues (real gaps)", () => {
     );
     await page.goto("/graph-issues");
     const pane = page.getByTestId("gi-issues");
-    await expect(pane.locator(".gi-issue")).toHaveCount(2); // 2 real gaps, not the 7 seeds
+    await expect(pane.locator(".gi-issue")).toHaveCount(2);
     await expect(pane).toContainText("Lonely feature");
     await expect(pane).toContainText("gap-analysis (orphan)");
   });

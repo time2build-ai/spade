@@ -1,6 +1,5 @@
 import * as React from "react";
 import { Icon } from "@/components/Icon";
-import { decisionSeed } from "@/lib/demo";
 import type { BrainNode } from "@/lib/types";
 
 const STATUS_PILL: Record<string, { color: string; bg: string }> = {
@@ -49,11 +48,10 @@ function snippet(detail: string | null): string | null {
 export function DecisionCard({ node, index, onOpen }: DecisionCardProps) {
   const date = formatDate(node.created_at);
   const preview = snippet(node.detail);
-  const seed = decisionSeed(node.id);
-  // Real-wins: real status/owner columns show through; seed fills gaps.
-  const status = (node.status as "active" | "proposed" | "superseded") ?? seed.status;
-  const owner = node.owner ?? seed.owner;
-  const pill = STATUS_PILL[status] ?? STATUS_PILL[seed.status];
+  // Real fields only. An inferred ADR defaults to "proposed" until the human promotes it.
+  const status = (node.status as "active" | "proposed" | "superseded") ?? "proposed";
+  const owner = node.owner ?? null;
+  const pill = STATUS_PILL[status] ?? STATUS_PILL.proposed;
   return (
     // `dec-<id>` anchor lets the brain panel deep-link to this exact row.
     <button
@@ -76,13 +74,7 @@ export function DecisionCard({ node, index, onOpen }: DecisionCardProps) {
         </span>
         <span className="dec-row-meta">
           {date && <span>{date}</span>}
-          <span className="muted">· {owner}</span>
-          <span className="chip feature" style={{ padding: "0 6px" }}><span className="d" />{seed.feature}</span>
-          {seed.conflict && (
-            <span className="chip decision" data-testid="dec-conflict" style={{ padding: "0 6px" }}>
-              <span className="d" />conflict {seed.conflict}
-            </span>
-          )}
+          {owner && <span className="muted">· {owner}</span>}
           {preview && <span className="dec-row-snippet">{preview}</span>}
         </span>
       </span>
