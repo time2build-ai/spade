@@ -46,4 +46,32 @@ test.describe("settings", () => {
     expect(patched!.url).toContain("/api/projects/p1");
     expect(patched!.body).toEqual({ autopilot: 0 });
   });
+
+  test("the groups fill the full width (grid, not a narrow column)", async ({ page }) => {
+    const groups = page.locator(".set-groups");
+    await expect(groups).toBeVisible();
+    const box = (await groups.boundingBox())!;
+    // spans most of the content area (>1000px on the desktop viewport), not capped at 760
+    expect(box.width).toBeGreaterThan(1000);
+  });
+
+  test("danger zone deletes the project and returns home", async ({ page }) => {
+    let deleted = false;
+    await page.route("**/api/projects/p1", async (route) => {
+      if (route.request().method() === "DELETE") {
+        deleted = true;
+        await route.fulfill({ json: { id: "p1", status: "deleted" } });
+      } else {
+        await route.fulfill({ json: { id: "p1", name: "Acme Storefront", path: "acme/web", account_strategy: "round_robin", model_ceiling: "opus", autopilot: 1, created_at: "" } });
+      }
+    });
+    await expect(page.getByTestId("set-danger")).toContainText("Delete this project");
+    await page.getByTestId("delete-project").click();
+    // requires an explicit confirm (no accidental delete)
+    const confirm = page.getByTestId("confirm-delete");
+    await expect(confirm).toBeVisible();
+    await confirm.click();
+    await expect.poll(() => deleted).toBe(true);
+    await expect(page).toHaveURL(/\/$/); // back to home
+  });
 });
