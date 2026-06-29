@@ -35,6 +35,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 class OrchestratorPrepError extends Error {}
 
+// A momentary server hiccup worth one retry — a 5xx (incl. a dev-server reload
+// restart) or a dropped connection, NOT a 4xx (a real client/state error).
+function isTransient(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return /\b(50\d|429)\b/.test(m) || /failed to fetch|networkerror|load failed|connection/i.test(m);
+}
+
 /**
  * The shared chat surface (reference `ChatPanel`) — the rich `.ch-*` message
  * stream + composer + the REAL orchestrator round-trip. Used inside the floating
@@ -97,21 +104,40 @@ export function ChatPanel({ resetKey, onClose }: { resetKey?: number; onClose?: 
     setBusy(true);
     setStatus(null);
     try {
-      const id = await resolveOrchestrator();
-      await api.setCurrentProject(project.id);
-      setStatus(null);
-      // Snapshot the project's records so we can show whatever the agent CREATES
-      // this turn (tasks / brain nodes) as clickable chips under the reply.
       const pid = project.id;
-      const [t0, n0] = await Promise.all([api.tasks(pid), api.brainNodes(pid)]).catch(() => [null, null] as const);
-      const beforeT = new Set((t0?.tasks ?? []).map((t) => t.id));
-      const beforeN = new Set((n0?.nodes ?? []).map((n) => n.id));
-
       const framed =
         `[Spade context] Answer as the orchestrator for the project "${project.name}" ` +
         `(id: ${project.id}, path: ${project.path}). Treat THIS as the current project, ` +
         `ignoring any other default. If it has no data yet, say so plainly.\n\nQuestion: ${text}`;
-      const { response } = await api.promptSession(id, framed);
+
+      // Resolve the orchestrator + round-trip the prompt, retrying ONCE on a
+      // transient server blip (e.g. a dev-server --reload restart, a brief 5xx)
+      // so a momentary hiccup never surfaces a scary "500" to the user.
+      let response = "";
+      let beforeT = new Set<string>();
+      let beforeN = new Set<string>();
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const id = await resolveOrchestrator();
+          await api.setCurrentProject(pid);
+          setStatus(null);
+          // Snapshot records right before the turn → clickable chips for whatever
+          // the agent creates.
+          const [t0, n0] = await Promise.all([api.tasks(pid), api.brainNodes(pid)]).catch(() => [null, null] as const);
+          beforeT = new Set((t0?.tasks ?? []).map((t) => t.id));
+          beforeN = new Set((n0?.nodes ?? []).map((n) => n.id));
+          response = (await api.promptSession(id, framed)).response;
+          break;
+        } catch (err) {
+          if (attempt === 0 && isTransient(err)) {
+            sessionIdRef.current = null; // a restart may have dropped the session
+            setStatus("reconnecting…");
+            await sleep(1800);
+            continue;
+          }
+          throw err;
+        }
+      }
 
       // Diff after the turn → the records the agent just created.
       let refs: Ref[] | undefined;

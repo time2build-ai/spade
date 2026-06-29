@@ -254,8 +254,9 @@ describe("AskDock", () => {
     );
   });
 
-  test("renders a friendly error (not the raw 500) when the prompt fails", async () => {
+  test("renders a friendly error (not the raw 500) after retrying a transient failure", async () => {
     apiSessions.mockResolvedValue({ sessions: [orchestratorSession()] });
+    // A persistent 500: the send retries once (transient), then surfaces friendly copy.
     apiPromptSession.mockRejectedValue(new Error("500 Internal Server Error"));
 
     const { result } = renderHook(() => useAskDock());
@@ -266,9 +267,11 @@ describe("AskDock", () => {
     fireEvent.change(input, { target: { value: "How are we doing?" } });
     fireEvent.click(screen.getByLabelText("Send"));
 
-    // Friendly primary text shows as the main bubble text...
-    const primary = await screen.findByText(/the orchestrator hit an error/i);
+    // It retries once (~1.8s) before giving up → allow time, then friendly copy.
+    const primary = await screen.findByText(/the orchestrator hit an error/i, {}, { timeout: 6000 });
     expect(primary).toHaveClass("ch-msg-text");
+    // a transient 500 is retried, not surfaced on the first failure
+    expect(apiPromptSession).toHaveBeenCalledTimes(2);
     // ...and the raw "500 …" is only kept as a muted detail line, never the
     // primary bubble text.
     const raw = screen.getByText("500 Internal Server Error");
