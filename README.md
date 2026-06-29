@@ -21,8 +21,7 @@ El prototipo implementa los **procesos centrales del núcleo del sistema**:
 
 > 📹 **Video de demostración (4–5 min).** El repositorio incluye un video que
 > muestra y explica el escenario de extremo a extremo descripto más abajo. Se
-> encuentra en [`docs/demo/`](docs/demo/) (archivo de video o enlace indicado en
-> la entrega).
+> encuentra en [`docs/demo/thesis-demo.mov`](docs/demo/thesis-demo.mov).
 
 ---
 
