@@ -647,7 +647,9 @@ def _spawn_agent(
         raise HTTPException(
             status_code=400, detail=f"account {acct['id']} is not logged in"
         )
-    env = {"CLAUDE_CONFIG_DIR": acct["config_dir"]} if acct else {}
+    # Expand a leading ~ — env vars aren't shell-expanded, so a config_dir stored
+    # as "~/.claude-x" must resolve to the real home for the agent to find creds.
+    env = {"CLAUDE_CONFIG_DIR": os.path.expanduser(acct["config_dir"])} if acct else {}
 
     # Pass the first message (preamble + instructions + task) as Claude's launch
     # PROMPT argument instead of typing it into the TUI afterwards. Claude submits
