@@ -312,8 +312,13 @@ def patch_project(id: str, req: ProjectPatch) -> dict:
 def delete_project(id: str) -> dict:
     if projects.get(id) is None:
         raise HTTPException(404, f"no project {id!r}")
+    # Kill the project's running agents first — the sessions table has no FK to
+    # projects, so deleting the row alone would orphan its orchestrator/workers
+    # as live tmux. Lazy import avoids a load-time cycle (server imports us).
+    from . import server
+    killed = server.reap_project_sessions(id)
     projects.delete(id)
-    return {"id": id, "status": "deleted"}
+    return {"id": id, "status": "deleted", "sessions_killed": killed}
 
 
 @router.put("/projects/{id}/accounts")

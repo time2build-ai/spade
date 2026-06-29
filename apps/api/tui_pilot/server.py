@@ -1238,6 +1238,28 @@ def delete_session(id: str) -> dict:
     return {"id": id, "status": "killed"}
 
 
+def reap_project_sessions(project_id: str) -> list[str]:
+    """Kill every session belonging to ``project_id`` (tmux + registry + store).
+
+    Called when a project is deleted: the ``sessions`` table has no FK to
+    ``projects``, so without this the project's orchestrator + workers keep
+    running as orphaned tmux. Covers both in-registry sessions and any persisted
+    rows whose tmux is still alive. Returns the reaped session ids."""
+    targets: set[str] = set()
+    with _registry_lock:
+        for aid, m in _meta.items():
+            if m.get("project_id") == project_id:
+                targets.add(aid)
+    # Also persisted rows (e.g. reattached on a prior run) not currently keyed
+    # by project_id in _meta.
+    for row in sessions_store.all():
+        if row.get("project_id") == project_id and row.get("status") == "live":
+            targets.add(row["id"])
+    for aid in targets:
+        _drop_session(aid, kill=True)
+    return sorted(targets)
+
+
 @app.post("/sessions/cleanup")
 def cleanup_sessions(idle: bool = False) -> dict:
     """Reap stale sessions on demand. Always reaps dead + orphan sessions; with

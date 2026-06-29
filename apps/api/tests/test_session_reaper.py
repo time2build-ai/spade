@@ -142,3 +142,29 @@ def test_cleanup_endpoint_reaps_idle_with_force():
         assert fresh.killed
     finally:
         _cleanup_registry("idle-ep")
+
+
+def test_deleting_a_project_kills_its_sessions():
+    from tui_pilot import projects
+
+    projects.create(id="proj-x", name="X", path="/w")
+    projects.create(id="proj-y", name="Y", path="/w")
+    mine = _register("orch-x", state=State.IDLE)
+    mine_w = _register("dev-x", state=State.STREAMING)   # a busy worker is killed too
+    other = _register("orch-y", state=State.IDLE)
+    # tag sessions to their projects
+    server._meta["orch-x"]["project_id"] = "proj-x"
+    server._meta["dev-x"]["project_id"] = "proj-x"
+    server._meta["orch-y"]["project_id"] = "proj-y"
+    try:
+        c = TestClient(server.app)
+        r = c.delete("/projects/proj-x")
+        assert r.status_code == 200
+        killed = r.json()["sessions_killed"]
+        assert set(killed) == {"orch-x", "dev-x"}
+        # proj-x sessions are gone + tmux killed; proj-y is untouched
+        assert mine.killed and mine_w.killed and not other.killed
+        assert "orch-x" not in server._sessions and "dev-x" not in server._sessions
+        assert "orch-y" in server._sessions
+    finally:
+        _cleanup_registry("orch-x", "dev-x", "orch-y")
