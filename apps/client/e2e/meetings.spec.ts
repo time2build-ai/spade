@@ -32,4 +32,45 @@ test.describe("meetings (real)", () => {
     await expect(page.getByText("No meetings captured yet.")).toBeVisible();
     await expect(page.getByTestId("meetings")).toHaveCount(0);
   });
+
+  test("ingest a meeting → it appears with source, transcript + extracted backlog", async ({ page }) => {
+    let meetings: object[] = [];
+    let tasks: object[] = [];
+
+    await page.route("**/api/projects", (r) => r.fulfill({ json: { projects: [PROJECT] } }));
+    // Generic list routes — register the specific ones AFTER so they win.
+    await page.route("**/api/meetings?**", (r) => r.fulfill({ json: { meetings } }));
+    await page.route("**/api/tasks?**", (r) => r.fulfill({ json: { tasks } }));
+    await page.route("**/api/meetings/samples", (r) =>
+      r.fulfill({ json: { samples: [
+        { id: "todo-kickoff", title: "Todo App — kickoff", source: "Granola", date: "2026-06-26", attendees: ["You", "Maya"] },
+      ] } }),
+    );
+    await page.route("**/api/meetings/ingest", (r) => {
+      const meeting = {
+        id: "mtg-ing-1", project_id: "p1", title: "Todo App — kickoff", date: "2026-06-26",
+        summary: "Scoped the first slice.", attendees: ["You", "Maya"],
+        source: "Granola",
+        transcript: "Maya: The list view matters most. → Build the todo list view\n",
+        created_at: "",
+      };
+      meetings = [meeting];
+      tasks = [{ id: "SPD-001", project_id: "p1", title: "Build the todo list view", feature: null, priority: 2, status: "ready", origin_quote: "The list view matters most.", origin_source: "Todo App — kickoff", description: null, created_at: "", nodes: [], links: [] }];
+      r.fulfill({ json: { meeting, tasks } });
+    });
+
+    await page.goto("/meetings");
+    await expect(page.getByText("No meetings captured yet.")).toBeVisible();
+
+    await page.getByTestId("ingest-meeting").click();
+    await page.getByTestId("ingest-sample").filter({ hasText: "Todo App" }).click();
+
+    // Meeting now shows, with its source badge, the extracted backlog, and the
+    // highlighted transcript line.
+    await expect(page.locator(".mtg-title")).toHaveText("Todo App — kickoff");
+    await expect(page.getByTestId("mtg-detail")).toContainText("via Granola");
+    await expect(page.getByTestId("mtg-backlog-item")).toHaveCount(1);
+    await expect(page.getByTestId("mtg-backlog")).toContainText("Build the todo list view");
+    await expect(page.locator(".mtg-line.hl")).toHaveCount(1);
+  });
 });

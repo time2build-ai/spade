@@ -5,6 +5,11 @@ cards across every column, decisions (incl. a proposed one → a real gap + gate
 conflict), pipelines at various stages, a live sprint, meetings and feedback —
 so you can walk the **full development lifecycle** in the UI.
 
+It also **ingests a meeting**: the seeded "Todo App — kickoff" transcript (via the
+mock Granola source) is parsed into seven grounded backlog tasks — open the
+Meetings screen to see the meeting → backlog flow, then hit **Ingest a meeting**
+to do it live in front of an audience.
+
 ```bash
 # from apps/api
 ../../.venv/bin/python -m demo --list                       # show app templates

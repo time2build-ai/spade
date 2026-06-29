@@ -52,6 +52,9 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     # + the decision owner. Provenance: `source` (where the node came from) and
     # `updated_at` (last-touched). All nullable → existing nodes are unaffected.
     "brain_nodes": {"status": "TEXT", "owner": "TEXT", "source": "TEXT", "updated_at": "TEXT"},
+    # Ingested meetings keep the raw transcript and the upstream `source` (the
+    # notes tool the meeting came from) so the ingest demo can show both.
+    "meetings": {"transcript": "TEXT", "source": "TEXT"},
 }
 
 

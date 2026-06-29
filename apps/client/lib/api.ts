@@ -13,6 +13,8 @@ import type {
   GateConflictSide,
   Integration,
   Meeting,
+  MeetingIngestResult,
+  MeetingSample,
   PipelineRun,
   Project,
   Session,
@@ -166,6 +168,22 @@ export const api = {
     http<{ meetings: Meeting[] }>(
       `/meetings?project_id=${encodeURIComponent(projectId)}`,
     ),
+  // Canned transcripts the demo can ingest (the "connected notes tool").
+  meetingSamples: () => http<{ samples: MeetingSample[] }>("/meetings/samples"),
+  // Ingest a meeting transcript → records the meeting and spins its action
+  // items into grounded backlog tasks. Pass a sample id, or an explicit
+  // { title, transcript } to ingest arbitrary notes.
+  ingestMeeting: (body: {
+    project_id: string;
+    sample?: string;
+    title?: string;
+    transcript?: string;
+    source?: string;
+  }) =>
+    http<MeetingIngestResult>("/meetings/ingest", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   feedbackClusters: (projectId: string) =>
     http<{ clusters: FeedbackClusterReal[] }>(
       `/feedback?project_id=${encodeURIComponent(projectId)}`,

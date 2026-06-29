@@ -116,6 +116,9 @@ def bring_to_life(app: str, *, reset: bool = False, account_dir: str | None = No
     # --- inputs -------------------------------------------------------------
     for (title, summary, attendees) in t["meetings"]:
         meetings.create(project_id=pid, title=title, date="2026-03-25", summary=summary, attendees=attendees)
+    # Ingest a real transcript so the project shows the meeting → backlog flow:
+    # the kickoff meeting and the tasks extracted from it (grounded back to it).
+    ingested = meetings.ingest(pid, sample="todo-kickoff")
     for (label, count, sources) in t["feedback_clusters"]:
         feedback.create(project_id=pid, label=label, count=count,
                         sources=[{"name": n, "n": k, "color": "var(--blue)"} for (n, k) in sources])
@@ -123,6 +126,8 @@ def bring_to_life(app: str, *, reset: bool = False, account_dir: str | None = No
     return {
         "project": pid, "name": t["name"],
         "features": len(feat), "decisions": len(dec), "tasks": len(task_ids),
-        "pipelines": runs, "meetings": len(t["meetings"]), "feedback_clusters": len(t["feedback_clusters"]),
+        "pipelines": runs, "meetings": len(t["meetings"]) + 1,
+        "ingested_tasks": len(ingested["tasks"]),
+        "feedback_clusters": len(t["feedback_clusters"]),
         "account": account_id if account_dir else None,
     }

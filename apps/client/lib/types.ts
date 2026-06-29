@@ -188,7 +188,8 @@ export type Sprint = {
   total: number;
 };
 
-// Phase 3: real meeting records (outcomes/transcript are a follow-up — seeded).
+// Phase 3: real meeting records. Ingested meetings also carry the raw transcript
+// and the `source` they came from (the notes tool); both are null when absent.
 export type Meeting = {
   id: string;
   project_id: string;
@@ -196,7 +197,25 @@ export type Meeting = {
   date: string | null;
   summary: string | null;
   attendees: string[];
+  transcript: string | null;
+  source: string | null;
   created_at: string | null;
+};
+
+// A canned meeting transcript the demo can ingest (GET /meetings/samples).
+export type MeetingSample = {
+  id: string;
+  title: string;
+  source: string;
+  date: string;
+  attendees: string[];
+};
+
+// Result of POST /meetings/ingest — the recorded meeting + the backlog tasks
+// extracted from its action items (each grounded back to the meeting).
+export type MeetingIngestResult = {
+  meeting: Meeting;
+  tasks: Task[];
 };
 
 // Phase 3: real feedback clusters. Verbatim quotes are a follow-up (seeded).

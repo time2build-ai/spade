@@ -7,7 +7,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import brain, chat, feedback, integrations, meetings, pipelines, projects, sprints, tasks
+from . import (
+    brain, chat, feedback, integrations, meeting_samples, meetings,
+    pipelines, projects, sprints, tasks,
+)
 
 router = APIRouter()
 
@@ -441,11 +444,32 @@ class MeetingCreate(BaseModel):
     date: str | None = None
     summary: str | None = None
     attendees: list[str] | None = None
+    transcript: str | None = None
+    source: str | None = None
+
+
+class MeetingIngest(BaseModel):
+    project_id: str
+    # Either a canned sample id (see GET /meetings/samples) or an explicit
+    # transcript + title. Sample fields fill any gaps left by the explicit ones.
+    sample: str | None = None
+    title: str | None = None
+    date: str | None = None
+    summary: str | None = None
+    attendees: list[str] | None = None
+    transcript: str | None = None
+    source: str | None = None
 
 
 @router.get("/meetings")
 def list_meetings(project_id: str) -> dict:
     return {"meetings": meetings.list_for_project(project_id)}
+
+
+@router.get("/meetings/samples")
+def list_meeting_samples() -> dict:
+    """Catalog of canned meeting transcripts the UI can ingest in the demo."""
+    return {"samples": meeting_samples.listing()}
 
 
 @router.post("/meetings")
@@ -455,7 +479,26 @@ def create_meeting(req: MeetingCreate) -> dict:
     return meetings.create(
         project_id=req.project_id, title=req.title, date=req.date,
         summary=req.summary, attendees=req.attendees,
+        transcript=req.transcript, source=req.source,
     )
+
+
+@router.post("/meetings/ingest")
+def ingest_meeting(req: MeetingIngest) -> dict:
+    """Ingest a meeting transcript and spin its action items into backlog tasks.
+
+    Returns {"meeting", "tasks"} — the recorded meeting and the tasks created from
+    it (each grounded back to the meeting)."""
+    if projects.get(req.project_id) is None:
+        raise HTTPException(404, f"no project {req.project_id!r}")
+    try:
+        return meetings.ingest(
+            req.project_id, sample=req.sample, title=req.title, date=req.date,
+            summary=req.summary, attendees=req.attendees,
+            transcript=req.transcript, source=req.source,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 # ---- feedback clusters ----------------------------------------------------

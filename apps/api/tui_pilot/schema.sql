@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS sprints (
 -- outcomes/transcript are a follow-up (client-seeded for now).
 CREATE TABLE IF NOT EXISTS meetings (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL,
-  date TEXT, summary TEXT, attendees TEXT, created_at TEXT,
+  date TEXT, summary TEXT, attendees TEXT, transcript TEXT, source TEXT, created_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
