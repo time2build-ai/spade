@@ -85,8 +85,11 @@ export const api = {
       }),
     }),
   // Send a prompt to a session; `response` is the agent's reply text.
-  // Default timeout here is 120s (the backend's own default is 180s).
-  promptSession: (id: string, text: string, timeout = 120) =>
+  // Timeout is generous (300s): a first "set up the brain + a backlog" turn on a
+  // fresh project drives the orchestrator through dozens of live API round-trips
+  // and routinely runs ~90-150s. A tight timeout cut that off mid-turn, which the
+  // server surfaced as a 500 — hence "short prompts work, the pitch errors".
+  promptSession: (id: string, text: string, timeout = 300) =>
     http<{ response: string; state: string }>(`/sessions/${id}/prompt`, {
       method: "POST",
       body: JSON.stringify({ text, timeout }),
