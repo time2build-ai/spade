@@ -39,31 +39,31 @@ test.describe("ask message anatomy", () => {
     const pill = page.locator("header.topbar").getByText("Ask the brain…");
     await expect(async () => {
       await pill.click();
-      await expect(page.locator(".ask-input")).toBeVisible({ timeout: 1000 });
+      await expect(page.getByPlaceholder(/Ask about this project/)).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 10_000 });
   });
 
   test("user and assistant messages render avatars and align opposite sides", async ({ page }) => {
-    await page.locator(".ask-input").fill("hi there");
-    await page.locator(".ask-send").click();
+    await page.getByPlaceholder(/Ask about this project/).fill("hi there");
+    await page.getByTestId("ask-send").click();
 
     // Assistant reply round-trips via the mocked prompt endpoint.
-    const brainRow = page.locator(".ask-msg-row-brain");
+    const brainRow = page.locator(".ch-msg.ch-assistant");
     await expect(brainRow).toContainText("Hello from the brain.");
     await expect(brainRow.getByTestId("ask-msg-avatar")).toBeVisible();
 
-    const youRow = page.locator(".ask-msg-row-you");
+    const youRow = page.locator(".ch-msg.ch-user");
     await expect(youRow).toContainText("hi there");
     await expect(youRow.getByTestId("ask-msg-avatar")).toBeVisible();
   });
 
   test("user row is right-aligned, assistant row left-aligned", async ({ page }) => {
-    await page.locator(".ask-input").fill("hi");
-    await page.locator(".ask-send").click();
-    await expect(page.locator(".ask-msg-row-brain")).toContainText("Hello from the brain.");
+    await page.getByPlaceholder(/Ask about this project/).fill("hi");
+    await page.getByTestId("ask-send").click();
+    await expect(page.locator(".ch-msg.ch-assistant")).toContainText("Hello from the brain.");
 
-    const you = (await page.locator(".ask-msg-row-you").boundingBox())!;
-    const brain = (await page.locator(".ask-msg-row-brain").boundingBox())!;
+    const you = (await page.locator(".ch-msg.ch-user").boundingBox())!;
+    const brain = (await page.locator(".ch-msg.ch-assistant").boundingBox())!;
     // User row starts further right than the assistant row.
     expect(you.x).toBeGreaterThan(brain.x);
   });

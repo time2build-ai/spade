@@ -36,7 +36,12 @@ vi.mock("@/lib/api", () => ({
     session: (id: string) => apiSession(id),
     accounts: () => apiAccounts(),
     setCurrentProject: (id: string) => apiSetCurrentProject(id),
+    chatThreads: () => Promise.resolve({ threads: [] }),
   },
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
 let mockUseProject: UseProjectResult;
@@ -187,7 +192,7 @@ describe("AskDock", () => {
     // EMPTY pool, so a project with an account keeps the active composer.
     expect(await screen.findByLabelText("Send")).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText("Ask the brain…"),
+      screen.getByPlaceholderText(/Ask about this project/),
     ).toBeInTheDocument();
   });
 
@@ -205,7 +210,7 @@ describe("AskDock", () => {
     // The active composer / send control must NOT be present.
     expect(screen.queryByLabelText("Send")).not.toBeInTheDocument();
     expect(
-      screen.queryByPlaceholderText("Ask the brain…"),
+      screen.queryByPlaceholderText(/Ask about this project/),
     ).not.toBeInTheDocument();
     // We must not have tried to spawn/prompt an orchestrator.
     expect(apiSpawnOrchestrator).not.toHaveBeenCalled();
@@ -223,9 +228,7 @@ describe("AskDock", () => {
     act(() => result.current.setOpen(true));
 
     render(<AskDock />);
-    const input = (await screen.findByPlaceholderText(
-      "Ask the brain…",
-    )) as HTMLTextAreaElement;
+    const input = (await screen.findByPlaceholderText(/Ask about this project/)) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "How are we doing?" } });
     fireEvent.click(screen.getByLabelText("Send"));
 
@@ -257,19 +260,17 @@ describe("AskDock", () => {
     act(() => result.current.setOpen(true));
 
     render(<AskDock />);
-    const input = (await screen.findByPlaceholderText(
-      "Ask the brain…",
-    )) as HTMLTextAreaElement;
+    const input = (await screen.findByPlaceholderText(/Ask about this project/)) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "How are we doing?" } });
     fireEvent.click(screen.getByLabelText("Send"));
 
     // Friendly primary text shows as the main bubble text...
     const primary = await screen.findByText(/the orchestrator hit an error/i);
-    expect(primary).toHaveClass("ask-msg-text");
+    expect(primary).toHaveClass("ch-msg-text");
     // ...and the raw "500 …" is only kept as a muted detail line, never the
     // primary bubble text.
     const raw = screen.getByText("500 Internal Server Error");
-    expect(raw).toHaveClass("ask-msg-detail");
-    expect(raw).not.toHaveClass("ask-msg-text");
+    expect(raw).toHaveClass("ch-msg-detail");
+    expect(raw).not.toHaveClass("ch-msg-text");
   });
 });

@@ -1,12 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * PR-14 — Ask dock relocation: a persistent bottom-right trigger pill (reference
- * launcher) and the dock docked bottom-right (was top-center). No-fabrication:
- * pure positioning/UI. The reference's separate ⌘K right-edge SIDE-dock (vs the
- * bubble) is noted deferred — we keep one float + trigger. Mocks the API.
+ * ChatBubble (reference): a bottom-right accent pill that expands into a floating
+ * bubble on click, and ⌘K opens it as a right-edge side dock. Mocks the API.
  */
-
 async function mockShell(page: Page) {
   await page.route("**/api/projects", (r) =>
     r.fulfill({ json: { projects: [{ id: "p1", name: "Demo", path: "/demo", account_strategy: "round_robin", model_ceiling: null, autopilot: 0, created_at: "" }] } }),
@@ -14,7 +11,7 @@ async function mockShell(page: Page) {
   await page.route("**/api/accounts", (r) => r.fulfill({ json: { accounts: [{ id: "a1", label: "acct-1", color: null, provider: "claude", config_dir: "", is_default: 1, created_at: "" }] } }));
 }
 
-test.describe("ask dock relocation", () => {
+test.describe("ask chat bubble", () => {
   test.beforeEach(async ({ page }) => {
     await mockShell(page);
     await page.goto("/backlog");
@@ -24,6 +21,7 @@ test.describe("ask dock relocation", () => {
   test("shows a bottom-right trigger pill when closed", async ({ page }) => {
     const trigger = page.getByTestId("ask-trigger");
     await expect(trigger).toBeVisible();
+    await expect(trigger).toHaveText(/Ask/);
     const box = (await trigger.boundingBox())!;
     const vw = page.viewportSize()!.width;
     const vh = page.viewportSize()!.height;
@@ -31,25 +29,39 @@ test.describe("ask dock relocation", () => {
     expect(box.y + box.height).toBeGreaterThan(vh - 60); // near bottom edge
   });
 
-  test("clicking the trigger opens the dock bottom-right; trigger disappears", async ({ page }) => {
+  test("clicking the trigger opens the bottom-right bubble; trigger disappears", async ({ page }) => {
     await page.getByTestId("ask-trigger").click();
-    const float = page.locator(".ask-float");
-    await expect(float).toBeVisible();
+    const bubble = page.locator(".ch-bubble-panel");
+    await expect(bubble).toBeVisible();
     await expect(page.getByTestId("ask-trigger")).toHaveCount(0);
-
-    const box = (await float.boundingBox())!;
+    // 440-wide bubble docked bottom-right
+    const box = (await bubble.boundingBox())!;
     const vw = page.viewportSize()!.width;
-    const vh = page.viewportSize()!.height;
-    expect(box.x + box.width).toBeGreaterThan(vw - 60); // docked right
-    expect(box.y + box.height).toBeGreaterThan(vh / 2); // lower half
+    expect(box.x + box.width).toBeGreaterThan(vw - 60);
+    // header has the thread picker + action icons
+    await expect(bubble.locator(".ch-bub-thread-pick")).toBeVisible();
+    await expect(bubble.locator(".ch-bub-actions .icon-btn")).toHaveCount(4);
   });
 
-  test("⌘K toggles the dock", async ({ page }) => {
+  test("⌘K opens the right-edge side dock; Esc closes", async ({ page }) => {
     await expect(page.getByTestId("ask-trigger")).toBeVisible();
     await page.keyboard.press("ControlOrMeta+k");
-    await expect(page.locator(".ask-float")).toBeVisible();
-    await page.keyboard.press("ControlOrMeta+k");
-    await expect(page.locator(".ask-float")).toHaveCount(0);
+    const dock = page.locator(".ch-dock");
+    await expect(dock).toBeVisible();
+    // a full-height right-edge panel (~480 wide) with the dim overlay
+    const box = (await dock.boundingBox())!;
+    const vh = page.viewportSize()!.height;
+    expect(box.height).toBeGreaterThan(vh - 4);
+    await expect(page.locator(".ch-dock-overlay")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".ch-dock")).toHaveCount(0);
     await expect(page.getByTestId("ask-trigger")).toBeVisible();
+  });
+
+  test("the bubble can dock to the side", async ({ page }) => {
+    await page.getByTestId("ask-trigger").click();
+    await page.locator(".ch-bubble-panel .icon-btn[title='Dock to side']").click();
+    await expect(page.locator(".ch-dock")).toBeVisible();
+    await expect(page.locator(".ch-bubble-panel")).toHaveCount(0);
   });
 });
