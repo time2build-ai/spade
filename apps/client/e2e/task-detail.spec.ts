@@ -26,7 +26,8 @@ const BASE = {
 const DEC = { id: "n-dec", project_id: "p1", type: "decision", label: "Use a CDN cache", detail: "**What:** cache at the edge.", x: null, y: null, status: "proposed", owner: null, source: null, updated_at: null };
 const BUG = { id: "n-bug", project_id: "p1", type: "bug", label: "Cart jank on iOS", detail: "Janks on scroll.", x: null, y: null, status: null, owner: null, source: null, updated_at: null };
 
-async function mock(page: Page, task: typeof BASE, nodes: unknown[] = [], pipelines: unknown[] = []) {
+async function mock(page: Page, task: typeof BASE, nodes: unknown[] = [], pipelines: unknown[] = [], comments: unknown[] = []) {
+  await page.route("**/api/tasks/*/comments", (r) => r.fulfill({ json: { comments } }));
   await page.route("**/api/tasks?**", (r) => r.fulfill({ json: { tasks: [task] } }));
   await page.route("**/api/tasks/*", (r) => r.fulfill({ json: task }));
   await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes } }));
@@ -105,6 +106,22 @@ test.describe("task detail", () => {
     await expect.poll(() => created).toBe(true);
     await expect.poll(() => started).toBe(true);
     await expect(page).toHaveURL(/\/orchestrator$/);
+  });
+
+  test("pipeline history renders each stage's finished report as an activity note", async ({ page }) => {
+    const RUN = { id: "r1", task_id: "T-1", project_id: "p1", status: "shipped", progress: 100, stages: [{ id: "s", pipeline_run_id: "r1", role: "developer", stage_order: 0, state: "done", session_id: null, account_id: null, created_at: "" }] };
+    const COMMENTS = [
+      { id: "c1", author: "developer", kind: "stage_report", body: "## Done\nImplemented the FastAPI scaffold.", created_at: "2026-06-28T10:00:00Z" },
+      { id: "c2", author: "reviewer", kind: "stage_report", body: "# Review\nLooks good, minor nits.", created_at: "2026-06-28T10:30:00Z" },
+      { id: "c3", author: "system", kind: "system", body: "Pipeline complete — task moved to shipped.", created_at: "2026-06-28T11:00:00Z" },
+    ];
+    await mock(page, BASE, [], [RUN], COMMENTS);
+    await page.goto("/task/T-1");
+    const notes = page.getByTestId("pipeline-note");
+    await expect(notes).toHaveCount(3);
+    await expect(notes.first()).toContainText("developer");
+    await expect(notes.first()).toContainText("Implemented the FastAPI scaffold");
+    await expect(page.locator(".td-main")).toContainText("Pipeline complete");
   });
 
   test("properties rail shows real fields only", async ({ page }) => {

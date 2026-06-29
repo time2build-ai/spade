@@ -7,6 +7,7 @@ import useSWR, { mutate } from "swr";
 import { PageHead, Priority, Chip } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { MetaRow } from "@/components/task/MetaRow";
+import { Markdown } from "@/components/ask/Markdown";
 import { api } from "@/lib/api";
 import type { BrainNode } from "@/lib/types";
 
@@ -82,6 +83,7 @@ export default function TaskPage() {
   const { data: nodesData } = useSWR(task ? ["brain", task.project_id] : null, () => api.brainNodes(task!.project_id));
   const { data: pipeData } = useSWR(task ? ["pipelines", task.project_id] : null, () => api.pipelines(task!.project_id));
   const { data: tasksData } = useSWR(task ? ["tasks", task.project_id] : null, () => api.tasks(task!.project_id));
+  const { data: commentsData } = useSWR(task ? ["comments", task.id] : null, () => api.comments(task!.id));
 
   const router = useRouter();
   const [starting, setStarting] = React.useState(false);
@@ -253,24 +255,46 @@ export default function TaskPage() {
             </>
           ) : null}
 
-          {/* Pipeline history (real runs for this task) */}
-          <div className="section-h">Pipeline history</div>
-          {pipelines.length ? (
-            <div className="card" style={{ padding: "14px 16px" }}>
-              <div className="timeline">
-                {pipelines.map((pl) => (
-                  <div className={"tl-item" + (pl.status === "running" ? " now" : "")} key={pl.id}>
-                    <div>{pl.status === "running" ? "Running" : pl.status} · {(pl.stages ?? []).map((st) => st.role).join(" → ") || "pipeline"}</div>
-                    <div className="when mono">{typeof pl.progress === "number" ? `${pl.progress}%` : ""}</div>
+          {/* Pipeline history (real runs + each stage's finished report) */}
+          {(() => {
+            const activity = commentsData?.comments ?? [];
+            if (!pipelines.length && !activity.length) {
+              return (
+                <>
+                  <div className="section-h">Pipeline history</div>
+                  <div className="muted" style={{ fontSize: 12.5, padding: "2px 2px" }}>
+                    Not run yet. Use “Start pipeline” to put the developer → reviewer → integrator flow on it.
+                  </div>
+                </>
+              );
+            }
+            return (
+              <>
+                <div className="section-h">Pipeline history{activity.length ? <span className="count">{activity.length} notes</span> : null}</div>
+                {pipelines.length ? (
+                  <div className="card" style={{ padding: "14px 16px", marginBottom: 10 }}>
+                    <div className="timeline">
+                      {pipelines.map((pl) => (
+                        <div className={"tl-item" + (pl.status === "running" ? " now" : "")} key={pl.id}>
+                          <div>{pl.status === "running" ? "Running" : pl.status} · {(pl.stages ?? []).map((st) => st.role).join(" → ") || "pipeline"}</div>
+                          <div className="when mono">{typeof pl.progress === "number" ? `${pl.progress}%` : ""}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {activity.map((c) => (
+                  <div className="td-act" key={c.id} data-testid="pipeline-note">
+                    <div className="td-act-h">
+                      <span className={"td-act-who" + (c.author === "system" ? " sys" : "")}>{c.author ?? "system"}</span>
+                      <span className="td-act-when mono">{formatDate(c.created_at)}</span>
+                    </div>
+                    <div className="td-act-body"><Markdown>{c.body}</Markdown></div>
                   </div>
                 ))}
-              </div>
-            </div>
-          ) : (
-            <div className="muted" style={{ fontSize: 12.5, padding: "2px 2px" }}>
-              Not run yet. Use “Start pipeline” to put the developer → reviewer → integrator flow on it.
-            </div>
-          )}
+              </>
+            );
+          })()}
         </div>
 
         <aside className="td-side">
