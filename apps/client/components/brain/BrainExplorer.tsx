@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Markdown } from "@/components/ask/Markdown";
 import { NODE_TYPE_META } from "@/lib/adapters";
 import type { BrainNode, BrainEdge, BrainNodeType } from "@/lib/types";
 
@@ -33,15 +34,6 @@ const PLURAL: Record<BrainNodeType, string> = {
 };
 
 /** Render prose with `ADR-NNN` tokens as cross-link chips. */
-function renderProse(text: string): React.ReactNode {
-  return text.split(/(ADR-\d+)/g).map((p, i) =>
-    /^ADR-\d+$/.test(p) ? (
-      <a key={i} className="bx-ref">{p}</a>
-    ) : (
-      <React.Fragment key={i}>{p}</React.Fragment>
-    ),
-  );
-}
 
 export interface BrainExplorerProps {
   nodes: BrainNode[];
@@ -183,7 +175,7 @@ export function BrainExplorer({ nodes, edges, selectedId, onSelect }: BrainExplo
 
                   <div className="bx-section-h">Description</div>
                   <div className="bx-prose">
-                    {sel.detail ? renderProse(sel.detail) : <span className="muted">No description recorded yet.</span>}
+                    {sel.detail ? <Markdown>{sel.detail}</Markdown> : <span className="muted">No description recorded yet.</span>}
                   </div>
                 </>
               );
