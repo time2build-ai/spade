@@ -259,6 +259,14 @@
     </div></div>
 
     <div class="step"><div class="n">2</div><div class="body">
+      <h4>Ingest a meeting → backlog <span class="chip ui">In the app</span> <span class="chip term">or terminal</span></h4>
+      <p>A transcript doesn't just get logged — Spade pulls its action items into the backlog. On <b>Meetings</b>, click <b>Ingest a meeting</b> and pick a transcript from a connected source. Or do it over the API:</p>
+      <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/meetings/ingest -H 'content-type: application/json' \
+  -d '<span class="s">{"project_id":"acme","sample":"todo-kickoff"}</span>'</code></pre>
+      <p class="see"><b>You should see</b> the meeting land with its summary + transcript, and a <b>Backlog created</b> list of cards — each grounded back to the line that was said. They appear on the <b>Backlog</b> board too. (<span class="s">GET /meetings/samples</span> lists the canned transcripts; pass <span class="s">title</span> + <span class="s">transcript</span> instead of <span class="s">sample</span> to ingest your own.)</p>
+    </div></div>
+
+    <div class="step"><div class="n">3</div><div class="body">
       <h4>Add a feedback cluster <span class="chip term">In a terminal</span></h4>
       <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/feedback -H 'content-type: application/json' \
   -d '<span class="s">{"project_id":"acme","label":"Checkout slow on mobile","count":12,
@@ -266,7 +274,7 @@
       <p class="see"><b>You should see</b> it on the <b>Feedback</b> page with a source-breakdown bar.</p>
     </div></div>
 
-    <div class="step"><div class="n">3</div><div class="body">
+    <div class="step"><div class="n">4</div><div class="body">
       <h4>Start a sprint <span class="chip term">In a terminal</span></h4>
       <pre><code><span class="k">curl</span> -s 127.0.0.1:8765/sprints -H 'content-type: application/json' \
   -d '<span class="s">{"project_id":"acme","number":26,"day_label":"day 1/10"}</span>'</code></pre>

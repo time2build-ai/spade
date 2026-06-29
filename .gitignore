@@ -14,3 +14,6 @@ docs/Spade (standalone).html
 
 # Local-only scratch guides (kept locally, not in VCS)
 *.local.html
+
+# Testing-guide PDF (kept locally, not in VCS)
+Spade-MVP-Testing-Guide.pdf
