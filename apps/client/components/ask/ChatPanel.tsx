@@ -42,6 +42,15 @@ function isTransient(err: unknown): boolean {
   return /\b(50\d|429)\b/.test(m) || /failed to fetch|networkerror|load failed|connection/i.test(m);
 }
 
+// The orchestrator we targeted is gone (reaped by the stale-session cleanup) or
+// its tmux died: a 404 "no session" or a 410. Worth one retry — dropping the
+// cached id and re-resolving spawns a fresh orchestrator transparently, so a
+// reaped session never surfaces as a scary error.
+function isSessionGone(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return /\b410\b/.test(m) || (/\b404\b/.test(m) && /no session/i.test(m));
+}
+
 /**
  * The shared chat surface (reference `ChatPanel`) — the rich `.ch-*` message
  * stream + composer + the REAL orchestrator round-trip. Used inside the floating
@@ -129,10 +138,13 @@ export function ChatPanel({ resetKey, onClose }: { resetKey?: number; onClose?: 
           response = (await api.promptSession(id, framed)).response;
           break;
         } catch (err) {
-          if (attempt === 0 && isTransient(err)) {
-            sessionIdRef.current = null; // a restart may have dropped the session
+          // Retry once on a transient blip OR a gone/reaped session — both are
+          // fixed by dropping the cached id and re-resolving (which re-spawns a
+          // fresh orchestrator). A reaped session must not surface as an error.
+          if (attempt === 0 && (isTransient(err) || isSessionGone(err))) {
+            sessionIdRef.current = null;
             setStatus("reconnecting…");
-            await sleep(1800);
+            await sleep(isSessionGone(err) ? 300 : 1800);
             continue;
           }
           throw err;

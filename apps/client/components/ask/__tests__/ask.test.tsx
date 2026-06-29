@@ -278,4 +278,28 @@ describe("AskDock", () => {
     expect(raw).toHaveClass("ch-msg-detail");
     expect(raw).not.toHaveClass("ch-msg-text");
   });
+
+  test("self-heals when the cached orchestrator was reaped (404 no session)", async () => {
+    apiSessions.mockResolvedValue({ sessions: [orchestratorSession()] });
+    // First prompt hits a session the stale-session reaper already removed; the
+    // send drops the cached id, re-resolves, and answers on the retry.
+    apiPromptSession
+      .mockRejectedValueOnce(new Error('404 {"detail":"no session with id \'orch-1\'"}'))
+      .mockResolvedValueOnce({ response: "Recovered — Acme is on track.", state: "idle" });
+
+    const { result } = renderHook(() => useAskDock());
+    act(() => result.current.setOpen(true));
+
+    render(<AskDock />);
+    const input = (await screen.findByPlaceholderText(/Ask about this project/)) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "status?" } });
+    fireEvent.click(screen.getByLabelText("Send"));
+
+    // The answer renders (self-healed); no scary error surfaces.
+    expect(
+      await screen.findByText("Recovered — Acme is on track.", {}, { timeout: 6000 }),
+    ).toBeInTheDocument();
+    expect(apiPromptSession).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/the orchestrator hit an error/i)).toBeNull();
+  });
 });
