@@ -47,6 +47,13 @@ export default function BrainPage() {
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
+  // Deep link: /brain?node=<id> (e.g. clicked from a chat reference chip) selects
+  // that node once it loads.
+  React.useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("node");
+    if (id) setSelectedId(id);
+  }, []);
+
   const nodes = nodesData?.nodes ?? [];
   const edges = edgesData?.edges ?? [];
   const byId = indexNodesById(nodes);

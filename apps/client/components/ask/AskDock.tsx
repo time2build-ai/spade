@@ -75,7 +75,7 @@ export function AskDock() {
     return (
       <div className="ch-bubble-panel" data-testid="ask-dock" role="dialog" aria-label="Ask Spade">
         {header}
-        <div className="ch-bubble-body"><div className="ch-panel"><ChatPanel resetKey={resetKey} /></div></div>
+        <div className="ch-bubble-body"><div className="ch-panel"><ChatPanel resetKey={resetKey} onClose={() => go(null)} /></div></div>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export function AskDock() {
       <div className="ch-dock-overlay" onClick={() => go(null)} />
       <div className="ch-dock" data-testid="ask-dock" role="dialog" aria-label="Ask Spade">
         {header}
-        <div className="ch-dock-body"><div className="ch-panel"><ChatPanel resetKey={resetKey} /></div></div>
+        <div className="ch-dock-body"><div className="ch-panel"><ChatPanel resetKey={resetKey} onClose={() => go(null)} /></div></div>
       </div>
     </>
   );

@@ -37,6 +37,8 @@ vi.mock("@/lib/api", () => ({
     accounts: () => apiAccounts(),
     setCurrentProject: (id: string) => apiSetCurrentProject(id),
     chatThreads: () => Promise.resolve({ threads: [] }),
+    tasks: () => Promise.resolve({ tasks: [] }),
+    brainNodes: () => Promise.resolve({ nodes: [] }),
   },
 }));
 

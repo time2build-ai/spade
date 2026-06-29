@@ -2,14 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { Icon } from "@/components/Icon";
 import { api } from "@/lib/api";
 import { useProject } from "@/lib/useProject";
 import { Markdown } from "./Markdown";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 
-type Msg = { role: "you" | "brain"; text: string; error?: boolean; detail?: string };
+type Ref = { kind: string; label: string; href: string; icon: string };
+type Msg = { role: "you" | "brain"; text: string; error?: boolean; detail?: string; refs?: Ref[] };
+
+const NODE_ICON: Record<string, string> = {
+  decision: "doc", feature: "spark", bug: "flag", metric: "graph", feedback: "flag", convention: "doc",
+};
+const nodeRef = (n: { id: string; type: string; label: string }): Ref => ({
+  kind: n.type === "decision" ? "ADR" : n.type,
+  label: n.label,
+  href: n.type === "decision" ? `/decisions#dec-${n.id}` : `/brain?node=${n.id}`,
+  icon: NODE_ICON[n.type] ?? "brain",
+});
+const taskRef = (t: { id: string; title: string }): Ref => ({
+  kind: "task", label: `${t.id} · ${t.title}`, href: `/task/${t.id}`, icon: "tasks",
+});
 
 const ERROR_PRIMARY =
   "Sorry — the orchestrator hit an error and couldn't answer. Try again in a moment.";
@@ -27,7 +41,7 @@ class OrchestratorPrepError extends Error {}
  * bubble and the ⌘K side dock (`ChatBubble`). The header lives in BubbleHeader,
  * so this renders body-only.
  */
-export function ChatPanel({ resetKey }: { resetKey?: number }) {
+export function ChatPanel({ resetKey, onClose }: { resetKey?: number; onClose?: () => void }) {
   const { project } = useProject();
   const { data: accountsData } = useSWR("accounts", () => api.accounts());
   const noAccount = accountsData != null && accountsData.accounts.length === 0;
@@ -86,12 +100,34 @@ export function ChatPanel({ resetKey }: { resetKey?: number }) {
       const id = await resolveOrchestrator();
       await api.setCurrentProject(project.id);
       setStatus(null);
+      // Snapshot the project's records so we can show whatever the agent CREATES
+      // this turn (tasks / brain nodes) as clickable chips under the reply.
+      const pid = project.id;
+      const [t0, n0] = await Promise.all([api.tasks(pid), api.brainNodes(pid)]).catch(() => [null, null] as const);
+      const beforeT = new Set((t0?.tasks ?? []).map((t) => t.id));
+      const beforeN = new Set((n0?.nodes ?? []).map((n) => n.id));
+
       const framed =
         `[Spade context] Answer as the orchestrator for the project "${project.name}" ` +
         `(id: ${project.id}, path: ${project.path}). Treat THIS as the current project, ` +
         `ignoring any other default. If it has no data yet, say so plainly.\n\nQuestion: ${text}`;
       const { response } = await api.promptSession(id, framed);
-      setMessages((m) => [...m, { role: "brain", text: response }]);
+
+      // Diff after the turn → the records the agent just created.
+      let refs: Ref[] | undefined;
+      try {
+        const [t1, n1] = await Promise.all([api.tasks(pid), api.brainNodes(pid)]);
+        const newNodes = n1.nodes.filter((n) => !beforeN.has(n.id));
+        const newTasks = t1.tasks.filter((t) => !beforeT.has(t.id));
+        const list = [...newNodes.map(nodeRef), ...newTasks.map(taskRef)];
+        if (list.length) {
+          refs = list;
+          // Reflect the new records in the rest of the app (sidebar/pages).
+          mutate(["tasks", pid]); mutate(["brain", pid]); mutate(["brain-edges", pid]);
+        }
+      } catch { /* chips are best-effort */ }
+
+      setMessages((m) => [...m, { role: "brain", text: response, refs }]);
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err);
       sessionIdRef.current = null;
@@ -141,6 +177,17 @@ export function ChatPanel({ resetKey }: { resetKey?: number }) {
                   {m.role === "brain" && !m.error ? <Markdown>{m.text}</Markdown> : m.text}
                 </div>
                 {m.detail && <div className="ch-msg-detail">{m.detail}</div>}
+                {m.refs && (
+                  <div className="ch-refs" data-testid="ch-refs">
+                    {m.refs.map((r) => (
+                      <Link key={r.href} href={r.href} className="ch-ref" data-testid="ch-ref" onClick={() => onClose?.()}>
+                        <Icon name={r.icon as never} size={12} />
+                        <span className="ch-ref-kind mono">{r.kind}</span>
+                        <span className="ch-ref-label">{r.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           );

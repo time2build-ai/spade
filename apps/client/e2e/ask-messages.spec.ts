@@ -67,4 +67,21 @@ test.describe("ask message anatomy", () => {
     // User row starts further right than the assistant row.
     expect(you.x).toBeGreaterThan(brain.x);
   });
+
+  test("records the agent creates show as clickable chips linking to the record", async ({ page }) => {
+    // Empty before the turn; after the prompt round-trips (the agent 'created' it)
+    // a new task appears → the reply should surface it as a clickable chip.
+    let prompted = false;
+    await page.route("**/api/sessions/*/prompt", (r) => { prompted = true; return r.fulfill({ json: { response: "Done — created the endpoint task.", state: "idle" } }); });
+    await page.route("**/api/tasks**", (r) =>
+      r.fulfill({ json: { tasks: prompted ? [{ id: "SPD-001", project_id: "p1", title: "POST /api/todos", status: "ready", feature: "Add a todo", priority: 1, origin_quote: null, origin_source: null, description: null, created_at: "", nodes: [], links: [] }] : [] } }),
+    );
+    await page.getByPlaceholder(/Ask about this project/).fill("plan the todo backend");
+    await page.getByTestId("ask-send").click();
+
+    const chip = page.getByTestId("ch-ref").filter({ hasText: "SPD-001" });
+    await expect(chip).toBeVisible();
+    await expect(chip).toContainText("POST /api/todos");
+    await expect(chip).toHaveAttribute("href", "/task/SPD-001");
+  });
 });
