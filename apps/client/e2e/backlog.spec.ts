@@ -118,4 +118,28 @@ test.describe("backlog", () => {
     await expect(banner).not.toContainText("ADR-014");
     await expect(banner.getByRole("link", { name: /Open gate/ })).toHaveAttribute("href", "/gate");
   });
+
+  test("dependency graph drives the 'start here' banner + per-card readiness", async ({ page }) => {
+    // A blocks B (B blocked by A); both ready. A is startable; B is not.
+    const DEP = [
+      { id: "A", project_id: "p1", title: "Backend model", feature: null, priority: 0, status: "ready", origin_quote: null, origin_source: null, description: null, created_at: "2026-01-01", nodes: [], links: [{ id: "l1", from_task: "A", to_task: "B", rel: "blocks", created_at: "" }] },
+      { id: "B", project_id: "p1", title: "API endpoints", feature: null, priority: 0, status: "ready", origin_quote: null, origin_source: null, description: null, created_at: "2026-01-01", nodes: [], links: [{ id: "l1", from_task: "A", to_task: "B", rel: "blocks", created_at: "" }] },
+    ];
+    await page.unrouteAll();
+    await mockBacklog(page);
+    await page.route("**/api/tasks**", (r) => r.fulfill({ json: { tasks: DEP } }));
+    await page.goto("/backlog");
+
+    // "Start here" points at the unblocked task A
+    const next = page.getByTestId("next-up-banner");
+    await expect(next).toContainText("A");
+    await expect(next).toContainText("Backend model");
+    await expect(next).toHaveAttribute("href", "/task/A");
+
+    // A is "ready to start"; B shows "blocked by 1"
+    const cardA = page.locator('[data-testid="task-card"]', { hasText: "Backend model" });
+    const cardB = page.locator('[data-testid="task-card"]', { hasText: "API endpoints" });
+    await expect(cardA.getByTestId("tc-startable")).toBeVisible();
+    await expect(cardB.getByTestId("tc-blocked")).toContainText("blocked by 1");
+  });
 });

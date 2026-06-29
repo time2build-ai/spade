@@ -1,6 +1,6 @@
 import * as React from "react";
 import { TaskCard } from "./TaskCard";
-import { tasksByStatus } from "@/lib/adapters";
+import { tasksByStatus, taskExecutionStates } from "@/lib/adapters";
 import type { BrainNode, Status, Task } from "@/lib/types";
 
 /**
@@ -22,6 +22,7 @@ export interface BoardProps {
 /** 4-column backlog board. Buckets tasks by status into ordered columns. */
 export function Board({ tasks, nodesById }: BoardProps) {
   const buckets = tasksByStatus(tasks);
+  const exec = taskExecutionStates(tasks);
 
   return (
     <div className="backlog-grid">
@@ -36,7 +37,7 @@ export function Board({ tasks, nodesById }: BoardProps) {
             </div>
             <div className="col-body">
               {items.map((task) => (
-                <TaskCard key={task.id} task={task} nodesById={nodesById} />
+                <TaskCard key={task.id} task={task} nodesById={nodesById} exec={exec.get(task.id)} />
               ))}
               {items.length === 0 && (
                 <div

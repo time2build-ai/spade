@@ -141,6 +141,44 @@ export function taskRelations(taskId: string, links: TaskLink[]): TaskRelations 
   return out;
 }
 
+/**
+ * Per-task execution readiness derived from the dependency graph:
+ *  - `isEpic`     — has subtasks (a container; you execute its leaves, not it);
+ *  - `blockedByOpen` — how many of its blockers are still un-shipped;
+ *  - `startable`  — a ready, non-epic leaf with no open blocker → safe to run NOW.
+ */
+export type TaskExecState = { startable: boolean; blockedByOpen: number; isEpic: boolean };
+
+export function taskExecutionStates(tasks: Task[]): Map<string, TaskExecState> {
+  const statusById = new Map(tasks.map((t) => [t.id, t.status]));
+  const out = new Map<string, TaskExecState>();
+  for (const t of tasks) {
+    const rel = taskRelations(t.id, t.links);
+    const blockedByOpen = rel.blockedBy.filter((id) => {
+      const s = statusById.get(id);
+      return s != null && s !== "shipped";
+    }).length;
+    const isEpic = rel.subtasks.length > 0;
+    out.set(t.id, {
+      startable: t.status === "ready" && blockedByOpen === 0 && !isEpic,
+      blockedByOpen,
+      isEpic,
+    });
+  }
+  return out;
+}
+
+/** The single task to start first: the highest-priority startable leaf. */
+export function recommendedFirstTask(tasks: Task[]): Task | null {
+  const states = taskExecutionStates(tasks);
+  const startable = tasks.filter((t) => states.get(t.id)?.startable);
+  if (!startable.length) return null;
+  startable.sort(
+    (a, b) => a.priority - b.priority || a.id.localeCompare(b.id, undefined, { numeric: true }),
+  );
+  return startable[0];
+}
+
 // -- brain (Product Brain graph) adapters -------------------------------------
 
 /** Count nodes per type. All 6 type keys are always present (0 if none). */

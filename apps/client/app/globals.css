@@ -552,6 +552,8 @@ body.home-mode .app > main { grid-column: 1 / -1; }
 .task-card .tc-foot { display: flex; align-items: center; gap: 8px; color: var(--text-4); font-size: 11px; font-family: var(--mono); }
 .task-card .tc-foot .left { display: flex; gap: 9px; align-items: center; }
 .task-card .tc-foot .agent-running { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 11px; }
+.task-card .tc-foot .tc-ready { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 11px; font-weight: 500; }
+.task-card .tc-foot .tc-blocked { display: inline-flex; align-items: center; gap: 4px; color: var(--amber); font-size: 11px; }
 .intel-bar { display: flex; gap: 2px; height: 3px; border-radius: 2px; overflow: hidden; margin: 0 0 7px; }
 .intel-bar span { flex: 1; }
 

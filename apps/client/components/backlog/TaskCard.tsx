@@ -1,13 +1,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { Priority } from "@/components/ui";
-import { groupNodesByType } from "@/lib/adapters";
+import { groupNodesByType, type TaskExecState } from "@/lib/adapters";
 import type { BrainNode, Task } from "@/lib/types";
 
 export interface TaskCardProps {
   task: Task;
   /** Project brain nodes keyed by id, for resolving task.nodes ids. */
   nodesById: Record<string, BrainNode>;
+  /** Dependency-derived readiness (startable / blocked / epic). */
+  exec?: TaskExecState;
 }
 
 /**
@@ -15,7 +17,7 @@ export interface TaskCardProps {
  * linked intelligence — feedback/bug/decision/metric counts come from the REAL
  * linked brain nodes; the "building" pill reflects the real task status.
  */
-export function TaskCard({ task, nodesById }: TaskCardProps) {
+export function TaskCard({ task, nodesById, exec }: TaskCardProps) {
   const resolved: BrainNode[] = [];
   for (const id of task.nodes) {
     const node = nodesById[id];
@@ -75,6 +77,17 @@ export function TaskCard({ task, nodesById }: TaskCardProps) {
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
               building
             </span>
+          ) : exec?.startable ? (
+            <span className="tc-ready" data-testid="tc-startable" title="No open blockers — ready to start now">
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
+              ready to start
+            </span>
+          ) : task.status === "ready" && exec?.blockedByOpen ? (
+            <span className="tc-blocked" data-testid="tc-blocked" title="Waiting on upstream tasks">
+              blocked by {exec.blockedByOpen}
+            </span>
+          ) : exec?.isEpic ? (
+            <span className="muted mono" style={{ fontSize: 10.5 }} data-testid="tc-epic">epic</span>
           ) : (
             <span className="muted mono" style={{ fontSize: 10.5 }}>{task.status}</span>
           )}

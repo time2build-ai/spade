@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { taskRelations } from "@/lib/adapters";
-import type { LinkRel, TaskLink } from "@/lib/types";
+import { recommendedFirstTask, taskExecutionStates, taskRelations } from "@/lib/adapters";
+import type { LinkRel, Status, Task, TaskLink } from "@/lib/types";
 
 let seq = 0;
 function link(from: string, to: string, rel: LinkRel): TaskLink {
@@ -10,6 +10,14 @@ function link(from: string, to: string, rel: LinkRel): TaskLink {
     to_task: to,
     rel,
     created_at: "2026-01-01",
+  };
+}
+
+function task(id: string, status: Status, links: TaskLink[] = [], priority = 1): Task {
+  return {
+    id, project_id: "p1", title: id, feature: null, priority, status,
+    origin_quote: null, origin_source: null, description: null, created_at: "2026-01-01",
+    nodes: [], links,
   };
 }
 
@@ -67,5 +75,35 @@ describe("taskRelations", () => {
       parent: ["P"],
       subtasks: ["C"],
     });
+  });
+});
+
+describe("taskExecutionStates / recommendedFirstTask", () => {
+  // SPD-1 blocks SPD-2 (so 2 is blocked by 1). EPIC has SPD-1 as a subtask.
+  const links = [link("SPD-1", "SPD-2", "blocks"), link("EPIC", "SPD-1", "subtask")];
+  const mk = (s1: Status, s2: Status) => [
+    task("EPIC", "ready", links, 0),
+    task("SPD-1", s1, links, 1),
+    task("SPD-2", s2, links, 1),
+  ];
+
+  it("a ready leaf with no open blocker is startable; the one it blocks is not", () => {
+    const st = taskExecutionStates(mk("ready", "ready"));
+    expect(st.get("SPD-1")!.startable).toBe(true);
+    expect(st.get("SPD-2")!).toMatchObject({ startable: false, blockedByOpen: 1 });
+    expect(st.get("EPIC")!).toMatchObject({ startable: false, isEpic: true });
+  });
+
+  it("the blocked task becomes startable once its blocker ships", () => {
+    const st = taskExecutionStates(mk("shipped", "ready"));
+    expect(st.get("SPD-2")!).toMatchObject({ startable: true, blockedByOpen: 0 });
+  });
+
+  it("recommendedFirstTask picks the startable leaf (never the epic) by priority", () => {
+    expect(recommendedFirstTask(mk("ready", "ready"))!.id).toBe("SPD-1");
+    // once SPD-1 ships, the next executable is SPD-2
+    expect(recommendedFirstTask(mk("shipped", "ready"))!.id).toBe("SPD-2");
+    // nothing startable → null
+    expect(recommendedFirstTask(mk("shipped", "shipped"))).toBeNull();
   });
 });

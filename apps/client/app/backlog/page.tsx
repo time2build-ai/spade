@@ -8,7 +8,37 @@ import { Board } from "@/components/backlog/Board";
 import { BlockedBanner } from "@/components/backlog/BlockedBanner";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
-import { indexNodesById } from "@/lib/adapters";
+import { indexNodesById, recommendedFirstTask } from "@/lib/adapters";
+
+/** "Start here" hint — the first executable task given the dependency graph. */
+function NextUpBanner({ tasks }: { tasks: import("@/lib/types").Task[] }) {
+  const first = recommendedFirstTask(tasks);
+  if (!first) return null;
+  return (
+    <div style={{ padding: "10px 22px 0" }}>
+      <Link
+        href={`/task/${first.id}`}
+        className="card"
+        data-testid="next-up-banner"
+        style={{
+          padding: "10px 14px", display: "flex", gap: 12, alignItems: "center",
+          textDecoration: "none", color: "inherit",
+          borderColor: "rgba(122,209,154,.3)",
+          background: "linear-gradient(180deg, rgba(122,209,154,.08), var(--bg-1))",
+        }}
+      >
+        <span style={{ fontSize: 14, color: "var(--green)" }}>▶</span>
+        <div style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span className="muted">Start here —</span>
+          <b>{first.id}</b>
+          <span className="muted">· {first.title}</span>
+          <span className="muted">· no open blockers, highest priority</span>
+        </div>
+        <span className="btn" style={{ marginLeft: "auto" }}>Open task →</span>
+      </Link>
+    </div>
+  );
+}
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return (
@@ -77,6 +107,7 @@ export default function BacklogPage() {
           </Link>
         }
       />
+      {tasksData && <NextUpBanner tasks={tasksData.tasks} />}
       {tasksData && <BlockedBanner tasks={tasksData.tasks} />}
       {body}
     </div>
