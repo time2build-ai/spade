@@ -33,23 +33,85 @@ function transcriptLines(transcript: string) {
   }).filter((l) => l.text);
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The staged "processing" the overlay walks through while we pull a transcript.
+// Pure theatre over a fast deterministic call — it's what sells the demo.
+const INGEST_STEPS = [
+  "Connecting to the source",
+  "Fetching the transcript",
+  "Reading the room",
+  "Extracting action items",
+  "Drafting backlog cards",
+];
+
+type Proc = { source: string; title: string; step: number; count: number | null };
+
+// Full-screen overlay that animates the ingest. `step` counts completed stages;
+// step === INGEST_STEPS.length means done (every row checked + the result count).
+function IngestOverlay({ proc }: { proc: Proc }) {
+  const done = proc.step >= INGEST_STEPS.length;
+  const pct = Math.min(100, Math.round((proc.step / INGEST_STEPS.length) * 100));
+  return (
+    <div className="ingest-overlay" data-testid="ingest-overlay">
+      <div className="ingest-card">
+        <div className="ingest-card-head">
+          <span className="ingest-pulse"><Icon name="mic" size={15} /></span>
+          <div>
+            <div className="ingest-card-title">Ingesting from {proc.source}</div>
+            <div className="ingest-card-sub mono">{proc.title}</div>
+          </div>
+        </div>
+        <div className="ingest-bar"><div className="ingest-bar-fill" style={{ width: `${done ? 100 : pct}%` }} /></div>
+        <ul className="ingest-steps">
+          {INGEST_STEPS.map((label, i) => {
+            const state = done || i < proc.step ? "done" : i === proc.step ? "active" : "pending";
+            return (
+              <li key={label} className={`ingest-step ${state}`}>
+                <span className="ingest-step-mark">
+                  {state === "done" ? <Icon name="check" size={12} /> : state === "active" ? <span className="ingest-spin" /> : <span className="ingest-dot" />}
+                </span>
+                <span className="ingest-step-label">{label}</span>
+              </li>
+            );
+          })}
+        </ul>
+        {done && proc.count !== null && (
+          <div className="ingest-done mono" data-testid="ingest-done">
+            <Icon name="spark" size={13} /> {proc.count} backlog {proc.count === 1 ? "item" : "items"} drafted
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // The ingest control: pick a "connected" notes source and pull it in. In the
 // demo these are canned transcripts standing in for Granola / Otter / etc.
 function IngestMenu({ projectId, onIngested }: { projectId: string; onIngested: (m: Meeting) => void }) {
   const { data } = useSWR("meeting-samples", () => api.meetingSamples());
   const [open, setOpen] = React.useState(false);
-  const [busy, setBusy] = React.useState<string | null>(null);
+  const [proc, setProc] = React.useState<Proc | null>(null);
   const samples = data?.samples ?? [];
 
-  async function ingest(sample: string) {
-    setBusy(sample);
-    try {
-      const { meeting } = await api.ingestMeeting({ project_id: projectId, sample });
-      setOpen(false);
-      onIngested(meeting);
-    } finally {
-      setBusy(null);
+  async function ingest(s: { id: string; title: string; source: string }) {
+    setOpen(false);
+    // Kick the real (fast, deterministic) request off immediately; the staged
+    // animation runs over it so the call always feels like real work.
+    const reqP = api.ingestMeeting({ project_id: projectId, sample: s.id }).catch(() => null);
+    setProc({ source: s.source, title: s.title, step: 0, count: null });
+    for (let i = 1; i < INGEST_STEPS.length; i++) {
+      await sleep(580);
+      setProc((p) => (p ? { ...p, step: i } : p));
     }
+    const res = await reqP;
+    await sleep(520);
+    if (!res) { setProc(null); return; }
+    // Land on a "done" frame showing the real count before handing off.
+    setProc((p) => (p ? { ...p, step: INGEST_STEPS.length, count: res.tasks.length } : p));
+    await sleep(950);
+    setProc(null);
+    onIngested(res.meeting);
   }
 
   return (
@@ -59,7 +121,7 @@ function IngestMenu({ projectId, onIngested }: { projectId: string; onIngested: 
         className="btn primary"
         data-testid="ingest-meeting"
         onClick={() => setOpen((v) => !v)}
-        disabled={samples.length === 0}
+        disabled={samples.length === 0 || proc !== null}
       >
         <Icon name="mic" size={13} /> Ingest a meeting
       </button>
@@ -72,17 +134,15 @@ function IngestMenu({ projectId, onIngested }: { projectId: string; onIngested: 
               type="button"
               className="ingest-menu-item"
               data-testid="ingest-sample"
-              onClick={() => ingest(s.id)}
-              disabled={busy !== null}
+              onClick={() => ingest(s)}
             >
               <span className="ingest-menu-title">{s.title}</span>
-              <span className="ingest-menu-sub mono">
-                {busy === s.id ? "Ingesting…" : `${s.source} · ${s.date}`}
-              </span>
+              <span className="ingest-menu-sub mono">{s.source} · {s.date}</span>
             </button>
           ))}
         </div>
       )}
+      {proc && <IngestOverlay proc={proc} />}
     </div>
   );
 }

@@ -65,6 +65,11 @@ test.describe("meetings (real)", () => {
     await page.getByTestId("ingest-meeting").click();
     await page.getByTestId("ingest-sample").filter({ hasText: "Todo App" }).click();
 
+    // The processing overlay plays, lands on a done frame with the real count,
+    // then hands off to the meeting view.
+    await expect(page.getByTestId("ingest-overlay")).toBeVisible();
+    await expect(page.getByTestId("ingest-done")).toContainText("1 backlog item");
+
     // Meeting now shows, with its source badge, the extracted backlog, and the
     // highlighted transcript line.
     await expect(page.locator(".mtg-title")).toHaveText("Todo App — kickoff");

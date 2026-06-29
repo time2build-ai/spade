@@ -18,7 +18,7 @@ SAMPLES: dict[str, dict] = {
         "title": "Todo App — kickoff",
         "date": "2026-06-26",
         "source": "Granola",
-        "attendees": ["You", "Maya", "Devin"],
+        "attendees": ["You", "Jose"],
         "summary": (
             "Scoped the first slice of the todo app: a React + Vite front end over "
             "a small FastAPI + SQLite back end. Agreed to ship the core list and "
@@ -27,13 +27,13 @@ SAMPLES: dict[str, dict] = {
         ),
         "transcript": (
             "You: Okay, let's get the todo app off the ground. What's the smallest thing worth building first?\n"
-            "Maya: The core list, honestly. People need to jot down todos and check them off. → Build the todo list view with add and check-off\n"
-            "Devin: And we should persist from day one — losing items on refresh feels broken. → Set up the FastAPI + SQLite backend with a todos table\n"
-            "You: Agreed. Wire the front end straight to it. → Add the create-todo endpoint and hook the form up to it\n"
-            "Maya: Editing and deleting come up constantly, let's not skip them. → Support editing and deleting a todo\n"
-            "Devin: A filter for just the open ones would keep the list usable. → Add a filter to show only open todos\n"
+            "Jose: The core list, honestly. People need to jot down todos and check them off. → Build the todo list view with add and check-off\n"
+            "You: And we should persist from day one — losing items on refresh feels broken. → Set up the FastAPI + SQLite backend with a todos table\n"
+            "Jose: Agreed. Wire the front end straight to it. → Add the create-todo endpoint and hook the form up to it\n"
+            "You: Editing and deleting come up constantly, let's not skip them. → Support editing and deleting a todo\n"
+            "Jose: A filter for just the open ones would keep the list usable. → Add a filter to show only open todos\n"
             "You: Due dates would be nice down the line, but it's not for this slice. → Explore optional due dates as a follow-up\n"
-            "Maya: Last thing — let's get a clean empty state so the first run isn't a blank box. →! Design the empty state for a fresh list\n"
+            "Jose: Last thing — let's get a clean empty state so the first run isn't a blank box. →! Design the empty state for a fresh list\n"
         ),
     },
     "weekly-sync": {
