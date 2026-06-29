@@ -24,7 +24,8 @@ function transcriptLines(transcript: string) {
     const line = raw.trim();
     const action = line.includes("→");
     const [speaker, ...rest] = line.split(":");
-    const hasSpeaker = rest.length > 0 && /^[A-Za-z][\w .'-]{0,30}$/.test(speaker);
+    // Unicode-aware so accented speaker labels (e.g. "Tú") parse as a speaker.
+    const hasSpeaker = rest.length > 0 && /^[\p{L}][\p{L}\d .'’-]{0,30}$/u.test(speaker.trim());
     return {
       speaker: hasSpeaker ? speaker : "",
       text: hasSpeaker ? rest.join(":").trim() : line,

@@ -18,22 +18,22 @@ SAMPLES: dict[str, dict] = {
         "title": "Todo App — kickoff",
         "date": "2026-06-26",
         "source": "Granola",
-        "attendees": ["You", "Jose"],
+        "attendees": ["Tú", "Jose"],
         "summary": (
-            "Scoped the first slice of the todo app: a React + Vite front end over "
-            "a small FastAPI + SQLite back end. Agreed to ship the core list and "
-            "check-off loop first, persist early, and leave due dates for a later "
-            "pass."
+            "Definimos la primera tanda de la app de tareas: un front en React + Vite "
+            "sobre un back pequeño en FastAPI + SQLite. Acordamos arrancar por la lista "
+            "y el marcado como completado, persistir desde el día uno, y dejar las "
+            "fechas de vencimiento para más adelante."
         ),
         "transcript": (
-            "You: Okay, let's get the todo app off the ground. What's the smallest thing worth building first?\n"
-            "Jose: The core list, honestly. People need to jot down todos and check them off. → Build the todo list view with add and check-off\n"
-            "You: And we should persist from day one — losing items on refresh feels broken. → Set up the FastAPI + SQLite backend with a todos table\n"
-            "Jose: Agreed. Wire the front end straight to it. → Add the create-todo endpoint and hook the form up to it\n"
-            "You: Editing and deleting come up constantly, let's not skip them. → Support editing and deleting a todo\n"
-            "Jose: A filter for just the open ones would keep the list usable. → Add a filter to show only open todos\n"
-            "You: Due dates would be nice down the line, but it's not for this slice. → Explore optional due dates as a follow-up\n"
-            "Jose: Last thing — let's get a clean empty state so the first run isn't a blank box. →! Design the empty state for a fresh list\n"
+            "Tú: Bueno, arranquemos la app de tareas. ¿Qué es lo mínimo que vale la pena construir primero?\n"
+            "Jose: La lista, sin duda. La gente necesita anotar tareas y marcarlas como hechas. → Construir la vista de lista de tareas con alta y marcado\n"
+            "Tú: Y deberíamos persistir desde el día uno — perder tareas al refrescar se siente roto. → Montar el backend en FastAPI + SQLite con una tabla de tareas\n"
+            "Jose: De acuerdo. Conectá el front directo a eso. → Agregar el endpoint de crear tarea y enganchar el formulario\n"
+            "Tú: Editar y borrar salen todo el tiempo, no las saltemos. → Permitir editar y borrar una tarea\n"
+            "Jose: Un filtro para ver solo las abiertas mantendría la lista usable. → Agregar un filtro para mostrar solo tareas abiertas\n"
+            "Tú: Las fechas de vencimiento estarían buenas más adelante, pero no en esta tanda. → Explorar fechas de vencimiento opcionales como seguimiento\n"
+            "Jose: Una última cosa — dejemos un estado vacío limpio para que el primer uso no sea una caja en blanco. →! Diseñar el estado vacío para una lista nueva\n"
         ),
     },
     "weekly-sync": {

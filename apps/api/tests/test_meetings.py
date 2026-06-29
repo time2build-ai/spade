@@ -69,9 +69,9 @@ def test_ingest_sample_creates_meeting_and_grounded_tasks():
     for t in created:
         assert t["origin_source"] == mtg["title"]
         assert t["status"] == "ready"
-    # tasks really landed in the project backlog
+    # tasks really landed in the project backlog (the sample is in Spanish)
     titles = [t["title"] for t in tasks.list_for_project("acme")]
-    assert "Build the todo list view with add and check-off" in titles
+    assert "Construir la vista de lista de tareas con alta y marcado" in titles
 
 
 def test_ingest_requires_sample_or_transcript():
