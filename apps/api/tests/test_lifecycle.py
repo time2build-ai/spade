@@ -1,0 +1,41 @@
+from tui_pilot import lifecycle, tasks, projects
+
+
+class FakeGit:
+    """Injected git facade — records calls, no real repo needed for engine tests.
+    Note: artifact re-pointing is NOT here — it's an engine-owned DB update
+    (artifacts.repoint_to_branch)."""
+    def __init__(self): self.calls = []; self.merge_sha = "sha123"
+    def prepare_workspace(self, cfg, task_id, slug, kind="feat"):
+        self.calls.append(("prepare", task_id))
+        return {"branch_name": f"feat/{task_id}-{slug}", "worktree_path": f"/wt/{task_id}"}
+    def open_pr(self, *a, **k): self.calls.append(("open_pr",)); return {"pr_number": 7, "pr_url": "u/7"}
+    def post_review(self, *a, **k): self.calls.append(("post_review",))
+    def merge(self, *a, **k): self.calls.append(("merge",)); return self.merge_sha
+
+
+def _setup():
+    projects.create(id="acme", name="Acme", path="/w")
+    from tui_pilot import project_git
+    project_git.upsert("acme", repo_ssh_url="git@github.com:acme/app.git")
+    return tasks.create(project_id="acme", title="Build X")["id"]
+
+
+def _spawn(run, phase):
+    return (f"sess-{phase}", "acct")
+
+
+def test_start_run_creates_shaping_run_and_moves_task():
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    assert run["phase"] == "shaping"
+    assert run["branch_name"].startswith("feat/SPD-")
+    assert tasks.get(tid)["status"] == "shaping"
+
+
+def test_start_run_rejects_a_second_active_run():
+    tid = _setup()
+    lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    import pytest
+    with pytest.raises(ValueError):
+        lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
