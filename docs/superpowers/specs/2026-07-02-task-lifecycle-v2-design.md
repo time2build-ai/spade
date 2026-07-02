@@ -107,9 +107,11 @@ project has no local `path`, the git service clones `repo_ssh_url` on first use.
 | `branch_name`, `worktree_path` | populated once building starts |
 | `pr_number`, `pr_url` | populated once the PR opens |
 | `merge_commit` | populated on merge to development |
-| `env_dev_at`, `env_staging_at`, `env_prod_at` | timestamps when `merge_commit` first appears in each env branch |
+| `env_dev_at` | stamped by `merge()` at merge to development (the commit is on `dev_branch` by definition) |
+| `env_staging_at`, `env_prod_at` | stamped by the env watcher when `merge_commit` first appears in the staging / prod branch |
 | `agent_session_id`, `account_id` | current phase's agent, via existing spawn |
 | `blocked_reason` | set when phase = `blocked` |
+| `blocked_from_phase` | the phase the run was in when it blocked; drives the "Retry phase" transition |
 | `self_heal_attempts` | int, for the building test-fix loop (cap 3) |
 | `created_at`, `updated_at` | |
 
@@ -128,6 +130,13 @@ project has no local `path`, the git service clones `repo_ssh_url` on first use.
 Rationale for storing repo path + branch rather than inlined content: specs and
 plans are committed to the branch (mirroring the superpowers flow), so the repo
 is the source of truth; the task view reads them from the branch on demand.
+
+**Branch lifetime.** The feature branch is deleted on merge (§3 `merge()`), but a
+squash merge lands the same files on `dev_branch`. So `merge()` **re-points every
+artifact row for the task from the feature branch to `dev_branch`** (updating
+`branch`, keeping `repo_path`). The Artifacts panel therefore keeps rendering for
+shipped tasks — the case the user is most likely to revisit. These doc paths are
+not renamed by the squash, so `repo_path` on `dev_branch` always resolves.
 
 ### `gates`
 
@@ -162,6 +171,22 @@ The `STATUSES` enum in `tasks.py` is extended accordingly. Legacy statuses
 (`in_progress`, `review`) are migrated: `in_progress → building`,
 `review → pr_review`.
 
+**Stored vs derived.** To avoid a dual source of truth, `tasks.status` is written
+by the engine (not computed at read time) — `lifecycle.advance()` and gate
+decisions call the existing `tasks.move()` as the single writer whenever the
+active run's phase changes, so the column always mirrors the run. Direct callers
+of `move()` outside the engine are removed; `move()` gains the transition rules
+described in §2. This keeps the board query unchanged (reads `tasks.status`) while
+making the run the authority.
+
+**`manual_test` waiting state.** The manual-test gate opens while the run's phase
+is `building`, which would otherwise leave the card looking "still building".
+Rather than add a status, the board treats any card **with a `waiting` gate** as
+amber "waiting on you" regardless of column (§4). A task at a green build with the
+manual_test gate open therefore shows amber in the Building column with a
+**Review →** button, matching the plan and merge gates. Phase stays `building`
+internally (a manual_test rejection loops back into building).
+
 ### Activity notes
 
 Every phase change, gate decision, artifact creation, test run, PR event, and
@@ -192,8 +217,8 @@ building       → pr_review           (tests green + manual_test gate passed)
 pr_review      → shipped             (merge gate approved + merge succeeds)
                → pr_review           (new blocker findings → fix → re-review)
                → blocked             (merge conflict / push rejected / gh error)
-blocked        → <phase it came from> (Retry phase)
-any            → blocked             (agent death / infra failure)
+blocked        → <blocked_from_phase> (Retry phase; the phase stored when it blocked)
+any            → blocked             (agent death / infra failure; sets blocked_from_phase)
 ```
 
 ### Phase agents
@@ -254,7 +279,12 @@ GitHub while using a real local repo.
   `dev_branch`; add a worktree under `<worktrees_root>/SPD-NNN/`. The phase
   agent's `cwd` is the worktree, so parallel tasks never collide (replaces
   today's "agents work directly in the project checkout"). Called at the start
-  of the shaping phase.
+  of the shaping phase. **Empty-change edge:** if shaping concludes no code
+  change is needed (spec/plan only, or the task is dropped), the branch may hold
+  only the committed docs or nothing; on merge those docs still land on
+  `dev_branch`, and a branch with zero commits is deleted without a PR and the
+  task is moved to `blocked` with a "no changes produced" note for the human to
+  close or redirect.
 - **`open_pr(task)`** — push branch; `gh pr create --base <dev_branch>` with a
   body generated from the task + spec/plan artifact links; store
   `pr_number`/`pr_url`.
@@ -284,8 +314,11 @@ silent failures.
 ### Backlog board
 
 Columns become six: `Ready · Shaping · Plan review · Building · PR review ·
-Shipped`. `Blocked` stays a banner (not a column). `Plan review` and `PR review`
-cards get amber "waiting on you" styling with an inline **Review →** button.
+Shipped`. `Blocked` stays a banner (not a column). Any card whose task has a
+`waiting` gate gets amber "waiting on you" styling with an inline **Review →**
+button — this covers `plan_review` and `pr_review` cards and also a `building`
+card whose `manual_test` gate is open (a green build awaiting your hands-on
+test), so the manual-test gate has a visible home without a dedicated column.
 Shipped cards show small `dev / staging / prod` env badges that light up as the
 task's merge commit reaches each branch. The "Start here" banner surfaces pending
 gates first (clearing a gate beats starting a new task).
@@ -358,8 +391,10 @@ Matches repo conventions (`.venv` pytest, in-memory SQLite via `db._migrate`).
 1. Add new tables via `db._migrate`; migrate legacy task statuses
    (`in_progress → building`, `review → pr_review`).
 2. Land `lifecycle.py` + `gitops.py` behind the existing spawn/poll
-   infrastructure; retire `pipelines.py` (keep the table briefly for history,
-   remove endpoints).
+   infrastructure; retire `pipelines.py` — remove its endpoints and stop the
+   engine immediately, but keep the `pipeline_runs`/`pipeline_stages` tables
+   read-only for one release so historical runs remain visible, then drop them
+   in a dedicated follow-up cleanup task tracked in the backlog.
 3. Ship UI changes; require `project_git.repo_ssh_url` before a task can leave
    `ready` (clear error in the gate bar if unset).
 
