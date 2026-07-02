@@ -82,3 +82,26 @@ def test_merge_returns_sha_and_cleans_up(origin_and_clone, tmp_path):
                        repo_dir=origin_and_clone["work"])
     assert sha == "deadbeef"
     assert not Path(ws["worktree_path"]).exists()  # worktree removed
+
+
+def test_commit_reached_branch_true_after_push(origin_and_clone):
+    work = origin_and_clone["work"]
+    (Path(work)/"g.txt").write_text("g"); _git(work, "add", "."); _git(work, "commit", "-m", "g")
+    sha = subprocess.run(["git","rev-parse","HEAD"], cwd=work, capture_output=True, text=True).stdout.strip()
+    _git(work, "push", "origin", "development")
+    _git(work, "fetch", "origin")
+    assert gitops.commit_reached_branch(sha, "development", repo_dir=work) is True
+
+
+def test_commit_reached_branch_false_for_unknown_ref(origin_and_clone):
+    work = origin_and_clone["work"]
+    sha = subprocess.run(["git","rev-parse","HEAD"], cwd=work, capture_output=True, text=True).stdout.strip()
+    assert gitops.commit_reached_branch(sha, "nonexistent", repo_dir=work) is False
+
+
+def test_read_at_branch_returns_file_contents(origin_and_clone):
+    work = origin_and_clone["work"]
+    (Path(work)/"docs").mkdir(exist_ok=True); (Path(work)/"docs"/"x.md").write_text("hello guide")
+    _git(work, "add", "."); _git(work, "commit", "-m", "doc"); _git(work, "push", "origin", "development")
+    _git(work, "fetch", "origin")
+    assert "hello guide" in gitops.read_at_branch("docs/x.md", "development", repo_dir=work)
