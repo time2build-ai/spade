@@ -45,12 +45,13 @@ export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
   const building = task.status === "building";
 
   // Env badges on shipped cards — the furthest deployment env the run reached.
+  // (Env stamps are only written post-merge, so gate on shipped to match intent.)
   const envs: { key: "dev" | "staging" | "prod"; label: string; at: string | null | undefined }[] = [
     { key: "dev", label: "dev", at: run?.env_dev_at },
     { key: "staging", label: "staging", at: run?.env_staging_at },
     { key: "prod", label: "prod", at: run?.env_prod_at },
   ];
-  const reachedEnvs = envs.filter((e) => e.at);
+  const reachedEnvs = task.status === "shipped" ? envs.filter((e) => e.at) : [];
 
   return (
     <Link

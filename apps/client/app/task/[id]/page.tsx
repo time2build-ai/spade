@@ -284,6 +284,7 @@ export default function TaskPage() {
               </div>
               <textarea
                 data-testid="gate-comment"
+                aria-label="Gate decision comment"
                 value={gateComment}
                 onChange={(e) => setGateComment(e.target.value)}
                 placeholder="Add a comment (required to request changes)…"
@@ -516,11 +517,16 @@ export default function TaskPage() {
 
 /** Split a test-guide markdown body into numbered steps (list items). Falls back
  *  to an empty list when the body isn't obviously a checklist. */
+const STEP_MARKER = /^\s*(\d+[.)]|[-*+]|\[[ xX]\])\s+/;
+
 function parseSteps(content: string): string[] {
+  // Only real list/numbered lines become checklist steps — prose paragraphs in
+  // the guide stay out of the step list (they render via the markdown fallback).
   return content
     .split("\n")
-    .map((l) => l.replace(/^\s*(\d+[.)]|[-*+]|\[[ xX]\])\s+/, "").trim())
-    .filter((l) => l.length > 0 && !l.startsWith("#"));
+    .filter((l) => STEP_MARKER.test(l))
+    .map((l) => l.replace(STEP_MARKER, "").trim())
+    .filter((l) => l.length > 0);
 }
 
 /** Right-side drawer rendering an artifact's markdown. The test guide gets the
@@ -541,6 +547,15 @@ function ArtifactDrawer({
   const content = data?.content ?? "";
   const steps = isTestGuide ? parseSteps(content) : [];
 
+  // Escape closes the drawer (basic modal a11y).
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const label = `${ARTIFACT_LABEL[artifact.kind] ?? artifact.kind}${artifact.title ? ` · ${artifact.title}` : ""}`;
+
   return (
     <div
       data-testid="artifact-drawer"
@@ -548,6 +563,9 @@ function ArtifactDrawer({
       style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,.4)", display: "flex", justifyContent: "flex-end" }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
         onClick={(e) => e.stopPropagation()}
         style={{ width: "min(560px, 92vw)", height: "100%", background: "var(--bg-1)", borderLeft: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}
       >
