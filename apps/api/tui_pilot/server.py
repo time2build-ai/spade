@@ -855,6 +855,11 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                 # auto-advance collector. Best-effort: never break reconcile.
                 # Deliberately do NOT set pipeline_advanced, so a stage that
                 # finished during downtime can still advance after reattach.
+                #
+                # NOTE: the pipeline linkage restore below is effectively dead
+                # now that the poll loop no longer runs the pipeline collector
+                # (flagged for the next-release pipeline cleanup). Left in place
+                # deliberately — do not remove the pipeline reads here.
                 try:
                     from tui_pilot import pipelines
                     link = pipelines.stage_by_session(sid)
@@ -864,6 +869,23 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                 except Exception:  # noqa: BLE001 - best-effort linkage restore
                     logger.warning(
                         "failed to restore pipeline linkage for %s", sid,
+                        exc_info=True,
+                    )
+                # Restore LIFECYCLE linkage the same way: a reattached lifecycle
+                # agent (shaping/building/pr_review) must stay visible to the
+                # auto-advance collector so its finished report isn't dropped.
+                # Stamp phase then run_id LAST (matches the spawn ordering). Do
+                # NOT set lifecycle_advanced, so a run that finished during
+                # downtime can still advance after reattach.
+                try:
+                    from tui_pilot import lifecycle
+                    lrun = lifecycle.run_by_session(sid)
+                    if lrun is not None:
+                        _meta[sid]["lifecycle_phase"] = lrun["phase"]
+                        _meta[sid]["lifecycle_run_id"] = lrun["id"]
+                except Exception:  # noqa: BLE001 - best-effort linkage restore
+                    logger.warning(
+                        "failed to restore lifecycle linkage for %s", sid,
                         exc_info=True,
                     )
                 kept.append(sid)

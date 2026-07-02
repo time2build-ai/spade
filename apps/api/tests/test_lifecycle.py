@@ -199,6 +199,43 @@ def test_merge_approve_ships():
     assert all(a["branch"] == "development" for a in artifacts.for_task(tid))
 
 
+def test_run_by_session_finds_active_run_by_agent_session():
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    # start_run spawned shaping with _spawn -> ("sess-shaping", "acct")
+    found = lifecycle.run_by_session("sess-shaping")
+    assert found is not None
+    assert found["id"] == run["id"] and found["phase"] == "shaping"
+    assert lifecycle.run_by_session("no-such-session") is None
+
+
+def test_merge_request_changes_sends_back_to_building_not_stranded():
+    tid = _setup()
+    git = FakeGit()
+    run = _to_pr_review(tid, git)
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[],"summary":"ok"}', spawn=_spawn, git=git)
+    # merge gate is waiting; human requests changes instead of merging
+    seen = {}
+
+    def rec(run, phase):
+        seen["comment"] = run.get("resume_comment")
+        seen["phase"] = phase
+        return ("s-rework", "a")
+
+    lifecycle.decide_gate(run["id"], "merge", "changes_requested",
+                          comment="fix the flaky test", spawn=rec, git=git)
+    r = lifecycle.get(run["id"])
+    # NOT stranded: back in building, active, with a fresh builder addressing the note
+    assert r["phase"] == "building"
+    assert r["active"] == 1
+    assert tasks.get(tid)["status"] == "building"
+    assert seen["phase"] == "building"
+    assert seen["comment"] == "fix the flaky test"
+    # merge never fired
+    assert ("merge",) not in git.calls
+
+
 # -- Task 3.6: retry from blocked + shaping no_changes -> blocked -------------
 
 def test_retry_from_blocked_resumes_producing_phase():

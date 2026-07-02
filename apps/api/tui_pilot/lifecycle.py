@@ -63,6 +63,20 @@ def active_run_for_task(task_id: str) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
+def run_by_session(session_id: str) -> dict | None:
+    """The active run whose current phase agent is ``session_id`` (or None).
+
+    Makes ``agent_session_id`` a read column: on server restart the reconcile
+    step uses this to re-stamp a reattached lifecycle agent's ``_meta`` so its
+    finished report still drives auto-advance (closing the durability gap)."""
+    rows = db.query(
+        "SELECT * FROM lifecycle_runs WHERE agent_session_id = ? AND active = 1 "
+        "ORDER BY updated_at DESC, rowid DESC",
+        (session_id,),
+    )
+    return dict(rows[0]) if rows else None
+
+
 def list_for_project(project_id: str) -> list[dict]:
     rows = db.query(
         "SELECT * FROM lifecycle_runs WHERE project_id = ? "
@@ -405,7 +419,12 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
             _set_run(run_id, phase="shaping")
             tasks.move(tid, "shaping", force=True)
             _spawn_phase(get(run_id), "shaping", spawn, resume_comment=comment)
-        elif gate == "manual_test":
+        elif gate in ("manual_test", "merge"):
+            # Both send the run back to BUILDING for rework. For merge this is the
+            # clean recovery path: human rejects the merge → builder addresses the
+            # comment → tests → manual_test gate → pr_review → merge gate again.
+            # (Without this, a rejected merge would strand the run in pr_review
+            # with no gate and no agent, and retry() only resumes blocked runs.)
             _set_run(run_id, phase="building")
             tasks.move(tid, "building", force=True)
             _spawn_phase(get(run_id), "building", spawn, resume_comment=comment)
