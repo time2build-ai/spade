@@ -435,7 +435,7 @@ def test_merge_returns_sha_and_cleans_up(origin_and_clone, tmp_path):
 - [ ] **Step 3: Implement.**
   - `open_pr(cfg, worktree, branch, base, title, body, *, gh, runner_factory=GitRunner)`: `runner_factory(worktree).run("push", "-u", "origin", branch)`, then `res = gh.create_pr(worktree, base, branch, title, body)`, return `{"pr_number": res["number"], "pr_url": res["url"]}`.
   - `post_review(pr_number, findings, *, gh)`: for each finding `gh.comment(None, pr_number, f["path"], f["line"], f["body"])`.
-  - `merge(cfg, worktree, branch, pr_number, *, gh, repo_dir, method="squash", runner_factory=GitRunner)`: `sha = gh.merge(worktree, pr_number, method)`; then clean up from the MAIN clone: `runner = runner_factory(repo_dir)`, `runner.run("worktree", "remove", "--force", worktree)`, `runner.run("branch", "-D", branch)`. For the remote branch, call `runner.run_code("push", "origin", "--delete", branch)` and ignore a nonzero result (remote ref may not exist — the `FakeGh` path never pushed it; the real path relies on `gh pr merge --delete-branch`). Return `sha`.
+  - `merge(cfg, worktree, branch, pr_number, *, gh, repo_dir, method="squash", runner_factory=GitRunner)`: `sha = gh.merge(worktree, pr_number, method)`; then clean up from the MAIN clone: `runner = runner_factory(repo_dir)`, `runner.run("worktree", "remove", "--force", worktree)`, `runner.run("branch", "-D", branch)`. For the remote branch, call `runner.run_code("push", "origin", "--delete", branch)` and ignore a nonzero result (remote ref may not exist — the `FakeGh` path never pushed it; the real path relies on `gh pr merge --delete-branch`). Finally `runner.run_code("fetch", "origin")` so the clone's `origin/<dev_branch>` ref reflects the just-landed squash commit (keeps the subsequent artifact re-point read and the env watcher from seeing a stale ref). Return `sha`.
 - [ ] **Step 4: Run, verify pass** — same `-k` command. Expected: PASS.
 - [ ] **Step 5: Commit** — `git add apps/api/tui_pilot/gitops.py apps/api/tests/test_gitops.py && git commit -m "feat(lifecycle): gitops open_pr/post_review/merge"`
 
@@ -598,7 +598,7 @@ def test_start_run_rejects_a_second_active_run():
 
 - [ ] **Step 1: Failing test** — after `start_run`, call `lifecycle.advance(run_id, phase="shaping", report=<json with spec/plan paths>, spawn=_spawn, git=FakeGit())`; assert phase == `plan_review`, task == `plan_review`, `gates.gate_for(run_id,"plan")` is `waiting`, and `artifacts.for_task(tid)` has a `spec` and a `plan`.
 - [ ] **Step 2: Run, verify fail** — `pytest tests/test_lifecycle.py -k shaping_advance -v`.
-- [ ] **Step 3: Implement `advance()` shaping branch** — parse the report as JSON `{"spec_path","plan_path","summary"}`; register both artifacts (on the run's `branch_name`), post a `progress` note with the summary, phase → `plan_review`, `tasks.move → plan_review`, `gates.open_gate(...,"plan")`. Defensive parse: on JSON failure, `system` note + move run to `blocked` (per Model). Handle the `{"no_changes": true}` case per Task 3.6.
+- [ ] **Step 3: Implement `advance()` shaping branch** — parse the report as JSON `{"spec_path","plan_path","summary"}`; register both artifacts (on the run's `branch_name`), post a `progress` note with the summary, phase → `plan_review`, `tasks.move → plan_review`, `gates.open_gate(...,"plan")`. Defensive parse: on JSON failure, post a `system` note AND set phase→`blocked`/`blocked_from_phase`/`blocked_reason` AND `tasks.move(tid,"blocked")` (same explicit board-honesty move as Task 3.4 — every blocked entry point moves the task). Handle the `{"no_changes": true}` case per Task 3.6.
 - [ ] **Step 4: Run, verify pass.**
 - [ ] **Step 5: Commit.**
 
@@ -673,7 +673,7 @@ Wire the engine to HTTP and to the tmux/mailbox poll loop, mirroring the pipelin
 
 - [ ] **Step 1: Write failing test** — with a `project_git` row whose `worktrees_root` points into a tmp dir and `repo_ssh_url` set to a local bare origin path, `git = lifecycle_git.for_project("acme")` exposes the engine methods; `git.prepare_workspace(task_id="SPD-9", slug="x")` returns a branch+worktree and the persistent clone now exists at `<worktrees_root>/.repo`. (Use a local path as the "ssh url" so `git clone` works offline; inject a `FakeGh` via a module hook so no network.)
 - [ ] **Step 2: Run, verify fail.**
-- [ ] **Step 3: Implement `for_project(project_id, *, gh=None)`** returning an object that: loads `cfg = project_git.get(project_id)`; computes `repo_dir = os.path.join(cfg["worktrees_root"], ".repo")`; `_ensure_clone()` runs `git clone <repo_ssh_url> <repo_dir>` if missing; and exposes `prepare_workspace(task_id, slug, kind="feat")`, `open_pr(...)`, `post_review(...)`, `merge(...)`, `commit_reached_branch(...)`, `read_at_branch(...)` — each delegating to the `gitops` free function with `repo_dir=self.repo_dir` and `gh=self._gh` (default `gitops.RealGh()`; tests inject `FakeGh`). This is the object `spade_server._lifecycle_git(project_id)` returns.
+- [ ] **Step 3: Implement `for_project(project_id, *, gh=None)`** returning an object that: loads `cfg = project_git.get(project_id)`; computes `repo_dir = os.path.join(cfg["worktrees_root"], ".repo")`; `_ensure_clone()` runs `git clone <repo_ssh_url> <repo_dir>` if missing; and exposes `prepare_workspace(task_id, slug, kind="feat")`, `open_pr(...)`, `post_review(...)`, `merge(...)`, `commit_reached_branch(...)`, `read_at_branch(...)`, `promote(from_branch, to_branch, title, body)` — each delegating to the `gitops` free function with `repo_dir=self.repo_dir` and `gh=self._gh` (default `gitops.RealGh()`; tests inject `FakeGh`). This is the object `spade_server._lifecycle_git(project_id)` returns.
 - [ ] **Step 4: Run, verify pass.**
 - [ ] **Step 5: Commit** — `git add apps/api/tui_pilot/lifecycle_git.py apps/api/tests/test_lifecycle_git.py && git commit -m "feat(lifecycle): _lifecycle_git facade + persistent clone"`
 
@@ -740,7 +740,7 @@ def _drain_lifecycle_advance(run_id, phase, report):
   - `GET /tasks/{id}/artifacts` → `artifacts.for_task(id)`; `GET /tasks/{id}/artifacts/{artifact_id}/content` → looks up the artifact row, then `_lifecycle_git(project_id).read_at_branch(artifact["repo_path"], artifact["branch"])` (works for shipped tasks too, since artifacts were re-pointed to `development` on merge and the read runs in the persistent clone). Returns `{content}`.
   - `GET /projects/{id}/git` + `PUT /projects/{id}/git` → `project_git.get/upsert`.
   - `GET /projects/{id}/releases` → env lanes: tasks grouped by furthest env reached (from `lifecycle_runs.env_*_at`).
-  - `POST /projects/{id}/promote` `{from_env, to_env}` → `gitops.promote(...)`.
+  - `POST /projects/{id}/promote` `{from_env, to_env}` → resolve `cfg = project_git.get(id)`, map `from_env`/`to_env` to the configured branch names, build the release-note `title`/`body` by listing the tasks whose `env_*_at` shows they sit in `from_env` but not `to_env` (the same grouping the releases endpoint computes), then `_lifecycle_git(id).promote(from_branch, to_branch, title, body)`. Returns `{pr_number, pr_url}` and posts a `system` note on each grouped task.
   - `GET /projects/{id}/gates` → all `waiting` lifecycle gates for the gate page.
 - [ ] **Step 4: Run tests, commit.**
 
@@ -786,7 +786,7 @@ SWR throughout. Add endpoints to `lib/api.ts`, types to `lib/types.ts`, then the
 - [ ] **Step 2:** Add a **Gate action bar** (mirror `headerActions` :114-127) shown when a gate is `waiting`: label + Approve / Request changes + comment box → `api.approveGate` / `api.requestGateChanges` then `mutate`.
 - [ ] **Step 3:** Replace the "Start/Resume pipeline" button (`runPipeline` :97-112) with **Start lifecycle** → `api.startLifecycle` then stay on the task (SWR polls the run).
 - [ ] **Step 4:** Upgrade the timeline to render the new comment kinds with icons (gate, test_report, review, artifact, progress).
-- [ ] **Step 5: e2e** `e2e/task-detail.spec.ts` — mock artifacts + a waiting gate; assert the gate bar and artifact drawer. Commit.
+- [ ] **Step 5: e2e** `e2e/task-detail.spec.ts` — KEEP existing mocks (`/api/projects`, `/api/tasks/{id}`, `/comments`, `/pipelines`) and add `/api/tasks/*/artifacts`, `/artifacts/*/content`, and the waiting-gate route; assert the gate bar and artifact drawer. Commit.
 
 ### Task 5.4: Releases page
 
@@ -794,7 +794,7 @@ SWR throughout. Add endpoints to `lib/api.ts`, types to `lib/types.ts`, then the
 
 - [ ] **Step 1:** Add the `{ label: "Releases", icon: "bolt", href: "/releases" }` nav item under the **PLAN** group in `PROJECT_GROUPS` (per spec §4 "under PLAN"), not Execution. No `CountKey`/badge is added, so no union edit is needed.
 - [ ] **Step 2:** Build the page: three lanes (Development / Staging / Production) from `api.releases(projectId)`, each listing tasks; **Promote** buttons between lanes → `api.promote` (open the env PR) showing the auto-generated release note; header shows the open promotion PR if any.
-- [ ] **Step 3: e2e** `e2e/releases.spec.ts` — mock `/api/projects/*/releases`; assert three lanes + a promote button. Commit.
+- [ ] **Step 3: e2e** `e2e/releases.spec.ts` — KEEP the `/api/projects` mock (so `useProject` resolves) and add `/api/projects/*/releases`; assert three lanes + a promote button. Commit.
 
 ### Task 5.5: Gate page — lifecycle gates alongside brakes
 
@@ -849,7 +849,7 @@ The engine consumes a `git` facade. Real `gitops` are free functions needing a `
 
 ### Task 6.3: Verification before completion
 
-- [ ] Use superpowers:verification-before-completion. Run `make test` (backend green), `npx playwright test` (e2e green), and manually drive one task through the lifecycle against a scratch GitHub repo (or the local-origin fixture) to confirm the happy path + one gate rejection loop. Record evidence before claiming done.
+- [ ] Use superpowers:verification-before-completion. Run `make test` (backend green), `npx playwright test` (e2e green), and manually drive one task through the lifecycle against a **real scratch GitHub repo** (not just the local-origin fixture) — this is the only path that exercises `RealGh`'s `gh pr create/merge` stdout parsing, which the offline fakes never cover — confirming the happy path + one gate rejection loop. Record evidence before claiming done.
 
 ### Chunk 6 review
 Dispatch plan-document-reviewer on Chunk 6. Fix + re-dispatch until approved.
