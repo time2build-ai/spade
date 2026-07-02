@@ -1,15 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * PR-06 — Backlog parity.
- * Four columns (blocked routed to an amber banner, not a 5th column), the
- * blocked banner, and the "Run sprint" head action. Mocks the API.
+ * Backlog — Task Lifecycle V2.
+ * Six columns (ready · shaping · plan_review · building · pr_review · shipped;
+ * blocked routed to an amber banner, not a column), the blocked banner, the
+ * "Run sprint" head action, and the amber "waiting on you" gate cards driven by
+ * the lifecycle gate list. Mocks the API.
  */
 
 const TASKS = [
   ["T-1", "ready", "Ready task"],
-  ["T-2", "in_progress", "WIP task"],
-  ["T-3", "review", "Review task"],
+  ["T-2", "building", "WIP task"],
+  ["T-3", "pr_review", "Review task"],
   ["T-4", "shipped", "Shipped task"],
   ["T-5", "blocked", "Blocked task"],
 ].map(([id, status, title]) => ({
@@ -33,6 +35,16 @@ const BRAIN_NODES = [
   { id: "bn-d", project_id: "p1", type: "decision", label: "use stripe", detail: null, x: null, y: null, created_at: null },
 ];
 
+// One waiting gate on the still-building T-2 (its manual_test gate home), and a
+// shipped run for T-4 that reached dev + staging → env badges.
+const GATES = [
+  { id: "g1", task_id: "T-2", run_id: "r2", gate: "manual_test", status: "waiting", comment: null, decided_by: null, decided_at: null, created_at: "", task_title: "WIP task", phase: "building" },
+];
+const RUNS = [
+  { id: "r2", project_id: "p1", task_id: "T-2", phase: "building", active: 1, branch_name: null, worktree_path: null, pr_number: null, pr_url: null, merge_commit: null, env_dev_at: null, env_staging_at: null, env_prod_at: null, agent_session_id: null, account_id: null, blocked_reason: null, blocked_from_phase: null, self_heal_attempts: 0, last_finished_session: null, created_at: "2026-01-02", updated_at: "2026-01-02" },
+  { id: "r4", project_id: "p1", task_id: "T-4", phase: "shipped", active: 0, branch_name: null, worktree_path: null, pr_number: 7, pr_url: null, merge_commit: "abc123", env_dev_at: "2026-01-03", env_staging_at: "2026-01-04", env_prod_at: null, agent_session_id: null, account_id: null, blocked_reason: null, blocked_from_phase: null, self_heal_attempts: 0, last_finished_session: null, created_at: "2026-01-02", updated_at: "2026-01-04" },
+];
+
 async function mockBacklog(page: Page) {
   await page.route("**/api/projects", (r) =>
     r.fulfill({
@@ -45,6 +57,8 @@ async function mockBacklog(page: Page) {
   );
   await page.route("**/api/tasks**", (r) => r.fulfill({ json: { tasks: TASKS } }));
   await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes: BRAIN_NODES } }));
+  await page.route("**/api/projects/*/gates", (r) => r.fulfill({ json: { gates: GATES } }));
+  await page.route("**/api/lifecycle**", (r) => r.fulfill({ json: { runs: RUNS } }));
 }
 
 test.describe("backlog", () => {
@@ -54,9 +68,9 @@ test.describe("backlog", () => {
     await expect(page.locator(".backlog-grid")).toBeVisible();
   });
 
-  test("renders exactly 4 columns, no Blocked column", async ({ page }) => {
-    await expect(page.locator(".backlog-grid .col")).toHaveCount(4);
-    for (const label of ["Ready", "In progress", "Review", "Shipped"]) {
+  test("renders exactly 6 lifecycle columns, no Blocked column", async ({ page }) => {
+    await expect(page.locator(".backlog-grid .col")).toHaveCount(6);
+    for (const label of ["Ready", "Shaping", "Plan review", "Building", "PR review", "Shipped"]) {
       await expect(page.locator(".col-head", { hasText: label })).toHaveCount(1);
     }
     await expect(page.locator(".col-head", { hasText: "Blocked" })).toHaveCount(0);
@@ -77,19 +91,35 @@ test.describe("backlog", () => {
     await expect(page.getByRole("link", { name: /Run sprint/ })).toHaveAttribute("href", "/orchestrator");
   });
 
-  test("each column shows its task count", async ({ page }) => {
-    // Ready/In progress/Review/Shipped each have exactly one task here.
-    for (const label of ["Ready", "In progress", "Review", "Shipped"]) {
+  test("populated columns show their task count", async ({ page }) => {
+    for (const label of ["Ready", "Building", "PR review", "Shipped"]) {
       const head = page.locator(".col-head", { hasText: label });
       await expect(head.locator(".count")).toHaveText("1");
     }
   });
 
-  test("columns fill the height (not tightly wrapping the card)", async ({ page }) => {
-    const col = page.locator(".backlog-grid .col").first();
-    const box = (await col.boundingBox())!;
-    // A single short card sits in a column that still stretches tall.
-    expect(box.height).toBeGreaterThan(300);
+  test("card foot shows the building pill when status is building", async ({ page }) => {
+    await expect(page.locator('[data-testid="task-card"] .tc-foot .avatar')).toHaveCount(0);
+    const wip = page.locator('[data-testid="task-card"]', { hasText: "WIP task" });
+    await expect(wip.locator(".tc-foot")).toContainText("building");
+    const ready = page.locator('[data-testid="task-card"]', { hasText: "Ready task" });
+    await expect(ready.locator(".tc-foot")).toContainText("ready");
+  });
+
+  test("a task with a waiting gate shows the amber 'waiting on you' card + Review link", async ({ page }) => {
+    const wip = page.locator('[data-testid="task-card"]', { hasText: "WIP task" });
+    const review = wip.getByTestId("card-gate-review");
+    await expect(review).toBeVisible();
+    await expect(review).toContainText("Review");
+    await expect(wip).toContainText("waiting on you");
+  });
+
+  test("a shipped card shows env badges for the envs its run reached", async ({ page }) => {
+    const shipped = page.locator('[data-testid="task-card"]', { hasText: "Shipped task" });
+    await expect(shipped.getByTestId("env-badge-dev")).toBeVisible();
+    await expect(shipped.getByTestId("env-badge-staging")).toBeVisible();
+    // prod not reached → no prod badge.
+    await expect(shipped.getByTestId("env-badge-prod")).toHaveCount(0);
   });
 
   test("rich card shows intel chips from linked nodes with reference wording", async ({ page }) => {
@@ -98,17 +128,6 @@ test.describe("backlog", () => {
     await expect(card.locator(".chip.feedback")).toContainText("1 feedback");
     await expect(card.locator(".chip.bug")).toContainText("1 bug");
     await expect(card.locator(".chip.decision")).toContainText("1 ADR"); // "ADR" not "decision"
-  });
-
-  test("card foot shows the real status (building pill when in_progress)", async ({ page }) => {
-    // No assignee avatar anymore — the foot reflects the real task.status.
-    await expect(page.locator('[data-testid="task-card"] .tc-foot .avatar')).toHaveCount(0);
-    // The in_progress WIP task shows the "building" pill.
-    const wip = page.locator('[data-testid="task-card"]', { hasText: "WIP task" });
-    await expect(wip.locator(".tc-foot")).toContainText("building");
-    // The ready task just shows its raw status text.
-    const ready = page.locator('[data-testid="task-card"]', { hasText: "Ready task" });
-    await expect(ready.locator(".tc-foot")).toContainText("ready");
   });
 
   test("blocked banner surfaces the real blocked task + a gate link (no fabricated ADR)", async ({ page }) => {

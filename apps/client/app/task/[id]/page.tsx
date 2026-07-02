@@ -16,6 +16,12 @@ const PRIORITY_LABEL = ["critical", "high", "medium", "low"] as const;
 /** Status → dot color, matching the backlog column colors. */
 const STATUS_COLOR: Record<string, string> = {
   ready: "var(--text-4)",
+  // Task Lifecycle V2 phases.
+  shaping: "var(--pink)",
+  plan_review: "var(--amber)",
+  building: "var(--blue)",
+  pr_review: "var(--accent)",
+  // Legacy pipeline statuses (still emitted until Chunk 6).
   in_progress: "var(--blue)",
   review: "var(--accent)",
   shipped: "var(--green)",

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { PageHead } from "@/components/ui";
@@ -67,6 +68,32 @@ export default function BacklogPage() {
     api.brainNodes(project!.id),
   );
 
+  // Task Lifecycle V2 — waiting gates + active runs drive the amber "waiting on
+  // you" cards and the env badges. Poll so gate/env changes surface live.
+  const { data: gatesData } = useSWR(
+    project ? ["lifecycle-gates", project.id] : null,
+    () => api.lifecycleGates(project!.id),
+    { refreshInterval: 4000 },
+  );
+  const { data: runsData } = useSWR(
+    project ? ["lifecycle-runs", project.id] : null,
+    () => api.lifecycleList(project!.id),
+    { refreshInterval: 4000 },
+  );
+
+  const gatedTaskIds = React.useMemo(
+    () => new Set((gatesData?.gates ?? []).map((g) => g.task_id)),
+    [gatesData],
+  );
+  const runsByTask = React.useMemo(() => {
+    const byTask: Record<string, import("@/lib/types").LifecycleRun> = {};
+    // list_for_project is newest-first; keep the first (most recent) per task.
+    for (const run of runsData?.runs ?? []) {
+      if (!byTask[run.task_id]) byTask[run.task_id] = run;
+    }
+    return byTask;
+  }, [runsData]);
+
   const byId = indexNodesById(brainData?.nodes ?? []);
   const error = tasksError || brainError;
   const dataLoading = tasksLoading || brainLoading;
@@ -91,7 +118,14 @@ export default function BacklogPage() {
   } else if (dataLoading || !tasksData) {
     body = <StateMessage>Loading…</StateMessage>;
   } else {
-    body = <Board tasks={tasksData.tasks} nodesById={byId} />;
+    body = (
+      <Board
+        tasks={tasksData.tasks}
+        nodesById={byId}
+        gatedTaskIds={gatedTaskIds}
+        runsByTask={runsByTask}
+      />
+    );
   }
 
   return (
