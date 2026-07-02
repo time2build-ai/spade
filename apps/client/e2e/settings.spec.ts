@@ -10,6 +10,12 @@ async function mock(page: Page) {
       json: { projects: [{ id: "p1", name: "Acme Storefront", path: "acme/web", account_strategy: "round_robin", model_ceiling: "opus", autopilot: 1, created_at: "" }] },
     }),
   );
+  await page.route("**/api/projects/*/git", (r) => {
+    if (r.request().method() === "GET") {
+      return r.fulfill({ json: { project_id: "p1", repo_ssh_url: "git@github.com:acme/web.git", dev_branch: "development", staging_branch: "staging", prod_branch: "main", worktrees_root: null, created_at: "" } });
+    }
+    return r.fulfill({ json: {} });
+  });
 }
 
 test.describe("settings", () => {
