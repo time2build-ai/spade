@@ -206,6 +206,64 @@ def _advance_building(run: dict, report: str | None, spawn, git) -> None:
                     f"Failing: {failing}")
 
 
+def _advance_pr_review(run: dict, report: str | None, spawn, git) -> None:
+    data = _parse_report(run, "pr_review", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    findings = data.get("findings") or []
+    # PR is already open (from the manual_test-approve step) — post review only.
+    git.post_review(run.get("pr_number"), findings)
+    tasks.add_comment(
+        tid,
+        body=(data.get("summary") or "Review complete.")
+             + (f"\n\n{len(findings)} finding(s) posted to the PR."),
+        author="pr_review", kind="review",
+    )
+    artifacts.register(tid, run["id"], "review_report", "Review report",
+                       data.get("review_report_path"), run.get("branch_name"),
+                       by="pr_review")
+    gates.open_gate(tid, run["id"], "merge")
+    tasks.add_comment(tid, body="Review done — merge gate opened.",
+                      author="system", kind="gate")
+
+
+def _approve_manual_test(run: dict, spawn, git) -> None:
+    """manual_test approve → open the PR, then spawn the reviewer against it."""
+    tid = run["task_id"]
+    cfg = project_git.get(run["project_id"]) or {}
+    task = tasks.get(tid) or {}
+    pr = git.open_pr(cfg, run.get("worktree_path"), run.get("branch_name"),
+                     cfg.get("dev_branch", "development"),
+                     task.get("title") or tid, "Opened by lifecycle engine.")
+    _set_run(run["id"], pr_number=pr.get("pr_number"), pr_url=pr.get("pr_url"),
+             phase="pr_review")
+    tasks.move(tid, "pr_review")
+    tasks.add_comment(
+        tid, body=f"PR #{pr.get('pr_number')} opened: {pr.get('pr_url')}",
+        author="system", kind="system",
+    )
+    _spawn_phase(get(run["id"]), "pr_review", spawn)
+
+
+def _approve_merge(run: dict, git) -> None:
+    """merge approve → merge the PR, stamp dev env, ship the task."""
+    tid = run["task_id"]
+    cfg = project_git.get(run["project_id"]) or {}
+    dev_branch = cfg.get("dev_branch", "development")
+    sha = git.merge(cfg, run.get("worktree_path"), run.get("branch_name"),
+                    run.get("pr_number"))
+    _set_run(run["id"], merge_commit=sha, env_dev_at=_now(), phase="shipped",
+             active=0)
+    artifacts.repoint_to_branch(tid, dev_branch)
+    tasks.move(tid, "shipped")
+    tasks.add_comment(
+        tid,
+        body=f"Merged ({sha}) to {dev_branch} — task shipped and live on dev.",
+        author="system", kind="system",
+    )
+
+
 def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
     data = _parse_report(run, "shaping", report)
     if data is None:

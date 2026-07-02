@@ -140,3 +140,60 @@ def test_building_red_self_heals_then_blocks():
     assert r["blocked_from_phase"] == "building"
     assert tasks.get(tid)["status"] == "blocked"
     assert any(c["kind"] == "test_report" for c in tasks.comments(tid))
+
+
+# -- Task 3.5: pr_review -> merge gate -> shipped -----------------------------
+
+def _to_pr_review(tid, git):
+    run = _build(tid)
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"green","test_guide_path":"docs/tg.md"}',
+                      spawn=_spawn, git=git)
+    lifecycle.decide_gate(run["id"], "manual_test", "approved", spawn=_spawn, git=git)
+    return run
+
+
+def test_manual_test_approve_opens_pr_and_spawns_reviewer():
+    tid = _setup()
+    git = FakeGit()
+    run = _to_pr_review(tid, git)
+    assert ("open_pr",) in git.calls
+    r = lifecycle.get(run["id"])
+    assert r["phase"] == "pr_review"
+    assert r["pr_number"] == 7
+
+
+def test_pr_review_advance_posts_review_and_opens_merge_gate():
+    from tui_pilot import gates, artifacts
+    tid = _setup()
+    git = FakeGit()
+    run = _to_pr_review(tid, git)
+    git2 = FakeGit()
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[{"path":"a.py","line":1,"body":"x"}],"summary":"ok"}',
+                      spawn=_spawn, git=git2)
+    assert ("post_review",) in git2.calls
+    assert any(c["kind"] == "review" for c in tasks.comments(tid))
+    assert any(a["kind"] == "review_report" for a in artifacts.for_task(tid))
+    g = gates.gate_for(run["id"], "merge")
+    assert g is not None and g["status"] == "waiting"
+
+
+def test_merge_approve_ships():
+    from tui_pilot import artifacts
+    tid = _setup()
+    git = FakeGit()
+    run = _to_pr_review(tid, git)
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[],"summary":"ok"}', spawn=_spawn, git=git)
+    merge_git = FakeGit()
+    lifecycle.decide_gate(run["id"], "merge", "approved", spawn=_spawn, git=merge_git)
+    assert ("merge",) in merge_git.calls
+    r = lifecycle.get(run["id"])
+    assert r["merge_commit"] == merge_git.merge_sha
+    assert r["env_dev_at"]
+    assert r["phase"] == "shipped"
+    assert r["active"] == 0
+    assert tasks.get(tid)["status"] == "shipped"
+    # artifacts re-pointed to the project's dev_branch (development)
+    assert all(a["branch"] == "development" for a in artifacts.for_task(tid))
