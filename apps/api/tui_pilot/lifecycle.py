@@ -193,3 +193,46 @@ def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
     gates.open_gate(tid, run["id"], "plan")
     tasks.add_comment(tid, body="Plan ready for review — plan gate opened.",
                       author="system", kind="gate")
+
+
+# -- gate decisions -----------------------------------------------------------
+
+def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = None,
+                by: str | None = None, spawn, git) -> None:
+    """Record a human gate decision and drive the resulting transition.
+
+    ``decision`` is ``approved`` or ``changes_requested``. On approval each gate
+    advances to its next phase (plan→building, manual_test→pr_review, merge→ship).
+    On ``changes_requested`` the engine sets ``run['resume_comment']`` and
+    re-spawns the producing agent.
+    """
+    run = get(run_id)
+    if run is None:
+        return
+    g = gates.gate_for(run_id, gate)
+    if g is not None:
+        gates.decide(g["id"], decision, comment=comment, by=by)
+    tid = run["task_id"]
+    tasks.add_comment(
+        tid,
+        body=f"{gate} gate: {decision}" + (f" — {comment}" if comment else ""),
+        author=by or "human", kind="gate",
+    )
+    if decision == "approved":
+        if gate == "plan":
+            _set_run(run_id, phase="building")
+            tasks.move(tid, "building")
+            _spawn_phase(get(run_id), "building", spawn)
+        elif gate == "manual_test":
+            _approve_manual_test(get(run_id), spawn, git)
+        elif gate == "merge":
+            _approve_merge(get(run_id), git)
+    elif decision == "changes_requested":
+        if gate == "plan":
+            _set_run(run_id, phase="shaping")
+            tasks.move(tid, "shaping", force=True)
+            _spawn_phase(get(run_id), "shaping", spawn, resume_comment=comment)
+        elif gate == "manual_test":
+            _set_run(run_id, phase="building")
+            tasks.move(tid, "building", force=True)
+            _spawn_phase(get(run_id), "building", spawn, resume_comment=comment)

@@ -67,3 +67,35 @@ def test_shaping_advance_bad_json_blocks():
     assert tasks.get(tid)["status"] == "blocked"
     bodies = [c["kind"] for c in tasks.comments(tid)]
     assert "system" in bodies
+
+
+# -- Task 3.3: gate decisions (plan approve / request_changes) ----------------
+
+def _shape(tid):
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    lifecycle.advance(run["id"], phase="shaping",
+                      report='{"spec_path":"docs/s.md","plan_path":"docs/p.md","summary":"ok"}',
+                      spawn=_spawn, git=FakeGit())
+    return run
+
+
+def test_plan_approve_spawns_builder():
+    from tui_pilot import gates
+    tid = _setup()
+    run = _shape(tid)
+    lifecycle.decide_gate(run["id"], "plan", "approved", spawn=_spawn, git=FakeGit())
+    assert lifecycle.get(run["id"])["phase"] == "building"
+    assert tasks.get(tid)["status"] == "building"
+    g = gates.gate_for(run["id"], "plan")
+    assert g["status"] == "approved" and g["decided_at"]
+
+
+def test_plan_request_changes_threads_comment_into_respawn():
+    tid = _setup()
+    run = _shape(tid)
+    seen = {}
+    def rec(run, phase): seen["comment"] = run.get("resume_comment"); return ("s", "a")
+    lifecycle.decide_gate(run["id"], "plan", "changes_requested",
+                          comment="tighten scope", spawn=rec, git=FakeGit())
+    assert seen["comment"] == "tighten scope"
+    assert lifecycle.get(run["id"])["phase"] == "shaping"
