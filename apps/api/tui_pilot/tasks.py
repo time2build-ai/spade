@@ -17,15 +17,16 @@ STATUSES = ["ready", "shaping", "plan_review", "building", "pr_review",
             "shipped", "blocked", "in_progress", "review"]
 
 # Legal forward transitions of the lifecycle state machine. "any -> blocked" and
-# "blocked -> <resume>" are handled specially (see move). Board reads tasks.status;
+# "blocked -> <resume>" are handled specially in move() (so 'blocked' is NOT listed
+# in the per-phase sets below — it would be dead there). Board reads tasks.status;
 # the lifecycle engine is the sole writer during a lifecycle run. Legacy statuses
 # are intentionally absent — the pipeline moves them with force=True.
 TRANSITIONS = {
     "ready": {"shaping"},
-    "shaping": {"plan_review", "blocked"},
-    "plan_review": {"building", "shaping", "blocked"},
-    "building": {"pr_review", "building", "blocked"},
-    "pr_review": {"shipped", "pr_review", "blocked"},
+    "shaping": {"plan_review"},
+    "plan_review": {"building", "shaping"},
+    "building": {"pr_review", "building"},
+    "pr_review": {"shipped", "pr_review"},
     "shipped": set(),
     "blocked": set(STATUSES),  # a blocked task may resume into any phase
 }
