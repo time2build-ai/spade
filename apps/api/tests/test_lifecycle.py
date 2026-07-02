@@ -297,3 +297,57 @@ def test_advance_unexpected_phase_posts_defensive_note():
                       spawn=_spawn, git=FakeGit())
     assert any(c["kind"] == "system" and "unexpected" in c["body"].lower()
                for c in tasks.comments(tid))
+
+
+# ---- env watcher ----------------------------------------------------------
+
+class _EnvGit:
+    """Records commit_reached_branch calls; returns True only for named branches."""
+    def __init__(self, reached):
+        self.reached = set(reached)
+        self.calls = []
+    def commit_reached_branch(self, commit, branch):
+        self.calls.append((commit, branch))
+        return branch in self.reached
+
+
+def _shipped_run(tid):
+    from tui_pilot import db, lifecycle
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    db.execute("UPDATE lifecycle_runs SET merge_commit='sha', env_dev_at='t', "
+               "phase='shipped', active=0 WHERE id=?", (run["id"],))
+    return run["id"]
+
+
+def test_run_env_watch_stamps_staging_and_is_idempotent():
+    from tui_pilot import lifecycle, tasks
+    tid = _setup()
+    run_id = _shipped_run(tid)
+    git = _EnvGit(reached={"staging"})  # reaches staging, not prod
+    lifecycle.run_env_watch("acme", git)
+    run = lifecycle.get(run_id)
+    assert run["env_staging_at"] and not run["env_prod_at"]
+    notes = [c for c in tasks.comments(tid) if "staging" in (c["body"] or "")]
+    assert len(notes) == 1
+    # second call: already stamped → no new note, no re-stamp churn
+    lifecycle.run_env_watch("acme", git)
+    notes2 = [c for c in tasks.comments(tid) if "staging" in (c["body"] or "")]
+    assert len(notes2) == 1
+
+
+def test_run_env_watch_stamps_prod_when_reached():
+    from tui_pilot import lifecycle
+    tid = _setup()
+    run_id = _shipped_run(tid)
+    git = _EnvGit(reached={"staging", "main"})  # main is the default prod branch
+    lifecycle.run_env_watch("acme", git)
+    run = lifecycle.get(run_id)
+    assert run["env_staging_at"] and run["env_prod_at"]
+
+
+def test_projects_with_pending_env():
+    from tui_pilot import lifecycle
+    tid = _setup()
+    assert lifecycle.projects_with_pending_env() == []
+    _shipped_run(tid)
+    assert lifecycle.projects_with_pending_env() == ["acme"]

@@ -319,6 +319,51 @@ def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
                       author="system", kind="gate")
 
 
+# -- environment watcher ------------------------------------------------------
+
+def projects_with_pending_env() -> list[str]:
+    """Distinct project_ids that have merged runs not yet observed in prod.
+
+    These are the projects the poll-loop env watcher needs to reconcile."""
+    rows = db.query(
+        "SELECT DISTINCT project_id FROM lifecycle_runs "
+        "WHERE merge_commit IS NOT NULL AND env_prod_at IS NULL"
+    )
+    return [r["project_id"] for r in rows]
+
+
+def run_env_watch(project_id: str, git) -> None:
+    """Reconcile deployed-env stamps for a project's merged runs.
+
+    For each run whose merge commit has landed but not yet reached prod, check
+    whether it has now reached staging (then prod) via ``git.commit_reached_branch``
+    and stamp + note the transition. Idempotent: a run already stamped for an env
+    is skipped."""
+    cfg = project_git.get(project_id) or {}
+    staging = cfg.get("staging_branch", "staging")
+    prod = cfg.get("prod_branch", "main")
+    rows = db.query(
+        "SELECT * FROM lifecycle_runs "
+        "WHERE project_id = ? AND merge_commit IS NOT NULL AND env_prod_at IS NULL",
+        (project_id,),
+    )
+    for row in rows:
+        run = dict(row)
+        sha = run.get("merge_commit")
+        if not run.get("env_staging_at") and git.commit_reached_branch(sha, staging):
+            _set_run(run["id"], env_staging_at=_now())
+            tasks.add_comment(run["task_id"],
+                              body=f"Reached staging ({staging}).",
+                              author="system", kind="system")
+            run["env_staging_at"] = _now()
+        if run.get("env_staging_at") and not run.get("env_prod_at") \
+                and git.commit_reached_branch(sha, prod):
+            _set_run(run["id"], env_prod_at=_now())
+            tasks.add_comment(run["task_id"],
+                              body=f"Reached production ({prod}).",
+                              author="system", kind="system")
+
+
 # -- gate decisions -----------------------------------------------------------
 
 def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = None,
