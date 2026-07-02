@@ -8,11 +8,16 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import (
-    brain, chat, feedback, integrations, meeting_samples, meetings,
-    pipelines, projects, sprints, tasks,
+    artifacts, brain, chat, feedback, gates, integrations, lifecycle,
+    lifecycle_git, meeting_samples, meetings, pipelines, project_git,
+    projects, sprints, tasks,
 )
 
 router = APIRouter()
+
+# Per-project git facade the lifecycle engine calls (persistent clone + gh).
+# Tests monkeypatch this module attribute with a fake so no real git/gh runs.
+_lifecycle_git = lifecycle_git.for_project
 
 
 # ---- request models -------------------------------------------------------
@@ -379,6 +384,101 @@ def _pipeline_spawn(run: dict):
         if meta is not None:
             meta["pipeline_stage_idx"] = idx
             meta["pipeline_run_id"] = run["id"]  # gate key written last
+        return (sid, info.get("account_id"))
+
+    return spawn
+
+
+# ---- lifecycle spawn callback ----------------------------------------------
+
+_PHASE_JSON = {
+    "shaping": '{"spec_path": "...", "plan_path": "...", "summary": "..."}',
+    "building": '{"tests": "green", "test_guide_path": "...", "failing": []}',
+    "pr_review": '{"findings": [{"path": "...", "line": 1, "body": "..."}], '
+                 '"summary": "...", "review_report_path": "..."}',
+}
+
+
+def _phase_prompt(run: dict, phase: str) -> str:
+    """Build the prompt for a lifecycle ``phase`` agent.
+
+    Invokes the relevant superpowers skills by name, replays any prior artifacts
+    and the latest changes-requested comment (``run['resume_comment']``, set by
+    the engine before spawn), and instructs the agent to end with a ``finished``
+    handoff whose report is the exact JSON payload the engine parses for the
+    phase.
+    """
+    task = tasks.get(run["task_id"]) or {}
+    lines: list[str] = [f"Task {run['task_id']}: {task.get('title', run['task_id'])}"]
+    if task.get("description"):
+        lines += ["", task["description"]]
+
+    prior = artifacts.for_task(run["task_id"])
+    if prior:
+        lines += ["", "Prior artifacts pinned to this task:"]
+        lines += [f"- [{a['kind']}] {a.get('title') or ''} @ {a.get('repo_path') or '?'}"
+                  for a in prior]
+
+    resume = run.get("resume_comment")
+    if resume:
+        lines += ["", f"Changes requested — address this feedback:\n{resume}"]
+
+    lines += [""]
+    if phase == "shaping":
+        lines += [
+            "Use the superpowers:brainstorming skill to explore the problem, then "
+            "the superpowers:writing-plans skill to produce a spec and an "
+            "implementation plan committed to this worktree.",
+        ]
+    elif phase == "building":
+        lines += [
+            "Use the superpowers:executing-plans skill and "
+            "superpowers:test-driven-development to implement the approved plan in "
+            "this worktree. Commit your work and make sure the test suite is green.",
+        ]
+    elif phase == "pr_review":
+        lines += [
+            "Use the superpowers:requesting-code-review skill (plus the project's "
+            "PR review conventions) to review the open PR for this branch and "
+            "collect actionable findings.",
+        ]
+
+    lines += [
+        "",
+        "When finished, emit a `finished` signal whose report is EXACTLY this JSON "
+        f"(no prose around it):\n{_PHASE_JSON.get(phase, '{}')}",
+    ]
+    return "\n".join(lines)
+
+
+def _lifecycle_spawn(run: dict):
+    """Return a ``spawn(run, phase)`` closure that spawns a real lifecycle agent
+    via ``server._spawn_agent`` and returns ``(session_id, account_id)``.
+
+    The engine passes the live run to the closure on each phase, so the outer
+    ``run`` argument is unused (kept for parity with ``_pipeline_spawn`` and the
+    drainer call site). Stamps the run/phase onto the session's ``_meta`` so the
+    poll loop's auto-advance branch can find and advance this run on finish."""
+    from . import server
+
+    def spawn(run: dict, phase: str):
+        info = server._spawn_agent(
+            name=f"{phase}-{run['id']}",
+            role=phase,
+            project_id=run["project_id"],
+            cwd=run["worktree_path"],
+            task=_phase_prompt(run, phase),
+            mission=run["id"],
+            parent=None,
+        )
+        sid = info["id"]
+        # Stamp phase then run_id LAST (matches the pipeline gate-key ordering):
+        # single-key dict writes are GIL-atomic, so a tick that sees the run id
+        # also sees the correct phase — closing the advance race.
+        meta = server._meta.get(sid)
+        if meta is not None:
+            meta["lifecycle_phase"] = phase
+            meta["lifecycle_run_id"] = run["id"]  # gate key written last
         return (sid, info.get("account_id"))
 
     return spawn
