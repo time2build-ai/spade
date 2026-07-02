@@ -156,7 +156,7 @@ def start_stage(run_id: str, idx: int, spawn, report: str | None = None) -> None
         target = "in_progress" if idx == 0 else "review"
         task = tasks.get(run["task_id"])
         if task is not None and task.get("status") != "shipped":
-            tasks.move(run["task_id"], target)
+            tasks.move(run["task_id"], target, force=True)
 
 
 def complete_stage(run_id: str, idx: int, report: str | None, spawn) -> None:
@@ -191,7 +191,7 @@ def complete_stage(run_id: str, idx: int, report: str | None, spawn) -> None:
     else:
         _set_run(run_id, status="shipped", current_stage=idx)
         if run is not None:
-            tasks.move(run["task_id"], "shipped")
+            tasks.move(run["task_id"], "shipped", force=True)
             tasks.add_comment(
                 run["task_id"],
                 body="Pipeline complete — all 4 stages done; task moved to shipped.",

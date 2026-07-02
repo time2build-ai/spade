@@ -10,7 +10,25 @@ from datetime import datetime, timezone
 
 from tui_pilot import db
 
-STATUSES = ["ready", "in_progress", "review", "shipped", "blocked"]
+# Lifecycle statuses first, then the two LEGACY values the live pipeline still
+# writes (in_progress/review). Legacy values are dropped in Chunk 6 once the
+# pipeline is retired; keeping them here means pipeline board moves stay valid.
+STATUSES = ["ready", "shaping", "plan_review", "building", "pr_review",
+            "shipped", "blocked", "in_progress", "review"]
+
+# Legal forward transitions of the lifecycle state machine. "any -> blocked" and
+# "blocked -> <resume>" are handled specially (see move). Board reads tasks.status;
+# the lifecycle engine is the sole writer during a lifecycle run. Legacy statuses
+# are intentionally absent — the pipeline moves them with force=True.
+TRANSITIONS = {
+    "ready": {"shaping"},
+    "shaping": {"plan_review", "blocked"},
+    "plan_review": {"building", "shaping", "blocked"},
+    "building": {"pr_review", "building", "blocked"},
+    "pr_review": {"shipped", "pr_review", "blocked"},
+    "shipped": set(),
+    "blocked": set(STATUSES),  # a blocked task may resume into any phase
+}
 
 # Task→task link relationships. "blocks"/"subtask" are directional (from→to),
 # "related" is symmetric. See add_link / links for semantics.
@@ -113,10 +131,21 @@ def delete(id: str) -> None:
 
 # -- Status management --------------------------------------------------------
 
-def move(id: str, status: str) -> None:
-    """Move a task to a new status. Raises ValueError if status not in STATUSES."""
+def move(id: str, status: str, force: bool = False) -> None:
+    """Move a task to a new status, enforcing the transition table.
+
+    Any status may go to 'blocked'. 'blocked' may resume into any status. Other
+    jumps must appear in TRANSITIONS[current]. force=True bypasses the guard
+    (admin override + legacy pipeline moves); callers should log a system note
+    when forcing an admin override.
+    """
     if status not in STATUSES:
         raise ValueError(f"invalid status {status!r}; must be one of {STATUSES}")
+    cur = get(id)
+    current = cur["status"] if cur else "ready"
+    legal = status == "blocked" or status in TRANSITIONS.get(current, set())
+    if not force and not legal:
+        raise ValueError(f"illegal transition {current!r} -> {status!r}")
     with db.tx() as cx:
         cx.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, id))
 

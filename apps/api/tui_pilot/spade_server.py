@@ -121,7 +121,7 @@ def delete_task(task_id: str) -> dict:
 def move_task(task_id: str, req: MoveRequest) -> dict:
     _task_or_404(task_id)
     try:
-        tasks.move(task_id, req.status)
+        tasks.move(task_id, req.status, force=True)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return _enrich(tasks.get(task_id))
