@@ -44,6 +44,7 @@ const PROJECT_GROUPS: NavGroup[] = [
       { label: "Backlog", icon: "tasks", href: "/backlog", countKey: "backlog" },
       { label: "Product brain", icon: "brain", href: "/brain", countKey: "brain" },
       { label: "Graph & Issues", icon: "graph", href: "/graph-issues", countKey: "graphIssues" },
+      { label: "Releases", icon: "bolt", href: "/releases" },
     ],
   },
   {
