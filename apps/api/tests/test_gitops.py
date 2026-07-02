@@ -39,3 +39,46 @@ def test_prepare_workspace_creates_branch_and_worktree(origin_and_clone, tmp_pat
     head = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
                           cwd=ws["worktree_path"], capture_output=True, text=True).stdout.strip()
     assert head == "feat/SPD-014-crear-tarea"
+
+
+class FakeGh:
+    def __init__(self): self.prs = []; self.comments = []; self.merged = []
+    def create_pr(self, cwd, base, head, title, body):
+        n = len(self.prs) + 42; self.prs.append((base, head, title))
+        return {"number": n, "url": f"https://gh/pr/{n}"}
+    def comment(self, cwd, pr_number, path, line, body):
+        self.comments.append((pr_number, path, line, body))
+    def merge(self, cwd, pr_number, method="squash"):
+        self.merged.append((pr_number, method)); return "deadbeef"
+
+
+def test_open_pr_returns_number_and_url(origin_and_clone, tmp_path):
+    cfg = {"worktrees_root": str(tmp_path/"wt"), "dev_branch": "development"}
+    ws = gitops.prepare_workspace(cfg, "SPD-1", "x", repo_dir=origin_and_clone["work"])
+    # make a commit on the branch so there's something to PR
+    (Path(ws["worktree_path"])/"f.txt").write_text("x")
+    _git(ws["worktree_path"], "add", "."); _git(ws["worktree_path"], "commit", "-m", "w")
+    gh = FakeGh()
+    pr = gitops.open_pr(cfg, ws["worktree_path"], ws["branch_name"], "development",
+                        "Title", "Body", gh=gh)
+    assert pr["pr_number"] == 42 and pr["pr_url"].endswith("/42")
+
+
+def test_post_review_forwards_each_finding(tmp_path):
+    gh = FakeGh()
+    findings = [{"path": "a.py", "line": 3, "body": "nit"},
+                {"path": "b.py", "line": 9, "body": "bug"}]
+    gitops.post_review(42, findings, gh=gh)
+    assert len(gh.comments) == 2 and gh.comments[0][0] == 42
+
+
+def test_merge_returns_sha_and_cleans_up(origin_and_clone, tmp_path):
+    cfg = {"worktrees_root": str(tmp_path/"wt"), "dev_branch": "development"}
+    ws = gitops.prepare_workspace(cfg, "SPD-2", "y", repo_dir=origin_and_clone["work"])
+    gh = FakeGh()
+    # NOTE: the feature branch was never pushed to origin in this test, so merge's
+    # remote-branch delete must tolerate a missing remote ref (see Step 3).
+    sha = gitops.merge(cfg, ws["worktree_path"], ws["branch_name"], 42, gh=gh,
+                       repo_dir=origin_and_clone["work"])
+    assert sha == "deadbeef"
+    assert not Path(ws["worktree_path"]).exists()  # worktree removed
