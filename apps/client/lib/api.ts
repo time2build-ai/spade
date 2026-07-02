@@ -1,22 +1,27 @@
 import type {
   Account,
+  Artifact,
   Brake,
   BrainEdge,
   BrainGap,
   BrainManifest,
   BrainNode,
   Comment,
+  Gate,
   LinkRel,
   ChatMessageReal,
   ChatThreadReal,
   FeedbackClusterReal,
   GateConflictSide,
   Integration,
+  LifecycleRun,
   Meeting,
   MeetingIngestResult,
   MeetingSample,
   PipelineRun,
   Project,
+  ProjectGit,
+  ReleaseLanes,
   Session,
   Sprint,
   Task,
@@ -213,6 +218,59 @@ export const api = {
     http<unknown>(`/brakes/${id}/allow`, { method: "POST" }),
   skipBrake: (id: string) =>
     http<unknown>(`/brakes/${id}/skip`, { method: "POST" }),
+  // -- Task Lifecycle V2 -----------------------------------------------------
+  // The durable brainstorm→ship state machine (worktrees, PRs, human gates,
+  // releases). Runs live alongside the legacy pipeline until Chunk 6.
+  startLifecycle: (projectId: string, taskId: string) =>
+    http<LifecycleRun>("/lifecycle/start", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId, task_id: taskId }),
+    }),
+  lifecycle: (runId: string) => http<LifecycleRun>(`/lifecycle/${runId}`),
+  lifecycleList: (projectId: string) =>
+    http<{ runs: LifecycleRun[] }>(
+      `/lifecycle?project_id=${encodeURIComponent(projectId)}`,
+    ),
+  retryLifecycle: (runId: string) =>
+    http<LifecycleRun>(`/lifecycle/${runId}/retry`, { method: "POST" }),
+  // Approve / request-changes a human gate on a task's active run.
+  approveGate: (taskId: string, gate: string, comment?: string) =>
+    http<LifecycleRun>(`/tasks/${taskId}/gates/${gate}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ comment: comment ?? null }),
+    }),
+  requestGateChanges: (taskId: string, gate: string, comment: string) =>
+    http<LifecycleRun>(`/tasks/${taskId}/gates/${gate}/request-changes`, {
+      method: "POST",
+      body: JSON.stringify({ comment }),
+    }),
+  // Documents pinned to a task (spec / plan / test_guide / review_report) and
+  // their rendered markdown (read from the repo at the pinned branch).
+  artifacts: (taskId: string) =>
+    http<{ artifacts: Artifact[] }>(`/tasks/${taskId}/artifacts`),
+  artifactContent: (taskId: string, artifactId: string) =>
+    http<{ content: string }>(`/tasks/${taskId}/artifacts/${artifactId}/content`),
+  // Per-project Repository config (the separate ProjectGit entity).
+  projectGit: (projectId: string) => http<ProjectGit>(`/projects/${projectId}/git`),
+  updateProjectGit: (
+    projectId: string,
+    body: Partial<Pick<ProjectGit, "repo_ssh_url" | "dev_branch" | "staging_branch" | "prod_branch" | "worktrees_root">>,
+  ) =>
+    http<ProjectGit>(`/projects/${projectId}/git`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  // Waiting lifecycle gates for a project (the gate board's home).
+  lifecycleGates: (projectId: string) =>
+    http<{ gates: Gate[] }>(`/projects/${projectId}/gates`),
+  // Release lanes (dev / staging / prod) + promotion between them.
+  releases: (projectId: string) =>
+    http<{ releases: ReleaseLanes }>(`/projects/${projectId}/releases`),
+  promote: (projectId: string, from: string, to: string) =>
+    http<{ pr_number?: number; pr_url?: string }>(`/projects/${projectId}/promote`, {
+      method: "POST",
+      body: JSON.stringify({ from_env: from, to_env: to }),
+    }),
   // Plain-text endpoint (the live agent terminal screen) — kept out of the
   // JSON `http<T>` wrapper so it returns text, not parsed JSON.
   sessionScreen: async (sessionId: string): Promise<string> => {
