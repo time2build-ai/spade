@@ -105,3 +105,21 @@ def test_read_at_branch_returns_file_contents(origin_and_clone):
     _git(work, "add", "."); _git(work, "commit", "-m", "doc"); _git(work, "push", "origin", "development")
     _git(work, "fetch", "origin")
     assert "hello guide" in gitops.read_at_branch("docs/x.md", "development", repo_dir=work)
+
+
+def test_promote_returns_pr_from_gh(tmp_path):
+    gh = FakeGh()
+    cfg = {"dev_branch": "development"}
+    pr = gitops.promote(cfg, "feat/x", "development", "T", "B",
+                        repo_dir=str(tmp_path), gh=gh)
+    assert pr["pr_number"] == 42 and pr["pr_url"].endswith("/42")
+    assert gh.prs[0] == ("development", "feat/x", "T")
+
+
+def test_realgh_create_pr_builds_expected_argv(monkeypatch):
+    calls = []
+    class R: returncode = 0; stdout = "https://github.com/o/r/pull/7\n"; stderr = ""
+    monkeypatch.setattr(gitops.subprocess, "run", lambda *a, **k: calls.append(a[0]) or R())
+    gitops.RealGh().create_pr("/w", "development", "feat/x", "T", "B")
+    argv = calls[-1]
+    assert argv[:3] == ["gh", "pr", "create"] and "--base" in argv and "development" in argv
