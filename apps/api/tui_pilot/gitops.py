@@ -8,6 +8,7 @@ via a module-level `subprocess` reference so tests can monkeypatch it.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -63,7 +64,10 @@ def prepare_workspace(cfg: dict, task_id: str, slug: str, kind: str = "feat", *,
     runner = runner_factory(repo_dir)
     dev = cfg.get("dev_branch", "development")
     branch = f"{kind}/{task_id}-{_slugify(slug)}"
-    wt = os.path.join(cfg.get("worktrees_root"), task_id)
+    worktrees_root = cfg.get("worktrees_root")
+    if not worktrees_root:
+        raise GitError("prepare_workspace: cfg is missing required 'worktrees_root'")
+    wt = os.path.join(worktrees_root, task_id)
     runner.run("fetch", "origin", dev)
     runner.run("worktree", "add", "-b", branch, wt, f"origin/{dev}")
     return {"branch_name": branch, "worktree_path": wt}
@@ -89,8 +93,8 @@ def merge(cfg: dict, worktree: str, branch: str, pr_number: int, *, gh: GhClient
 
     Returns the merge-commit sha. Cleanup runs from the MAIN clone (repo_dir)
     because the worktree is removed here. The remote-branch delete tolerates a
-    missing remote ref. Ends with a `fetch origin` so origin/<dev_branch>
-    reflects the just-landed commit.
+    missing remote ref. Ends with a plain `fetch origin` so the clone's remote
+    refs (including origin/<dev_branch>) reflect the just-landed commit.
     """
     sha = gh.merge(worktree, pr_number, method)
     runner = runner_factory(repo_dir)
@@ -101,6 +105,16 @@ def merge(cfg: dict, worktree: str, branch: str, pr_number: int, *, gh: GhClient
     runner.run_code("push", "origin", "--delete", branch)
     runner.run_code("fetch", "origin")
     return sha
+
+
+def _pr_number_from_url(url: str) -> int:
+    """Parse the numeric PR id from a `gh pr create` URL, ignoring any
+    trailing query/fragment (e.g. '.../pull/7?foo#bar')."""
+    tail = url.rstrip("/").rsplit("/", 1)[-1]
+    m = re.search(r"\d+", tail)
+    if not m:
+        raise GitError(f"could not parse PR number from gh output: {url!r}")
+    return int(m.group())
 
 
 def commit_reached_branch(commit: str, branch: str, *, repo_dir: str,
@@ -130,25 +144,34 @@ class RealGh:
 
     Inline anchoring is deferred: `comment` uses `gh pr comment {n} --body`,
     embedding the path:line prefix in the body.
+
+    Bound to a `repo_dir` so callers that pass `cwd=None` (e.g.
+    `post_review` -> `gh.comment(None, ...)`) still run against the right repo:
+    every method resolves `cwd = cwd or self.repo_dir`.
     """
+
+    def __init__(self, repo_dir: str | None = None):
+        self.repo_dir = repo_dir
 
     def create_pr(self, cwd: str, base: str, head: str, title: str, body: str) -> dict:
         result = subprocess.run(
             ["gh", "pr", "create", "--base", base, "--head", head,
              "--title", title, "--body", body],
-            cwd=cwd, capture_output=True, text=True,
+            cwd=cwd or self.repo_dir, capture_output=True, text=True,
         )
         if result.returncode != 0:
             raise GitError(result.stderr)
-        url = result.stdout.strip().splitlines()[-1].strip()
-        number = int(url.rstrip("/").rsplit("/", 1)[-1])
-        return {"number": number, "url": url}
+        lines = [ln.strip() for ln in (result.stdout or "").splitlines() if ln.strip()]
+        if not lines:
+            raise GitError(f"gh pr create produced no PR url (stdout={result.stdout!r})")
+        url = lines[-1]
+        return {"number": _pr_number_from_url(url), "url": url}
 
     def comment(self, cwd: str, pr_number: int, path: str, line: int, body: str) -> None:
         text = f"`{path}:{line}` — {body}"
         result = subprocess.run(
             ["gh", "pr", "comment", str(pr_number), "--body", text],
-            cwd=cwd, capture_output=True, text=True,
+            cwd=cwd or self.repo_dir, capture_output=True, text=True,
         )
         if result.returncode != 0:
             raise GitError(result.stderr)
@@ -156,16 +179,15 @@ class RealGh:
     def merge(self, cwd: str, pr_number: int, method: str = "squash") -> str:
         merge_result = subprocess.run(
             ["gh", "pr", "merge", str(pr_number), f"--{method}", "--delete-branch"],
-            cwd=cwd, capture_output=True, text=True,
+            cwd=cwd or self.repo_dir, capture_output=True, text=True,
         )
         if merge_result.returncode != 0:
             raise GitError(merge_result.stderr)
         view = subprocess.run(
             ["gh", "pr", "view", str(pr_number), "--json", "mergeCommit"],
-            cwd=cwd, capture_output=True, text=True,
+            cwd=cwd or self.repo_dir, capture_output=True, text=True,
         )
         if view.returncode != 0:
             raise GitError(view.stderr)
-        import json
         data = json.loads(view.stdout or "{}")
         return (data.get("mergeCommit") or {}).get("oid", "")

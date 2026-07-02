@@ -123,3 +123,42 @@ def test_realgh_create_pr_builds_expected_argv(monkeypatch):
     gitops.RealGh().create_pr("/w", "development", "feat/x", "T", "B")
     argv = calls[-1]
     assert argv[:3] == ["gh", "pr", "create"] and "--base" in argv and "development" in argv
+
+
+def test_realgh_comment_uses_bound_repo_dir_when_cwd_none(monkeypatch):
+    calls = []
+    class R: returncode = 0; stdout = ""; stderr = ""
+    monkeypatch.setattr(gitops.subprocess, "run",
+                        lambda *a, **k: calls.append((a[0], k.get("cwd"))) or R())
+    gitops.RealGh(repo_dir="/x").comment(None, 7, "a.py", 3, "nit")
+    argv, cwd = calls[-1]
+    assert cwd == "/x"
+    assert argv[:3] == ["gh", "pr", "comment"] and "7" in argv
+
+
+def test_realgh_create_pr_raises_on_empty_stdout(monkeypatch):
+    class R: returncode = 0; stdout = "\n"; stderr = ""
+    monkeypatch.setattr(gitops.subprocess, "run", lambda *a, **k: R())
+    with pytest.raises(gitops.GitError):
+        gitops.RealGh().create_pr("/w", "development", "feat/x", "T", "B")
+
+
+def test_gitrunner_run_raises_giterror_on_nonzero(tmp_path):
+    with pytest.raises(gitops.GitError):
+        gitops.GitRunner(str(tmp_path)).run("rev-parse", "--verify", "no-such-ref")
+
+
+def test_prepare_workspace_requires_worktrees_root(origin_and_clone):
+    with pytest.raises(gitops.GitError):
+        gitops.prepare_workspace({"dev_branch": "development"}, "SPD-9", "z",
+                                 repo_dir=origin_and_clone["work"])
+
+
+def test_merge_deletes_local_branch(origin_and_clone, tmp_path):
+    cfg = {"worktrees_root": str(tmp_path/"wt"), "dev_branch": "development"}
+    ws = gitops.prepare_workspace(cfg, "SPD-3", "z", repo_dir=origin_and_clone["work"])
+    gitops.merge(cfg, ws["worktree_path"], ws["branch_name"], 42, gh=FakeGh(),
+                 repo_dir=origin_and_clone["work"])
+    branches = subprocess.run(["git", "branch", "--list", ws["branch_name"]],
+                              cwd=origin_and_clone["work"], capture_output=True, text=True).stdout
+    assert ws["branch_name"] not in branches
