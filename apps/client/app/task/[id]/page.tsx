@@ -21,9 +21,6 @@ const STATUS_COLOR: Record<string, string> = {
   plan_review: "var(--amber)",
   building: "var(--blue)",
   pr_review: "var(--accent)",
-  // Legacy pipeline statuses (still emitted until Chunk 6).
-  in_progress: "var(--blue)",
-  review: "var(--accent)",
   shipped: "var(--green)",
   blocked: "var(--amber)",
 };

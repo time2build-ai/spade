@@ -57,7 +57,7 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     "meetings": {"transcript": "TEXT", "source": "TEXT"},
     # Lifecycle idempotency: the session id of the last finished agent whose
     # handoff advance() processed, so a duplicate delivery of the same finish is
-    # a no-op (mirrors pipelines.complete_stage's re-entry guard).
+    # a no-op (the engine's re-entry guard).
     "lifecycle_runs": {"last_finished_session": "TEXT"},
 }
 

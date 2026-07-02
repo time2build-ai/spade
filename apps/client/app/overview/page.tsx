@@ -8,10 +8,13 @@ import { Icon } from "@/components/Icon";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
 
+// Task Lifecycle V2 phases (match the 6-column board vocabulary), plus blocked.
 const STATUS = [
   { k: "ready", color: "var(--text-3)", label: "ready" },
-  { k: "in_progress", color: "var(--blue)", label: "in progress" },
-  { k: "review", color: "var(--accent)", label: "review" },
+  { k: "shaping", color: "var(--pink)", label: "shaping" },
+  { k: "plan_review", color: "var(--amber)", label: "plan review" },
+  { k: "building", color: "var(--blue)", label: "building" },
+  { k: "pr_review", color: "var(--accent)", label: "PR review" },
   { k: "shipped", color: "var(--green)", label: "shipped" },
   { k: "blocked", color: "var(--red)", label: "blocked" },
 ] as const;
@@ -97,7 +100,7 @@ export default function OverviewPage() {
           <Link href="/backlog" className="ov-kpi">
             <div className="lbl">Backlog</div>
             <div className="val">{total}</div>
-            <div className="sub muted">{byStatus("in_progress")} in progress</div>
+            <div className="sub muted">{byStatus("building")} building</div>
           </Link>
           <div className="ov-kpi">
             <div className="lbl">Shipped</div>

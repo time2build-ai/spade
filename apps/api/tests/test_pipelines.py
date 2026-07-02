@@ -38,24 +38,12 @@ def test_create_run_builds_four_ordered_stages():
     assert all(s["state"] == "queued" for s in stages)
 
 
-# NOTE: The pipeline WRITE engine (start_stage/complete_stage board moves +
-# auto-advance) was retired in Chunk 6 in favor of the lifecycle engine. The
-# former start_stage → in_progress/review → shipped tests were removed with it
-# (those statuses no longer exist). The CRUD/read path (create_run, stage
-# ordering, derived progress, roles seed) stays for one-release coexistence and
-# is still covered below.
-
-
-def test_spawn_failure_pauses_run():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-
-    def boom(idx, report):
-        raise RuntimeError("no account")
-
-    pipelines.start_stage(run["id"], 0, boom)
-    r = pipelines.get(run["id"])
-    assert r["status"] == "paused" and r["stages"][0]["state"] == "failed"
+# NOTE: The pipeline WRITE engine (start_stage/complete_stage — stage spawning,
+# board moves, auto-advance, spawn-failure pausing) was retired in Chunk 6 in
+# favor of the lifecycle engine and DELETED from pipelines.py (it moved tasks to
+# the now-dropped 'in_progress'/'review' statuses). Its tests were removed with
+# it. The CRUD/read path (create_run, stage ordering, derived progress, roles
+# seed) stays for one-release coexistence and is still covered below.
 
 
 # -- read path: derived progress ----------------------------------------------
