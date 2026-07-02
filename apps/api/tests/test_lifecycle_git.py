@@ -95,3 +95,32 @@ def test_for_project_unknown_project_raises():
     import pytest
     with pytest.raises(ValueError):
         lifecycle_git.for_project("nope")
+
+
+def test_clone_failure_raises_giterror(tmp_path):
+    """A bad repo url fails fast (BatchMode SSH / bad path) as a clear GitError,
+    and leaves no wedged non-empty target dir behind."""
+    import pytest
+    from tui_pilot import gitops
+    projects.create(id="acme", name="Acme", path="/w")
+    project_git.upsert("acme", repo_ssh_url=str(tmp_path / "does-not-exist.git"),
+                       worktrees_root=str(tmp_path / "wt"))
+    git = lifecycle_git.for_project("acme", gh=FakeGh())
+    with pytest.raises(gitops.GitError):
+        git.prepare_workspace(task_id="SPD-1", slug="x")
+    # target dir was never populated (atomic move only happens on success)
+    assert not (Path(tmp_path) / "wt" / ".repo").exists()
+
+
+def test_ensure_clone_is_noop_when_repo_present(tmp_path):
+    """A second facade over an already-cloned repo does not re-clone."""
+    _project(tmp_path)
+    lifecycle_git.for_project("acme", gh=FakeGh()).prepare_workspace(
+        task_id="SPD-2", slug="a")
+    repo = Path(tmp_path) / "wt" / ".repo"
+    assert (repo / ".git").is_dir()
+    # break the recorded url: if it tried to clone again it would fail
+    project_git.upsert("acme", repo_ssh_url="git@bad:nope.git")
+    git2 = lifecycle_git.for_project("acme", gh=FakeGh())
+    ws = git2.prepare_workspace(task_id="SPD-3", slug="b")  # reuses existing clone
+    assert ws["branch_name"] == "feat/SPD-3-b"

@@ -221,3 +221,14 @@ def test_gates_and_releases_and_promote(monkeypatch):
     pr = c.post("/projects/acme/promote", json={"from_env": "dev", "to_env": "staging"})
     assert pr.status_code == 200 and pr.json()["pr_number"] == 99
     assert ("promote", "development", "staging") in git.calls
+
+
+def test_promote_empty_returns_409(monkeypatch):
+    git = _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    c = TestClient(app)
+    # no shipped runs → nothing sits in dev awaiting staging
+    r = c.post("/projects/acme/promote", json={"from_env": "dev", "to_env": "staging"})
+    assert r.status_code == 409
+    assert not any(call and call[0] == "promote" for call in git.calls)

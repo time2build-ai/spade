@@ -214,6 +214,30 @@ def test_collect_lifecycle_advance_once_guard():
         server._meta.pop(aid, None)
 
 
+def test_env_watch_tick_posts_system_note_on_git_error(monkeypatch):
+    from tui_pilot import server, spade_server, lifecycle, tasks, projects, project_git, db
+
+    projects.create(id="acme", name="Acme", path="/w")
+    project_git.upsert("acme", repo_ssh_url="git@github.com:acme/app.git")
+    tid = tasks.create(project_id="acme", title="X")["id"]
+
+    class FakeGit:
+        def prepare_workspace(self, cfg=None, task_id=None, slug=None, kind="feat"):
+            return {"branch_name": "feat/x", "worktree_path": "/wt/x"}
+
+    run = lifecycle.start_run("acme", tid, spawn=lambda r, p: ("s", "a"), git=FakeGit())
+    db.execute("UPDATE lifecycle_runs SET merge_commit='sha' WHERE id=?", (run["id"],))
+
+    class BoomGit:
+        def commit_reached_branch(self, *a, **k):
+            raise RuntimeError("ssh exploded")
+
+    monkeypatch.setattr(spade_server, "_lifecycle_git", lambda pid: BoomGit())
+    server._run_env_watch_tick()  # must not raise
+    bodies = [c["body"] for c in tasks.comments(tid)]
+    assert any("Environment watch failed" in b for b in bodies)
+
+
 # ---- registry HTTP endpoints ----------------------------------------------
 
 

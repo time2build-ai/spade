@@ -922,6 +922,9 @@ def promote_env(project_id: str, req: PromoteRequest) -> dict:
         run for run in lifecycle.list_for_project(project_id)
         if run.get(from_stamp) and not run.get(to_stamp)
     ]
+    if not grouped:
+        raise HTTPException(
+            409, f"no tasks in {req.from_env!r} awaiting promotion to {req.to_env!r}")
     titles = []
     for run in grouped:
         task = tasks.get(run["task_id"]) or {}

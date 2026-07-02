@@ -267,7 +267,7 @@ _env_watch_tick = 0
 
 def _run_env_watch_tick() -> None:
     """Reconcile deployed-env stamps for every project with pending runs."""
-    from . import lifecycle
+    from . import lifecycle, tasks
     from .spade_server import _lifecycle_git
     try:
         pids = lifecycle.projects_with_pending_env()
@@ -276,8 +276,20 @@ def _run_env_watch_tick() -> None:
     for pid in pids:
         try:
             lifecycle.run_env_watch(pid, _lifecycle_git(pid))
-        except Exception:  # noqa: BLE001 - never let one project kill the loop
+        except Exception as e:  # noqa: BLE001 - never let one project kill the loop
             logger.warning("env watch failed for project %s", pid, exc_info=True)
+            # Plan 4.4: a git error posts a system note and never kills the loop.
+            # Attach it to each pending run's task so it's visible in the trail.
+            try:
+                for run in lifecycle.list_for_project(pid):
+                    if run.get("merge_commit") and not run.get("env_prod_at"):
+                        tasks.add_comment(
+                            run["task_id"],
+                            body=f"Environment watch failed: {e}",
+                            author="system", kind="system",
+                        )
+            except Exception:  # noqa: BLE001 - note-posting must not kill the loop
+                pass
 
 
 def _collect_pipeline_advance(aid: str, harness_state):
