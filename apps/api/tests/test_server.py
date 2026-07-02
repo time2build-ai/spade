@@ -182,6 +182,38 @@ def test_reconcile_restores_pipeline_linkage():
             server._pollers.pop("psess", None)
 
 
+def test_collect_lifecycle_advance_once_guard():
+    from tui_pilot import server
+    from tui_pilot.harness import HarnessState
+    from tui_pilot import lifecycle, projects, tasks, project_git
+
+    projects.create(id="acme", name="Acme", path="/w")
+    project_git.upsert("acme", repo_ssh_url="git@github.com:acme/app.git")
+    tid = tasks.create(project_id="acme", title="Build X")["id"]
+
+    class FakeGit:
+        def prepare_workspace(self, cfg=None, task_id=None, slug=None, kind="feat"):
+            return {"branch_name": f"feat/{task_id}", "worktree_path": f"/wt/{task_id}"}
+
+    def _spawn(run):
+        def spawn(run, phase):
+            return (f"sess-{phase}", "acct")
+        return spawn
+
+    run = lifecycle.start_run("acme", tid, spawn=_spawn(None), git=FakeGit())
+    aid = "lsess"
+    server._meta[aid] = {"id": aid, "lifecycle_run_id": run["id"],
+                         "lifecycle_phase": "shaping"}
+    st = HarnessState("done", report='{"spec_path": "s", "plan_path": "p"}')
+    try:
+        first = server._collect_lifecycle_advance(aid, st)
+        assert first == (run["id"], "shaping", '{"spec_path": "s", "plan_path": "p"}')
+        # once-guard: a second collect for the same finished agent yields None
+        assert server._collect_lifecycle_advance(aid, st) is None
+    finally:
+        server._meta.pop(aid, None)
+
+
 # ---- registry HTTP endpoints ----------------------------------------------
 
 

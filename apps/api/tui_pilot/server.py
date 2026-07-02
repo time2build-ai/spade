@@ -190,10 +190,12 @@ def _poll_loop() -> None:
          through the executor and deliver results/forwards. Each drained item
          takes at most ONE target session lock.
     """
+    global _env_watch_tick
     while True:
         signals: list = []   # (orch_aid, OrchestrationSignal)
         forwards: list = []  # (orch_aid, note)
         advances: list = []  # (run_id, stage_idx, report) for parentless pipeline stages
+        lifecycle_advances: list = []  # (run_id, phase, report, aid) for lifecycle runs
         for aid, poller in list(_pollers.items()):
             try:
                 # HarnessPoller is not internally synchronized; every poll()
@@ -221,6 +223,12 @@ def _poll_loop() -> None:
                         item = _collect_pipeline_advance(aid, st)
                         if item is not None:
                             advances.append(item)
+                        # Lifecycle run (parentless, has a lifecycle_run_id):
+                        # gather a once-only auto-advance item, threading the
+                        # finishing session id (aid) for the engine's dedup guard.
+                        litem = _collect_lifecycle_advance(aid, st)
+                        if litem is not None:
+                            lifecycle_advances.append((*litem, aid))
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
         _advance_login_sessions()
@@ -237,7 +245,39 @@ def _poll_loop() -> None:
                     "pipeline auto-advance failed for run %s stage %s",
                     run_id, stage_idx, exc_info=True,
                 )
+        for run_id, phase, report, aid in lifecycle_advances:
+            try:
+                _drain_lifecycle_advance(run_id, phase, report, aid)
+            except Exception:  # noqa: BLE001 - never let one advance kill the loop
+                logger.warning(
+                    "lifecycle auto-advance failed for run %s phase %s",
+                    run_id, phase, exc_info=True,
+                )
+        # Env watcher: ~every 60th tick, promote-branch reconciliation for runs
+        # whose merge commit may have reached staging/prod. Guarded so a git
+        # error posts a note and never kills the loop.
+        _env_watch_tick += 1
+        if _env_watch_tick % 60 == 0:
+            _run_env_watch_tick()
         time.sleep(1.0)
+
+
+_env_watch_tick = 0
+
+
+def _run_env_watch_tick() -> None:
+    """Reconcile deployed-env stamps for every project with pending runs."""
+    from . import lifecycle
+    from .spade_server import _lifecycle_git
+    try:
+        pids = lifecycle.projects_with_pending_env()
+    except Exception:  # noqa: BLE001
+        return
+    for pid in pids:
+        try:
+            lifecycle.run_env_watch(pid, _lifecycle_git(pid))
+        except Exception:  # noqa: BLE001 - never let one project kill the loop
+            logger.warning("env watch failed for project %s", pid, exc_info=True)
 
 
 def _collect_pipeline_advance(aid: str, harness_state):
@@ -278,6 +318,48 @@ def _drain_pipeline_advance(run_id: str, stage_idx: int, report: str) -> None:
     if run is None:
         return
     pipelines.complete_stage(run_id, stage_idx, report, spawn=_pipeline_spawn(run))
+
+
+def _collect_lifecycle_advance(aid: str, harness_state):
+    """COLLECT phase (under the worker's lock): if ``aid`` is a parentless
+    lifecycle-phase agent that just finished, mark it advanced once and return a
+    ``(run_id, phase, report)`` item; else None.
+
+    Mirrors ``_collect_pipeline_advance``: the ``lifecycle_advanced`` flag is a
+    per-worker scratch key written under the worker's session lock, so a run
+    advances exactly once per finished agent."""
+    from . import lifecycle
+    m = _meta.get(aid)
+    if not m or m.get("parent") or m.get("is_orchestrator"):
+        return None
+    run_id = m.get("lifecycle_run_id")
+    if not run_id:
+        return None
+    if harness_state is None or harness_state.kind != "done":
+        return None
+    if m.get("lifecycle_advanced"):
+        return None
+    if lifecycle.get(run_id) is None:  # vanished run — don't burn the once-flag
+        return None
+    m["lifecycle_advanced"] = True
+    report = (harness_state.report or "").strip()
+    return (run_id, m.get("lifecycle_phase"), report)
+
+
+def _drain_lifecycle_advance(run_id: str, phase: str, report: str, aid: str) -> None:
+    """DRAIN phase (no session lock held): drive the lifecycle state machine on a
+    finished agent. ``aid`` (the finishing session) is passed as ``session_id``
+    so the engine's idempotency guard dedups a repeated delivery."""
+    from . import lifecycle, spade_server
+    run = lifecycle.get(run_id)
+    if run is None:
+        return
+    lifecycle.advance(
+        run_id, phase=phase, report=report,
+        spawn=spade_server._lifecycle_spawn(run),
+        git=spade_server._lifecycle_git(run["project_id"]),
+        session_id=aid,
+    )
 
 
 threading.Thread(target=_poll_loop, daemon=True).start()
