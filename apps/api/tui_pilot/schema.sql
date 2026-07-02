@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS lifecycle_runs (
   agent_session_id TEXT, account_id TEXT,
   blocked_reason TEXT, blocked_from_phase TEXT,
   self_heal_attempts INTEGER DEFAULT 0,
+  last_finished_session TEXT,
   created_at TEXT, updated_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE

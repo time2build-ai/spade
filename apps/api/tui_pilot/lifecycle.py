@@ -155,15 +155,34 @@ def _parse_report(run: dict, phase: str, report: str | None):
 
 # -- advance ------------------------------------------------------------------
 
-def advance(run_id: str, *, phase: str, report: str | None, spawn, git) -> None:
+def advance(run_id: str, *, phase: str, report: str | None, spawn, git,
+            session_id: str | None = None) -> None:
     """Consume a finished agent's handoff report and drive the state machine.
 
-    ``phase`` is the phase the finished agent was working. Dispatches to the
-    per-phase handler. A vanished run is a silent no-op (the poll-loop collector
-    already guards this, but be defensive)."""
+    ``phase`` is the phase the finished agent was working. ``session_id`` is the
+    finishing agent's session; when given, a repeated delivery of the SAME
+    session is a no-op (idempotent against a duplicate poll-loop drain — critical
+    for pr_review, whose phase stays 'pr_review' after post_review so a phase-only
+    guard wouldn't catch it). A legitimate building self-heal re-spawns a NEW
+    agent (new session id), so its fresh finish is still processed. A vanished run
+    is a silent no-op."""
     run = get(run_id)
     if run is None:
         return
+    if session_id is not None and session_id == run.get("last_finished_session"):
+        return  # already processed this exact agent finish
+    if phase not in AGENT_PHASES:
+        # Never silent: a finish for a non-agent phase (plan_review/blocked/
+        # shipped) is unexpected — record it rather than fall through.
+        tasks.add_comment(
+            run["task_id"],
+            body=f"advance() called for unexpected phase {phase!r}; ignoring.",
+            author="system", kind="system",
+        )
+        return
+    if session_id is not None:
+        _set_run(run_id, last_finished_session=session_id)
+        run = get(run_id)
     if phase == "shaping":
         _advance_shaping(run, report, spawn, git)
     elif phase == "building":
@@ -314,9 +333,13 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
     run = get(run_id)
     if run is None:
         return
+    # Idempotency: only act on a gate that is actually waiting. A double-click or
+    # racing second decision (git.merge would fire twice, shipping twice) is a
+    # no-op — record nothing, run no side-effects.
     g = gates.gate_for(run_id, gate)
-    if g is not None:
-        gates.decide(g["id"], decision, comment=comment, by=by)
+    if g is None or g["status"] != "waiting":
+        return
+    gates.decide(g["id"], decision, comment=comment, by=by)
     tid = run["task_id"]
     tasks.add_comment(
         tid,

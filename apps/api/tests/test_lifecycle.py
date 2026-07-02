@@ -226,3 +226,74 @@ def test_shaping_no_changes_blocks_with_note():
     assert lifecycle.get(run["id"])["phase"] == "blocked"
     assert tasks.get(tid)["status"] == "blocked"
     assert any("no changes" in c["body"].lower() for c in tasks.comments(tid))
+
+
+# -- Idempotency guards (reviewer follow-ups) ---------------------------------
+
+def test_double_merge_approve_ships_once():
+    tid = _setup()
+    git = FakeGit()
+    run = _to_pr_review(tid, git)
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[],"summary":"ok"}', spawn=_spawn, git=git)
+    merge_git = FakeGit()
+    lifecycle.decide_gate(run["id"], "merge", "approved", spawn=_spawn, git=merge_git)
+    # a second (racing / double-click) approve must not merge or ship again
+    lifecycle.decide_gate(run["id"], "merge", "approved", spawn=_spawn, git=merge_git)
+    assert merge_git.calls.count(("merge",)) == 1
+    ship_notes = [c for c in tasks.comments(tid)
+                  if c["kind"] == "system" and "shipped" in c["body"].lower()]
+    assert len(ship_notes) == 1
+
+
+def test_duplicate_shaping_finish_is_idempotent():
+    from tui_pilot import gates, artifacts
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    rpt = '{"spec_path":"docs/s.md","plan_path":"docs/p.md","summary":"ok"}'
+    lifecycle.advance(run["id"], phase="shaping", report=rpt,
+                      spawn=_spawn, git=FakeGit(), session_id="sess-A")
+    lifecycle.advance(run["id"], phase="shaping", report=rpt,
+                      spawn=_spawn, git=FakeGit(), session_id="sess-A")
+    assert len(artifacts.for_task(tid)) == 2  # spec + plan once, not doubled
+    assert len([g for g in gates.waiting_for_project("acme") if g["gate"] == "plan"]) == 1
+
+
+def test_duplicate_pr_review_finish_is_idempotent():
+    from tui_pilot import gates
+    tid = _setup()
+    git = FakeGit()
+    run = _to_pr_review(tid, git)
+    rev = FakeGit()
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[{"path":"a.py","line":1,"body":"x"}],"summary":"ok"}',
+                      spawn=_spawn, git=rev, session_id="sess-R")
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[{"path":"a.py","line":1,"body":"x"}],"summary":"ok"}',
+                      spawn=_spawn, git=rev, session_id="sess-R")
+    assert rev.calls.count(("post_review",)) == 1
+    merge_gates = [g for g in gates.waiting_for_project("acme") if g["gate"] == "merge"]
+    assert len(merge_gates) == 1
+
+
+def test_building_self_heal_new_session_not_deduped():
+    # each self-heal spawns a NEW agent (new session id) — a fresh session_id is
+    # correctly processed even though the phase stays 'building'.
+    tid = _setup()
+    run = _build(tid)
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"red","failing":["t1"]}',
+                      spawn=_spawn, git=FakeGit(), session_id="sess-1")
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"red","failing":["t1"]}',
+                      spawn=_spawn, git=FakeGit(), session_id="sess-2")
+    assert lifecycle.get(run["id"])["self_heal_attempts"] == 2
+
+
+def test_advance_unexpected_phase_posts_defensive_note():
+    tid = _setup()
+    run = _shape(tid)  # phase is now plan_review
+    lifecycle.advance(run["id"], phase="plan_review", report="{}",
+                      spawn=_spawn, git=FakeGit())
+    assert any(c["kind"] == "system" and "unexpected" in c["body"].lower()
+               for c in tasks.comments(tid))
