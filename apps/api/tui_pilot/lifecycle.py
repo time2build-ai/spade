@@ -172,6 +172,19 @@ def advance(run_id: str, *, phase: str, report: str | None, spawn, git) -> None:
         _advance_pr_review(run, report, spawn, git)
 
 
+def retry(run_id: str, *, spawn, git) -> None:
+    """Resume a blocked run: return to the phase it blocked from and re-spawn."""
+    run = get(run_id)
+    if run is None or run.get("phase") != "blocked":
+        return
+    phase = run.get("blocked_from_phase") or "shaping"
+    _set_run(run_id, phase=phase, blocked_reason=None, blocked_from_phase=None)
+    tasks.move(run["task_id"], phase, force=True)
+    tasks.add_comment(run["task_id"], body=f"Retrying — resuming {phase}.",
+                      author="system", kind="system")
+    _spawn_phase(get(run_id), phase, spawn, resume_comment=run.get("blocked_reason"))
+
+
 def _advance_building(run: dict, report: str | None, spawn, git) -> None:
     data = _parse_report(run, "building", report)
     if data is None:

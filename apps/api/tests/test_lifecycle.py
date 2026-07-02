@@ -197,3 +197,32 @@ def test_merge_approve_ships():
     assert tasks.get(tid)["status"] == "shipped"
     # artifacts re-pointed to the project's dev_branch (development)
     assert all(a["branch"] == "development" for a in artifacts.for_task(tid))
+
+
+# -- Task 3.6: retry from blocked + shaping no_changes -> blocked -------------
+
+def test_retry_from_blocked_resumes_producing_phase():
+    tid = _setup()
+    run = _build(tid)
+    # drive building to blocked via 3 red reports
+    for _ in range(3):
+        lifecycle.advance(run["id"], phase="building",
+                          report='{"tests":"red","failing":["t1"]}',
+                          spawn=_spawn, git=FakeGit())
+    assert lifecycle.get(run["id"])["phase"] == "blocked"
+    seen = {}
+    def rec(run, phase): seen["phase"] = phase; return ("s", "a")
+    lifecycle.retry(run["id"], spawn=rec, git=FakeGit())
+    assert seen["phase"] == "building"
+    assert lifecycle.get(run["id"])["phase"] == "building"
+    assert tasks.get(tid)["status"] == "building"
+
+
+def test_shaping_no_changes_blocks_with_note():
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    lifecycle.advance(run["id"], phase="shaping", report='{"no_changes": true}',
+                      spawn=_spawn, git=FakeGit())
+    assert lifecycle.get(run["id"])["phase"] == "blocked"
+    assert tasks.get(tid)["status"] == "blocked"
+    assert any("no changes" in c["body"].lower() for c in tasks.comments(tid))
