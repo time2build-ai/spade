@@ -39,3 +39,31 @@ def test_start_run_rejects_a_second_active_run():
     import pytest
     with pytest.raises(ValueError):
         lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+
+
+# -- Task 3.2: advance() shaping -> plan gate ---------------------------------
+
+def test_shaping_advance_opens_plan_gate_and_registers_artifacts():
+    from tui_pilot import gates, artifacts
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    lifecycle.advance(run["id"], phase="shaping",
+                      report='{"spec_path":"docs/s.md","plan_path":"docs/p.md","summary":"ok"}',
+                      spawn=_spawn, git=FakeGit())
+    assert lifecycle.get(run["id"])["phase"] == "plan_review"
+    assert tasks.get(tid)["status"] == "plan_review"
+    g = gates.gate_for(run["id"], "plan")
+    assert g is not None and g["status"] == "waiting"
+    kinds = {a["kind"] for a in artifacts.for_task(tid)}
+    assert "spec" in kinds and "plan" in kinds
+
+
+def test_shaping_advance_bad_json_blocks():
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    lifecycle.advance(run["id"], phase="shaping", report="not json",
+                      spawn=_spawn, git=FakeGit())
+    assert lifecycle.get(run["id"])["phase"] == "blocked"
+    assert tasks.get(tid)["status"] == "blocked"
+    bodies = [c["kind"] for c in tasks.comments(tid)]
+    assert "system" in bodies

@@ -125,3 +125,71 @@ def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
         author="system", kind="system",
     )
     return get(run_id)
+
+
+# -- blocking -----------------------------------------------------------------
+
+def _block(run: dict, from_phase: str, reason: str, *, note: str | None = None) -> None:
+    """Move a run + its task to blocked (board-honest), posting a system note."""
+    _set_run(run["id"], phase="blocked", blocked_from_phase=from_phase,
+             blocked_reason=reason)
+    tasks.add_comment(run["task_id"], body=note or reason, author="system",
+                      kind="system")
+    tasks.move(run["task_id"], "blocked", force=True)
+
+
+def _parse_report(run: dict, phase: str, report: str | None):
+    """Parse an agent handoff report as JSON. On failure, block the run+task and
+    return None (never silently swallow — spec §5)."""
+    try:
+        return json.loads(report or "")
+    except (json.JSONDecodeError, TypeError):
+        _block(
+            run, phase,
+            "agent report was not valid JSON",
+            note=f"{phase} agent returned an unparseable report; blocking.\n\n"
+                 f"Raw report:\n{report!r}",
+        )
+        return None
+
+
+# -- advance ------------------------------------------------------------------
+
+def advance(run_id: str, *, phase: str, report: str | None, spawn, git) -> None:
+    """Consume a finished agent's handoff report and drive the state machine.
+
+    ``phase`` is the phase the finished agent was working. Dispatches to the
+    per-phase handler. A vanished run is a silent no-op (the poll-loop collector
+    already guards this, but be defensive)."""
+    run = get(run_id)
+    if run is None:
+        return
+    if phase == "shaping":
+        _advance_shaping(run, report, spawn, git)
+    elif phase == "building":
+        _advance_building(run, report, spawn, git)
+    elif phase == "pr_review":
+        _advance_pr_review(run, report, spawn, git)
+
+
+def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
+    data = _parse_report(run, "shaping", report)
+    if data is None:
+        return
+    if data.get("no_changes"):
+        _block(run, "shaping", "shaping produced no changes",
+               note="Shaping agent reported no changes produced; blocking.")
+        return
+    tid = run["task_id"]
+    branch = run.get("branch_name")
+    artifacts.register(tid, run["id"], "spec", "Spec",
+                       data.get("spec_path"), branch, by="shaping")
+    artifacts.register(tid, run["id"], "plan", "Plan",
+                       data.get("plan_path"), branch, by="shaping")
+    tasks.add_comment(tid, body=data.get("summary") or "Shaping complete.",
+                      author="shaping", kind="progress")
+    _set_run(run["id"], phase="plan_review")
+    tasks.move(tid, "plan_review")
+    gates.open_gate(tid, run["id"], "plan")
+    tasks.add_comment(tid, body="Plan ready for review — plan gate opened.",
+                      author="system", kind="gate")
