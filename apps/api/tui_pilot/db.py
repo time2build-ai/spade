@@ -68,6 +68,12 @@ def _migrate(conn) -> None:
         for col, decl in cols.items():
             if col not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    # Legacy status remap (idempotent): the retired pipeline engine wrote
+    # 'in_progress'/'review'; the lifecycle engine uses 'building'/'pr_review'.
+    # These two statuses were dropped from tasks.STATUSES, so any pre-existing row
+    # must be moved forward or it would fail validation on the next move().
+    conn.execute("UPDATE tasks SET status = 'building'  WHERE status = 'in_progress'")
+    conn.execute("UPDATE tasks SET status = 'pr_review' WHERE status = 'review'")
 
 
 @contextlib.contextmanager

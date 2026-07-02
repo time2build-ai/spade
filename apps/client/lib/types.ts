@@ -5,10 +5,9 @@ export const STATUSES = [
   "plan_review",
   "building",
   "pr_review",
-  // Legacy pipeline statuses — the old pipeline still emits these until the
-  // lifecycle fully supersedes it (Chunk 6). TaskCard/STATUS_COLOR reference them.
-  "in_progress",
-  "review",
+  // The legacy pipeline statuses ('in_progress'/'review') were retired with the
+  // pipeline write path (Chunk 6) and remapped to 'building'/'pr_review' by the
+  // backend db._migrate.
   "shipped",
   "blocked",
 ] as const;

@@ -6,8 +6,8 @@ import type { BrainNode, LifecycleRun, Status, Task } from "@/lib/types";
 /**
  * Column display order + label + dot color (Task Lifecycle V2 phases). Blocked
  * is NOT a column — blocked tasks surface in the amber banner above the board.
- * The legacy in_progress/review statuses still exist in the union but no longer
- * get their own column; they show under `status` on the card.
+ * (The legacy in_progress/review statuses were retired with the pipeline write
+ * path in Chunk 6 and remapped to building/pr_review.)
  */
 const COLUMNS: { status: Status; label: string; color: string }[] = [
   { status: "ready", label: "Ready", color: "var(--text-4)" },

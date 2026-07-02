@@ -310,85 +310,6 @@ def delete_brain_edge(edge_id: str) -> dict:
     return {"id": edge_id, "status": "deleted"}
 
 
-# ---- pipeline request models ------------------------------------------------
-
-class PipelineCreate(BaseModel):
-    project_id: str
-    task_id: str
-
-
-class AdvanceRequest(BaseModel):
-    report: str | None = None
-
-
-# ---- pipeline spawn callback ------------------------------------------------
-
-def _stage_prompt(run: dict, idx: int) -> str:
-    """Build the prompt for stage ``idx`` of ``run``.
-
-    Stage 0 (developer) gets the task title + description + grounded brain-node
-    labels for context; later stages get a short instruction to continue the
-    pipeline (the report_context carries the prior stage's work)."""
-    role = pipelines.STAGES[idx]
-    if idx == 0:
-        task = tasks.get(run["task_id"]) or {}
-        lines = [f"Implement this task: {task.get('title', run['task_id'])}"]
-        if task.get("description"):
-            lines.append("")
-            lines.append(task["description"])
-        node_labels = []
-        for nid in tasks.nodes(run["task_id"]):
-            node = brain.get_node(nid)
-            if node:
-                node_labels.append(f"- [{node['type']}] {node['label']}")
-        if node_labels:
-            lines.append("")
-            lines.append("Grounded product-brain context:")
-            lines.extend(node_labels)
-        return "\n".join(lines)
-    return (
-        f"Continue this pipeline as the {role}. The previous stage's handoff "
-        "report (above) is your input — act on it and emit a `finished` signal "
-        "when done."
-    )
-
-
-def _pipeline_spawn(run: dict):
-    """Return a ``spawn(idx, report)`` closure that spawns a real worker for the
-    given pipeline run via ``server._spawn_agent`` and returns
-    ``(session_id, account_id)``. Stamps the run/stage onto the session's _meta
-    so the poll loop can auto-advance the pipeline on finish."""
-    from . import server
-
-    project = projects.get(run["project_id"]) or {}
-
-    def spawn(idx: int, report: str | None):
-        info = server._spawn_agent(
-            name=f"{pipelines.STAGES[idx]}-{run['id']}",
-            role=pipelines.STAGES[idx],
-            project_id=run["project_id"],
-            cwd=project.get("path"),
-            task=_stage_prompt(run, idx),
-            mission=run["id"],
-            parent=None,
-            report_context=report,
-        )
-        sid = info["id"]
-        # Stamp the run/stage onto the session's _meta so the poll loop's
-        # auto-advance branch can find and advance this pipeline on finish.
-        # Write pipeline_run_id LAST: the collector gates on pipeline_run_id then
-        # reads pipeline_stage_idx (defaulting to 0). Single-key dict writes are
-        # GIL-atomic, so writing the gate key last guarantees a tick that sees
-        # the run id also sees the correct stage_idx — closing the advance race.
-        meta = server._meta.get(sid)
-        if meta is not None:
-            meta["pipeline_stage_idx"] = idx
-            meta["pipeline_run_id"] = run["id"]  # gate key written last
-        return (sid, info.get("account_id"))
-
-    return spawn
-
-
 # ---- lifecycle spawn callback ----------------------------------------------
 
 _PHASE_JSON = {
@@ -456,8 +377,8 @@ def _lifecycle_spawn(run: dict):
     via ``server._spawn_agent`` and returns ``(session_id, account_id)``.
 
     The engine passes the live run to the closure on each phase, so the outer
-    ``run`` argument is unused (kept for parity with ``_pipeline_spawn`` and the
-    drainer call site). Stamps the run/phase onto the session's ``_meta`` so the
+    ``run`` argument is unused (kept for symmetry with the drainer call site).
+    Stamps the run/phase onto the session's ``_meta`` so the
     poll loop's auto-advance branch can find and advance this run on finish."""
     from . import server
 
@@ -493,16 +414,11 @@ def _run_or_404(run_id: str) -> dict:
     return run
 
 
-# ---- pipeline endpoints -----------------------------------------------------
-
-@router.post("/pipelines")
-def create_pipeline(req: PipelineCreate) -> dict:
-    if projects.get(req.project_id) is None:
-        raise HTTPException(404, f"no project {req.project_id!r}")
-    if tasks.get(req.task_id) is None:
-        raise HTTPException(404, f"no task {req.task_id!r}")
-    return pipelines.create_run(project_id=req.project_id, task_id=req.task_id)
-
+# ---- pipeline endpoints (READ-ONLY) -----------------------------------------
+# The pipeline WRITE path (create/start/advance) was retired in favor of the
+# lifecycle engine. These GET endpoints remain for one release so existing
+# client read sites keep resolving; the tables stay read-only. See
+# schema.sql's TODO(cleanup, next release).
 
 @router.get("/pipelines")
 def list_pipelines(project_id: str) -> dict:
@@ -710,26 +626,6 @@ def create_chat_message(thread_id: str, req: MessageCreate) -> dict:
 
 @router.get("/pipelines/{run_id}")
 def get_pipeline(run_id: str) -> dict:
-    return _run_or_404(run_id)
-
-
-@router.post("/pipelines/{run_id}/start")
-def start_pipeline(run_id: str) -> dict:
-    run = _run_or_404(run_id)
-    pipelines.start_stage(run_id, 0, _pipeline_spawn(run))
-    return _run_or_404(run_id)
-
-
-@router.post("/pipelines/{run_id}/advance")
-def advance_pipeline(run_id: str, req: AdvanceRequest) -> dict:
-    """Manually complete the current running stage and start the next one."""
-    run = _run_or_404(run_id)
-    # Idempotent on a finished run: a shipped/paused run is not advanced again
-    # (so we never re-run complete_stage or re-call tasks.move).
-    if run["status"] in ("shipped", "paused"):
-        return run
-    idx = run["current_stage"]
-    pipelines.complete_stage(run_id, idx, report=req.report, spawn=_pipeline_spawn(run))
     return _run_or_404(run_id)
 
 

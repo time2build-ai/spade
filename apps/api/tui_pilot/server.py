@@ -194,7 +194,6 @@ def _poll_loop() -> None:
     while True:
         signals: list = []   # (orch_aid, OrchestrationSignal)
         forwards: list = []  # (orch_aid, note)
-        advances: list = []  # (run_id, stage_idx, report) for parentless pipeline stages
         lifecycle_advances: list = []  # (run_id, phase, report, aid) for lifecycle runs
         for aid, poller in list(_pollers.items()):
             try:
@@ -216,16 +215,11 @@ def _poll_loop() -> None:
                         forwards.extend(
                             orchestrator_server.collect_worker_forward(_module, aid, st)
                         )
-                        # Pipeline stage (parentless, has a pipeline_run_id):
-                        # gather a once-only auto-advance item. collect_worker_forward
-                        # returns early for parentless workers, so there is no
-                        # conflict with orchestrator finish-forwarding.
-                        item = _collect_pipeline_advance(aid, st)
-                        if item is not None:
-                            advances.append(item)
                         # Lifecycle run (parentless, has a lifecycle_run_id):
                         # gather a once-only auto-advance item, threading the
                         # finishing session id (aid) for the engine's dedup guard.
+                        # (The pipeline write path — including its auto-advance —
+                        # was retired; only its read endpoints remain.)
                         litem = _collect_lifecycle_advance(aid, st)
                         if litem is not None:
                             lifecycle_advances.append((*litem, aid))
@@ -237,14 +231,6 @@ def _poll_loop() -> None:
             orchestrator_server.drain(_module, signals, forwards)
         except Exception:  # noqa: BLE001 - never let drain kill the loop
             pass
-        for run_id, stage_idx, report in advances:
-            try:
-                _drain_pipeline_advance(run_id, stage_idx, report)
-            except Exception:  # noqa: BLE001 - never let one advance kill the loop
-                logger.warning(
-                    "pipeline auto-advance failed for run %s stage %s",
-                    run_id, stage_idx, exc_info=True,
-                )
         for run_id, phase, report, aid in lifecycle_advances:
             try:
                 _drain_lifecycle_advance(run_id, phase, report, aid)
@@ -292,54 +278,13 @@ def _run_env_watch_tick() -> None:
                 pass
 
 
-def _collect_pipeline_advance(aid: str, harness_state):
-    """COLLECT phase (under the worker's lock): if ``aid`` is a parentless
-    pipeline stage that just finished, mark it advanced once and return a
-    ``(run_id, stage_idx, report)`` item; else None.
-
-    The ``pipeline_advanced`` flag is a per-worker scratch key written under the
-    worker's session lock (held by the caller), mirroring the ``finish_forwarded``
-    guard in collect_worker_forward — so a stage advances exactly once.
-    """
-    m = _meta.get(aid)
-    if not m or m.get("parent") or m.get("is_orchestrator"):
-        return None
-    run_id = m.get("pipeline_run_id")
-    if not run_id:
-        return None
-    if harness_state is None or harness_state.kind != "done":
-        return None
-    if m.get("pipeline_advanced"):
-        return None
-    # Confirm the run still exists before claiming the advance.
-    from . import pipelines
-    if pipelines.get(run_id) is None:
-        return None
-    m["pipeline_advanced"] = True
-    report = (harness_state.report or "").strip()
-    return (run_id, m.get("pipeline_stage_idx", 0), report)
-
-
-def _drain_pipeline_advance(run_id: str, stage_idx: int, report: str) -> None:
-    """DRAIN phase (no session lock held): complete the finished stage and start
-    the next (or ship the run). The spawn callback may take _registry_lock."""
-    from . import pipelines
-    from .spade_server import _pipeline_spawn
-
-    run = pipelines.get(run_id)
-    if run is None:
-        return
-    pipelines.complete_stage(run_id, stage_idx, report, spawn=_pipeline_spawn(run))
-
-
 def _collect_lifecycle_advance(aid: str, harness_state):
     """COLLECT phase (under the worker's lock): if ``aid`` is a parentless
     lifecycle-phase agent that just finished, mark it advanced once and return a
     ``(run_id, phase, report)`` item; else None.
 
-    Mirrors ``_collect_pipeline_advance``: the ``lifecycle_advanced`` flag is a
-    per-worker scratch key written under the worker's session lock, so a run
-    advances exactly once per finished agent."""
+    The ``lifecycle_advanced`` flag is a per-worker scratch key written under the
+    worker's session lock, so a run advances exactly once per finished agent."""
     from . import lifecycle
     m = _meta.get(aid)
     if not m or m.get("parent") or m.get("is_orchestrator"):

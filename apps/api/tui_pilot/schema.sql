@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS brain_edges (
   FOREIGN KEY(from_id) REFERENCES brain_nodes(id) ON DELETE CASCADE,
   FOREIGN KEY(to_id) REFERENCES brain_nodes(id) ON DELETE CASCADE
 );
+-- TODO(cleanup, next release): drop pipeline_runs/pipeline_stages. The pipeline
+-- WRITE path was retired in favor of the lifecycle engine (Chunk 6); only the
+-- read endpoints remain for one release of client coexistence.
 CREATE TABLE IF NOT EXISTS pipeline_runs (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL,
   status TEXT DEFAULT 'queued', current_stage INTEGER DEFAULT 0, created_at TEXT,

@@ -48,3 +48,26 @@ def test_nested_tx_inner_commit_does_not_persist_when_outer_rolls_back():
     # Nothing should have persisted: no partial commit from the inner tx.
     rows = db.query("SELECT id FROM accounts")
     assert rows == []
+
+
+def test_migrate_remaps_legacy_task_statuses():
+    """Deferred legacy migration: a pre-existing 'in_progress'/'review' row (from
+    the retired pipeline write path) is remapped to 'building'/'pr_review'."""
+    from tui_pilot import projects, tasks
+    projects.create(id="acme", name="Acme", path="/w")
+    ip = tasks.create(project_id="acme", title="A")["id"]
+    rv = tasks.create(project_id="acme", title="B")["id"]
+    conn = db.get_conn()
+    # Stamp the legacy statuses directly (they are no longer in tasks.STATUSES,
+    # so tasks.move would reject them).
+    conn.execute("UPDATE tasks SET status = 'in_progress' WHERE id = ?", (ip,))
+    conn.execute("UPDATE tasks SET status = 'review' WHERE id = ?", (rv,))
+    conn.commit()
+
+    db._migrate(conn)  # idempotent remap
+
+    assert tasks.get(ip)["status"] == "building"
+    assert tasks.get(rv)["status"] == "pr_review"
+    # Idempotent: a second run is a harmless no-op.
+    db._migrate(conn)
+    assert tasks.get(ip)["status"] == "building"

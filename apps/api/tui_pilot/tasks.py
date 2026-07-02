@@ -10,17 +10,18 @@ from datetime import datetime, timezone
 
 from tui_pilot import db
 
-# Lifecycle statuses first, then the two LEGACY values the live pipeline still
-# writes (in_progress/review). Legacy values are dropped in Chunk 6 once the
-# pipeline is retired; keeping them here means pipeline board moves stay valid.
+# Lifecycle statuses. The legacy pipeline values ('in_progress'/'review') were
+# retired with the pipeline write path (Chunk 6) and remapped to
+# 'building'/'pr_review' by db._migrate.
 STATUSES = ["ready", "shaping", "plan_review", "building", "pr_review",
-            "shipped", "blocked", "in_progress", "review"]
+            "shipped", "blocked"]
 
 # Legal forward transitions of the lifecycle state machine. "any -> blocked" and
 # "blocked -> <resume>" are handled specially in move() (so 'blocked' is NOT listed
 # in the per-phase sets below — it would be dead there). Board reads tasks.status;
-# the lifecycle engine is the sole writer during a lifecycle run. Legacy statuses
-# are intentionally absent — the pipeline moves them with force=True.
+# the lifecycle engine is the sole writer during a lifecycle run. The legacy
+# 'in_progress'/'review' statuses were retired with the pipeline write path and
+# remapped to 'building'/'pr_review' by db._migrate.
 TRANSITIONS = {
     "ready": {"shaping"},
     "shaping": {"plan_review"},

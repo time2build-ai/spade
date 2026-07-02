@@ -30,9 +30,10 @@ def test_spd_ids_are_globally_sequential_and_unique():
 def test_move_validates_status():
     _proj()
     t = tasks.create(project_id="acme", title="X")
-    # in_progress is a legacy status only reached via force under the new guard.
-    tasks.move(t["id"], "in_progress", force=True)
-    assert tasks.get(t["id"])["status"] == "in_progress"
+    # force bypasses the transition guard (admin override): ready -> pr_review is
+    # not a legal forward transition, but force allows the jump.
+    tasks.move(t["id"], "pr_review", force=True)
+    assert tasks.get(t["id"])["status"] == "pr_review"
     with pytest.raises(ValueError):
         tasks.move(t["id"], "bogus")
 

@@ -159,12 +159,9 @@ export const api = {
       `/pipelines?project_id=${encodeURIComponent(projectId)}`,
     ),
   pipeline: (runId: string) => http<PipelineRun>(`/pipelines/${runId}`),
-  // Create a pipeline run for a task (does not start it — call startPipeline).
-  createPipeline: (projectId: string, taskId: string) =>
-    http<PipelineRun>("/pipelines", {
-      method: "POST",
-      body: JSON.stringify({ project_id: projectId, task_id: taskId }),
-    }),
+  // NOTE: the pipeline WRITE path (create/start/advance) was retired in favor of
+  // the lifecycle engine. Only the read getters above remain (one-release
+  // coexistence). Use startLifecycle / decideGate / advance the lifecycle instead.
   sprints: (projectId: string) =>
     http<{ sprints: Sprint[] }>(
       `/sprints?project_id=${encodeURIComponent(projectId)}`,
@@ -205,13 +202,6 @@ export const api = {
     ),
   chatMessages: (threadId: string) =>
     http<{ messages: ChatMessageReal[] }>(`/chat/threads/${threadId}/messages`),
-  startPipeline: (runId: string) =>
-    http<PipelineRun>(`/pipelines/${runId}/start`, { method: "POST" }),
-  advancePipeline: (runId: string, report?: string | null) =>
-    http<PipelineRun>(`/pipelines/${runId}/advance`, {
-      method: "POST",
-      body: JSON.stringify({ report: report ?? null }),
-    }),
   // Human gates — brakes are global orchestrator state (no project_id).
   brakes: () => http<{ brakes: Brake[] }>("/brakes"),
   allowBrake: (id: string) =>
