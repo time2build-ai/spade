@@ -99,3 +99,44 @@ def test_plan_request_changes_threads_comment_into_respawn():
                           comment="tighten scope", spawn=rec, git=FakeGit())
     assert seen["comment"] == "tighten scope"
     assert lifecycle.get(run["id"])["phase"] == "shaping"
+
+
+# -- Task 3.4: building -> manual_test gate / self-heal / blocked -------------
+
+def _build(tid):
+    run = _shape(tid)
+    lifecycle.decide_gate(run["id"], "plan", "approved", spawn=_spawn, git=FakeGit())
+    return run
+
+
+def test_building_green_opens_manual_test_gate():
+    from tui_pilot import gates, artifacts
+    tid = _setup()
+    run = _build(tid)
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"green","test_guide_path":"docs/tg.md"}',
+                      spawn=_spawn, git=FakeGit())
+    g = gates.gate_for(run["id"], "manual_test")
+    assert g is not None and g["status"] == "waiting"
+    assert tasks.get(tid)["status"] == "building"  # stays building (amber via gate)
+    assert any(a["kind"] == "test_guide" for a in artifacts.for_task(tid))
+
+
+def test_building_red_self_heals_then_blocks():
+    tid = _setup()
+    run = _build(tid)
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"red","failing":["t1"]}',
+                      spawn=_spawn, git=FakeGit())
+    assert lifecycle.get(run["id"])["self_heal_attempts"] == 1
+    assert lifecycle.get(run["id"])["phase"] == "building"
+    # two more red reports -> cap of 3 -> blocked
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"red","failing":["t1"]}', spawn=_spawn, git=FakeGit())
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"red","failing":["t1"]}', spawn=_spawn, git=FakeGit())
+    r = lifecycle.get(run["id"])
+    assert r["phase"] == "blocked"
+    assert r["blocked_from_phase"] == "building"
+    assert tasks.get(tid)["status"] == "blocked"
+    assert any(c["kind"] == "test_report" for c in tasks.comments(tid))

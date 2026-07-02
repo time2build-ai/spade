@@ -172,6 +172,40 @@ def advance(run_id: str, *, phase: str, report: str | None, spawn, git) -> None:
         _advance_pr_review(run, report, spawn, git)
 
 
+def _advance_building(run: dict, report: str | None, spawn, git) -> None:
+    data = _parse_report(run, "building", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    if data.get("tests") == "green":
+        artifacts.register(tid, run["id"], "test_guide", "Test guide",
+                           data.get("test_guide_path"), run.get("branch_name"),
+                           by="building")
+        tasks.add_comment(tid, body="Tests green — manual test gate opened.",
+                          author="building", kind="test_report")
+        gates.open_gate(tid, run["id"], "manual_test")  # task stays 'building'
+        tasks.add_comment(tid, body="Manual test gate opened — waiting on you.",
+                          author="system", kind="gate")
+        return
+    # tests red → self-heal up to the cap, else block
+    failing = data.get("failing") or []
+    attempts = (run.get("self_heal_attempts") or 0) + 1
+    _set_run(run["id"], self_heal_attempts=attempts)
+    tasks.add_comment(
+        tid,
+        body=f"Tests red (attempt {attempts}/{_MAX_SELF_HEAL}). Failing: {failing}",
+        author="building", kind="test_report",
+    )
+    if attempts < _MAX_SELF_HEAL:
+        _spawn_phase(get(run["id"]), "building", spawn,
+                     resume_comment=f"Tests failing: {failing}. Fix and re-run.")
+    else:
+        _block(get(run["id"]), "building",
+               f"tests still red after {_MAX_SELF_HEAL} self-heal attempts",
+               note=f"Tests still red after {_MAX_SELF_HEAL} attempts; blocking. "
+                    f"Failing: {failing}")
+
+
 def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
     data = _parse_report(run, "shaping", report)
     if data is None:
