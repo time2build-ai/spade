@@ -180,6 +180,42 @@ def test_retry_angle_guards_resolved_rows(synth_kind):
     assert rec.count("investigating") == now
 
 
+def test_lifecycle_spawn_stamps_distinct_fanout_trigger_key(synth_kind, monkeypatch):
+    from tui_pilot import server, spade_server
+    projects.create(id="acme", name="Acme", path="/w")
+    tid = tasks.create(project_id="acme", title="R")["id"]
+
+    counter = {"n": 0}
+
+    def fake_spawn_agent(**kw):
+        counter["n"] += 1
+        sid = f"spawned-{counter['n']}"
+        server._meta[sid] = {"id": sid}
+        return {"id": sid, "account_id": "acct"}
+
+    monkeypatch.setattr(server, "_spawn_agent", fake_spawn_agent)
+    run = {"id": "r1", "project_id": "acme", "task_id": tid, "kind": synth_kind,
+           "worktree_path": None, "fanout_idx": 2}
+    spawn = spade_server._lifecycle_spawn(None)
+    try:
+        sid, _ = spawn(run, "investigating")     # a fan-out phase
+        m = server._meta[sid]
+        assert m["lifecycle_fanout_run_id"] == "r1"
+        assert m["lifecycle_fanout_idx"] == 2
+        assert m["lifecycle_phase"] == "investigating"
+        assert "lifecycle_run_id" not in m       # NOT the single-agent key
+        # a non-fan-out phase stamps the single-agent trigger key instead
+        run2 = dict(run); run2["fanout_idx"] = None
+        sid2, _ = spawn(run2, "synthesis")
+        m2 = server._meta[sid2]
+        assert m2["lifecycle_run_id"] == "r1"
+        assert "lifecycle_fanout_run_id" not in m2
+    finally:
+        for k in list(server._meta):
+            if k.startswith("spawned-"):
+                server._meta.pop(k, None)
+
+
 def test_concurrent_drop_vs_finish_resolves_to_one_advance(synth_kind):
     rec = Rec()
     run = _start_synth(synth_kind, rec)

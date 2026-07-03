@@ -198,6 +198,47 @@ def test_retry_endpoint(monkeypatch):
     assert r.status_code == 200 and r.json()["phase"] == "shaping"
 
 
+def test_fanout_retry_and_drop_endpoints(monkeypatch):
+    _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    from tui_pilot import db, fanout, lifecycle, tasks
+    from tui_pilot import lifecycle_templates as LT
+    c = TestClient(app)
+    # register a synthetic fan-out kind for this test
+    LT.LIFECYCLE_TEMPLATES["_srv"] = {
+        "terminal_status": "delivered", "needs_workspace": False,
+        "phases": [
+            {"name": "scoping", "agent": True, "fanout": False, "gate": None, "column": "Planning"},
+            {"name": "investigating", "agent": True, "fanout": True, "gate": None, "column": "In progress"},
+            {"name": "synthesis", "agent": True, "fanout": False, "gate": None, "column": "Review"},
+            {"name": "delivered", "agent": False, "fanout": False, "gate": None, "column": "Done"},
+        ],
+        "gate_advances": {},
+    }
+    LT.transition_pairs.cache_clear()
+    try:
+        tid = c.post("/tasks", json={"project_id": "acme", "title": "X"}).json()["id"]
+        db.execute("UPDATE tasks SET kind='_srv' WHERE id=?", (tid,))
+        run = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid}).json()
+        rid = run["id"]
+        lifecycle.enter_fanout(lifecycle.get(rid), "investigating",
+                               angles=["a", "b"], spawn=_fake_spawn(run), git=FakeGit())
+        # block angle 0, then retry it via the endpoint (re-spawn)
+        fanout.block(rid, "investigating", 0)
+        r = c.post(f"/lifecycle/{rid}/fanout/0/retry")
+        assert r.status_code == 200
+        assert fanout.get_row(rid, "investigating", 0)["status"] == "running"
+        # finish angle 0, drop angle 1 → barrier releases to synthesis
+        lifecycle.advance_fanout(rid, "investigating", 0, report='{}',
+                                 spawn=_fake_spawn(run), git=FakeGit())
+        r = c.post(f"/lifecycle/{rid}/fanout/1/drop")
+        assert r.status_code == 200 and r.json()["phase"] == "synthesis"
+    finally:
+        LT.LIFECYCLE_TEMPLATES.pop("_srv", None)
+        LT.transition_pairs.cache_clear()
+
+
 def test_gates_and_releases_and_promote(monkeypatch):
     git = _patch(monkeypatch)
     _project()

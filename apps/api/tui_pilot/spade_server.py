@@ -9,8 +9,8 @@ from pydantic import BaseModel
 
 from . import (
     artifacts, brain, chat, feedback, gates, gitops, integrations, lifecycle,
-    lifecycle_git, meeting_samples, meetings, pipelines, project_git,
-    projects, sprints, tasks,
+    lifecycle_git, lifecycle_templates, meeting_samples, meetings, pipelines,
+    project_git, projects, sprints, tasks,
 )
 
 router = APIRouter()
@@ -393,13 +393,20 @@ def _lifecycle_spawn(run: dict):
             parent=None,
         )
         sid = info["id"]
-        # Stamp phase then run_id LAST (matches the pipeline gate-key ordering):
-        # single-key dict writes are GIL-atomic, so a tick that sees the run id
-        # also sees the correct phase — closing the advance race.
+        # Stamp phase first, then the TRIGGER key LAST (single-key dict writes are
+        # GIL-atomic, so a poll tick that sees the trigger key also sees phase +
+        # idx — closing the advance race). A fan-out agent sets the DISTINCT
+        # `lifecycle_fanout_run_id` (and idx) and never the plain `lifecycle_run_id`,
+        # so the single-agent collector can never claim a fan-out finish.
         meta = server._meta.get(sid)
         if meta is not None:
             meta["lifecycle_phase"] = phase
-            meta["lifecycle_run_id"] = run["id"]  # gate key written last
+            kind = run.get("kind") or "code"
+            if phase in lifecycle_templates.fanout_phases(kind):
+                meta["lifecycle_fanout_idx"] = run.get("fanout_idx")
+                meta["lifecycle_fanout_run_id"] = run["id"]  # trigger key last
+            else:
+                meta["lifecycle_run_id"] = run["id"]  # gate key written last
         return (sid, info.get("account_id"))
 
     return spawn
@@ -720,6 +727,27 @@ def retry_lifecycle(run_id: str) -> dict:
     run = _lifecycle_run_or_404(run_id)
     lifecycle.retry(run_id, spawn=_lifecycle_spawn(run),
                     git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run_id)
+
+
+@router.post("/lifecycle/{run_id}/fanout/{idx}/retry")
+def retry_fanout_angle(run_id: str, idx: int) -> dict:
+    """Re-spawn one fan-out angle (a blocked/dead one). The fan-out phase is the
+    run's current phase (the run sits there until the barrier releases)."""
+    run = _lifecycle_run_or_404(run_id)
+    lifecycle.retry_angle(run_id, run["phase"], idx,
+                          spawn=_lifecycle_spawn(run),
+                          git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run_id)
+
+
+@router.post("/lifecycle/{run_id}/fanout/{idx}/drop")
+def drop_fanout_angle(run_id: str, idx: int) -> dict:
+    """Give up on one fan-out angle; may release the barrier (→ synthesis)."""
+    run = _lifecycle_run_or_404(run_id)
+    lifecycle.drop_angle(run_id, run["phase"], idx,
+                         spawn=_lifecycle_spawn(run),
+                         git=_lifecycle_git(run["project_id"]))
     return _lifecycle_run_or_404(run_id)
 
 

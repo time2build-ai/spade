@@ -194,7 +194,9 @@ def _poll_loop() -> None:
     while True:
         signals: list = []   # (orch_aid, OrchestrationSignal)
         forwards: list = []  # (orch_aid, note)
-        lifecycle_advances: list = []  # (run_id, phase, report, aid) for lifecycle runs
+        lifecycle_advances: list = []  # (run_id, phase, report, aid) single-agent
+        lifecycle_fanouts: list = []   # (run_id, phase, idx, report, aid) fan-out
+        lifecycle_fanout_deaths: list = []  # (run_id, phase, idx) fan-out deaths
         for aid, poller in list(_pollers.items()):
             try:
                 # HarnessPoller is not internally synchronized; every poll()
@@ -223,6 +225,16 @@ def _poll_loop() -> None:
                         litem = _collect_lifecycle_advance(aid, st)
                         if litem is not None:
                             lifecycle_advances.append((*litem, aid))
+                        # Fan-out run (parentless, has a lifecycle_fanout_run_id):
+                        # gather a once-only per-angle advance, OR — if the agent
+                        # died without a `done` handoff — a death descriptor that
+                        # blocks its row so the barrier can't stall in 'running'.
+                        fitem = _collect_lifecycle_fanout(aid, st)
+                        if fitem is not None:
+                            lifecycle_fanouts.append((*fitem, aid))
+                        fdeath = _collect_lifecycle_fanout_death(aid, st)
+                        if fdeath is not None:
+                            lifecycle_fanout_deaths.append(fdeath)
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
         _advance_login_sessions()
@@ -238,6 +250,23 @@ def _poll_loop() -> None:
                 logger.warning(
                     "lifecycle auto-advance failed for run %s phase %s",
                     run_id, phase, exc_info=True,
+                )
+        for run_id, phase, idx, report, aid in lifecycle_fanouts:
+            try:
+                _drain_lifecycle_fanout(run_id, phase, idx, report, aid)
+            except Exception:  # noqa: BLE001 - never let one advance kill the loop
+                logger.warning(
+                    "fan-out auto-advance failed for run %s phase %s idx %s",
+                    run_id, phase, idx, exc_info=True,
+                )
+        for run_id, phase, idx in lifecycle_fanout_deaths:
+            try:
+                from . import lifecycle
+                lifecycle.fanout_agent_died(run_id, phase, idx)
+            except Exception:  # noqa: BLE001 - never let one death kill the loop
+                logger.warning(
+                    "fan-out death handling failed for run %s phase %s idx %s",
+                    run_id, phase, idx, exc_info=True,
                 )
         # Env watcher: ~every 60th tick, promote-branch reconciliation for runs
         # whose merge commit may have reached staging/prod. Guarded so a git
@@ -289,6 +318,13 @@ def _collect_lifecycle_advance(aid: str, harness_state):
     m = _meta.get(aid)
     if not m or m.get("parent") or m.get("is_orchestrator"):
         return None
+    if m.get("lifecycle_fanout_idx") is not None:
+        # A fan-out session (distinct trigger key) is claimed by
+        # _collect_lifecycle_fanout, never the single-agent path. Belt-and-
+        # suspenders on top of the distinct key: even if this session somehow
+        # carried a lifecycle_run_id, the presence of a fan-out idx disqualifies
+        # it here so the single-agent handler can never fire on a fan-out finish.
+        return None
     run_id = m.get("lifecycle_run_id")
     if not run_id:
         return None
@@ -303,6 +339,52 @@ def _collect_lifecycle_advance(aid: str, harness_state):
     return (run_id, m.get("lifecycle_phase"), report)
 
 
+def _collect_lifecycle_fanout(aid: str, harness_state):
+    """COLLECT (under the worker's lock): if ``aid`` is a parentless fan-out agent
+    that just finished, mark it advanced once and return ``(run_id, phase, idx,
+    report)``; else None. Keyed on the DISTINCT ``lifecycle_fanout_run_id`` trigger
+    key (never the single-agent ``lifecycle_run_id``), so the single-agent and
+    fan-out paths are mutually exclusive."""
+    from . import lifecycle
+    m = _meta.get(aid)
+    if not m or m.get("parent") or m.get("is_orchestrator"):
+        return None
+    run_id = m.get("lifecycle_fanout_run_id")
+    if not run_id:
+        return None
+    if harness_state is None or harness_state.kind != "done":
+        return None
+    if m.get("lifecycle_fanout_advanced"):
+        return None
+    if lifecycle.get(run_id) is None:  # vanished run — don't burn the once-flag
+        return None
+    m["lifecycle_fanout_advanced"] = True
+    report = (harness_state.report or "").strip()
+    return (run_id, m.get("lifecycle_phase"), m.get("lifecycle_fanout_idx"), report)
+
+
+def _collect_lifecycle_fanout_death(aid: str, harness_state):
+    """COLLECT (under the worker's lock): if a parentless fan-out agent's harness
+    exited WITHOUT a ``done`` handoff, return ``(run_id, phase, idx)`` once so the
+    drainer can block its row (keeping the barrier from stalling in 'running').
+    A finished (``done``) agent is handled by _collect_lifecycle_fanout instead."""
+    from . import lifecycle
+    m = _meta.get(aid)
+    if not m or m.get("parent") or m.get("is_orchestrator"):
+        return None
+    run_id = m.get("lifecycle_fanout_run_id")
+    if not run_id:
+        return None
+    if harness_state is None or harness_state.kind != "exited":
+        return None
+    if m.get("lifecycle_fanout_advanced") or m.get("lifecycle_fanout_death_handled"):
+        return None
+    if lifecycle.get(run_id) is None:
+        return None
+    m["lifecycle_fanout_death_handled"] = True
+    return (run_id, m.get("lifecycle_phase"), m.get("lifecycle_fanout_idx"))
+
+
 def _drain_lifecycle_advance(run_id: str, phase: str, report: str, aid: str) -> None:
     """DRAIN phase (no session lock held): drive the lifecycle state machine on a
     finished agent. ``aid`` (the finishing session) is passed as ``session_id``
@@ -313,6 +395,23 @@ def _drain_lifecycle_advance(run_id: str, phase: str, report: str, aid: str) -> 
         return
     lifecycle.advance(
         run_id, phase=phase, report=report,
+        spawn=spade_server._lifecycle_spawn(run),
+        git=spade_server._lifecycle_git(run["project_id"]),
+        session_id=aid,
+    )
+
+
+def _drain_lifecycle_fanout(run_id: str, phase: str, idx: int, report: str,
+                            aid: str) -> None:
+    """DRAIN (no session lock held): advance one finished fan-out angle. ``aid``
+    (the finishing session) is threaded as ``session_id``; per-row status is the
+    real idempotency guard for fan-out (a duplicate delivery no-ops on the row)."""
+    from . import lifecycle, spade_server
+    run = lifecycle.get(run_id)
+    if run is None:
+        return
+    lifecycle.advance_fanout(
+        run_id, phase, idx, report=report,
         spawn=spade_server._lifecycle_spawn(run),
         git=spade_server._lifecycle_git(run["project_id"]),
         session_id=aid,
