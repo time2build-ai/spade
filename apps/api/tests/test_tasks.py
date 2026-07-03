@@ -131,3 +131,23 @@ def test_any_status_can_go_to_blocked_and_back_via_force():
     tasks.move(tid, "shaping")
     tasks.move(tid, "blocked")  # any -> blocked is always legal
     assert tasks.get(tid)["status"] == "blocked"
+
+
+def test_new_phase_statuses_present():
+    for s in ["scoping", "investigating", "synthesis", "outline", "drafting",
+              "review", "delivered"]:
+        assert s in tasks.STATUSES
+
+
+def test_guard_uses_registry_pairs():
+    projects.create(id="p", name="P", path="/w")
+    tid = tasks.create(project_id="p", title="X")["id"]
+    tasks.move(tid, "shaping")            # ready->shaping (code ENTRY edge) ok
+    with pytest.raises(ValueError):
+        tasks.move(tid, "drafting")       # shaping->drafting not a pair
+
+
+def test_entry_edge_legal_for_code():
+    projects.create(id="p2", name="P", path="/w")
+    tid = tasks.create(project_id="p2", title="Y")["id"]
+    tasks.move(tid, "shaping")            # no force, no raise

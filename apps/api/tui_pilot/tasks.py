@@ -10,27 +10,16 @@ from datetime import datetime, timezone
 
 from tui_pilot import db
 
-# Lifecycle statuses. The legacy pipeline values ('in_progress'/'review') were
-# retired with the pipeline write path (Chunk 6) and remapped to
-# 'building'/'pr_review' by db._migrate.
+# Lifecycle statuses. The V2 code statuses plus the per-kind phase names added by
+# the task-type router (research: scoping/investigating/synthesis; docs: outline/
+# drafting/review) and the non-code terminal status ``delivered``. The legacy
+# pipeline values ('in_progress'/'review') were retired with the pipeline write
+# path (Chunk 6) and remapped to 'building'/'pr_review' by db._migrate.
 STATUSES = ["ready", "shaping", "plan_review", "building", "pr_review",
-            "shipped", "blocked"]
-
-# Legal forward transitions of the lifecycle state machine. "any -> blocked" and
-# "blocked -> <resume>" are handled specially in move() (so 'blocked' is NOT listed
-# in the per-phase sets below — it would be dead there). Board reads tasks.status;
-# the lifecycle engine is the sole writer during a lifecycle run. The legacy
-# 'in_progress'/'review' statuses were retired with the pipeline write path and
-# remapped to 'building'/'pr_review' by db._migrate.
-TRANSITIONS = {
-    "ready": {"shaping"},
-    "shaping": {"plan_review"},
-    "plan_review": {"building", "shaping"},
-    "building": {"pr_review", "building"},
-    "pr_review": {"shipped", "pr_review"},
-    "shipped": set(),
-    "blocked": set(STATUSES),  # a blocked task may resume into any phase
-}
+            "shipped", "blocked",
+            # router phases (research / docs)
+            "scoping", "investigating", "synthesis", "outline", "drafting",
+            "review", "delivered"]
 
 # Task→task link relationships. "blocks"/"subtask" are directional (from→to),
 # "related" is symmetric. See add_link / links for semantics.
@@ -143,9 +132,18 @@ def move(id: str, status: str, force: bool = False) -> None:
     """
     if status not in STATUSES:
         raise ValueError(f"invalid status {status!r}; must be one of {STATUSES}")
+    # Lazy import to avoid any import cycle (lifecycle_templates stays free of a
+    # tasks dependency at module load; later chunks may add one).
+    from tui_pilot import lifecycle_templates
     cur = get(id)
     current = cur["status"] if cur else "ready"
-    legal = status == "blocked" or status in TRANSITIONS.get(current, set())
+    # Legal iff moving to blocked, resuming FROM blocked (into any phase), or the
+    # (current, status) pair is a registered transition across all templates.
+    legal = (
+        status == "blocked"
+        or current == "blocked"
+        or (current, status) in lifecycle_templates.transition_pairs()
+    )
     if not force and not legal:
         raise ValueError(f"illegal transition {current!r} -> {status!r}")
     with db.tx() as cx:
