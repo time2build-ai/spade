@@ -301,6 +301,34 @@ def test_merge_approve_git_error_blocks_and_leaves_gate_waiting():
     assert lifecycle.get(run["id"])["phase"] == "pr_review"
 
 
+def test_merge_changes_requested_second_lap_does_not_reopen_pr():
+    from tui_pilot import gates
+    tid = _setup()
+    git = FakeGit()
+    # lap 1: reach the merge gate (opens the PR once)
+    run = _to_pr_review(tid, git)
+    assert git.calls.count(("open_pr",)) == 1
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[],"summary":"ok"}', spawn=_spawn, git=git)
+    # human requests changes at the merge gate -> back to building
+    lifecycle.decide_gate(run["id"], "merge", "changes_requested",
+                          comment="fix flaky test", spawn=_spawn, git=git)
+    assert lifecycle.get(run["id"])["phase"] == "building"
+    # lap 2: builder fixes, tests green -> manual_test gate again
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"green","test_guide_path":"docs/tg.md"}',
+                      spawn=_spawn, git=git)
+    g = gates.gate_for(run["id"], "manual_test")
+    assert g["status"] == "waiting"
+    # approve manual_test AGAIN — must NOT re-open the (still-open) PR
+    lifecycle.decide_gate(run["id"], "manual_test", "approved", spawn=_spawn, git=git)
+    r = lifecycle.get(run["id"])
+    assert r["phase"] == "pr_review"
+    assert r["pr_number"] == 7  # same PR from lap 1
+    # open_pr fired exactly ONCE across both laps
+    assert git.calls.count(("open_pr",)) == 1
+
+
 # -- Task 3.6: retry from blocked + shaping no_changes -> blocked -------------
 
 def test_retry_from_blocked_resumes_producing_phase():

@@ -275,8 +275,24 @@ def _advance_pr_review(run: dict, report: str | None, spawn, git) -> None:
 
 
 def _approve_manual_test(run: dict, spawn, git) -> None:
-    """manual_test approve → open the PR, then spawn the reviewer against it."""
+    """manual_test approve → open the PR, then spawn the reviewer against it.
+
+    Second-lap recovery: after a merge ``changes_requested`` the run loops back
+    through building → manual_test. The PR from lap 1 is still open (its branch is
+    already pushed and the builder committed fixes onto it), so re-opening it would
+    make a real ``gh pr create`` fail. When ``pr_number`` is already set, skip
+    ``open_pr`` and go straight to re-reviewing the existing PR.
+    """
     tid = run["task_id"]
+    if run.get("pr_number"):
+        _set_run(run["id"], phase="pr_review")
+        tasks.move(tid, "pr_review")
+        tasks.add_comment(
+            tid, body=f"PR #{run.get('pr_number')} updated with fixes — re-reviewing.",
+            author="system", kind="system",
+        )
+        _spawn_phase(get(run["id"]), "pr_review", spawn)
+        return
     cfg = project_git.get(run["project_id"]) or {}
     task = tasks.get(tid) or {}
     pr = git.open_pr(cfg, run.get("worktree_path"), run.get("branch_name"),
