@@ -7,10 +7,12 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import json
+
 from . import (
-    artifacts, brain, chat, feedback, gates, gitops, integrations, lifecycle,
-    lifecycle_git, lifecycle_templates, meeting_samples, meetings, pipelines,
-    project_git, projects, sprints, tasks,
+    artifacts, brain, chat, fanout, feedback, gates, gitops, integrations,
+    lifecycle, lifecycle_git, lifecycle_templates, meeting_samples, meetings,
+    pipelines, project_git, projects, sprints, tasks,
 )
 from . import router as task_router
 
@@ -372,6 +374,15 @@ _PHASE_JSON = {
     "building": '{"tests": "green", "test_guide_path": "...", "failing": []}',
     "pr_review": '{"findings": [{"path": "...", "line": 1, "body": "..."}], '
                  '"summary": "...", "review_report_path": "..."}',
+    # research phases (Chunk 4): without these the prompt appends `{}` and the
+    # engine's defensive JSON parse would block every research agent.
+    "scoping": '{"angles": [{"brief": "...", "mode": "repo|web"}], "summary": "..."}',
+    # the per-angle investigator (its prompt is built by _fanout_prompt)
+    "investigating": '{"summary": "...", "evidence": ["..."]}',
+    "synthesis": '{"report": "...", '
+                 '"followups": [{"title": "...", "description": "..."}], '
+                 '"brain_nodes": [{"type": "feature|decision|convention|feedback|'
+                 'bug|metric", "label": "...", "detail": "..."}]}',
 }
 
 
@@ -392,8 +403,16 @@ def _phase_prompt(run: dict, phase: str) -> str:
     prior = artifacts.for_task(run["task_id"])
     if prior:
         lines += ["", "Prior artifacts pinned to this task:"]
-        lines += [f"- [{a['kind']}] {a.get('title') or ''} @ {a.get('repo_path') or '?'}"
-                  for a in prior]
+        for a in prior:
+            title = a.get("title") or ""
+            if a.get("repo_path"):
+                # repo-path pointer: a metadata line (resolved from git elsewhere).
+                lines.append(f"- [{a['kind']}] {title} @ {a['repo_path']}")
+            else:
+                # inline content (research findings/report, docs): EMBED it so the
+                # synthesis manager actually sees the findings, not a `@ None` list.
+                lines.append(f"- [{a['kind']}] {title}:")
+                lines.append(f"```\n{a.get('content') or ''}\n```")
 
     resume = run.get("resume_comment")
     if resume:
@@ -418,6 +437,23 @@ def _phase_prompt(run: dict, phase: str) -> str:
             "PR review conventions) to review the open PR for this branch and "
             "collect actionable findings.",
         ]
+    elif phase == "scoping":
+        lines += [
+            "Scope this research task into a handful of independent ANGLES to "
+            "investigate in parallel. Ground each angle in what already exists — "
+            "check the project brain and codebase. For each angle give a short "
+            "`brief` and a `mode`: `repo` (investigate the codebase) or `web` "
+            "(research the open web via the deep-research skill).",
+        ]
+    elif phase == "synthesis":
+        lines += [
+            "You are the research MANAGER. The per-angle findings are embedded "
+            "above. First run a VERIFY pass — cross-check the findings against each "
+            "other and flag anything unsupported — then synthesize a single cited "
+            "`report`. Propose any concrete `followups` (new tasks) and "
+            "`brain_nodes` (durable knowledge: type one of feature/decision/"
+            "convention/feedback/bug/metric) the research warrants.",
+        ]
 
     lines += [
         "",
@@ -425,6 +461,62 @@ def _phase_prompt(run: dict, phase: str) -> str:
         f"(no prose around it):\n{_PHASE_JSON.get(phase, '{}')}",
     ]
     return "\n".join(lines)
+
+
+def _fanout_prompt(run: dict, phase: str, idx: int) -> str:
+    """Build the prompt for ONE fan-out angle (research investigating #idx).
+
+    ``_phase_prompt`` can't see ``idx``, so the fan-out spawn routes here. Reads
+    the angle's ``fanout_agents`` row and branches on its ``mode``: ``repo`` →
+    repo tools scoped to the brief; ``web`` → invoke the ``deep-research`` skill.
+    """
+    task = tasks.get(run["task_id"]) or {}
+    row = fanout.get_row(run["id"], phase, idx) or {}
+    try:
+        angle = json.loads(row.get("angle") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        angle = {}
+    if not isinstance(angle, dict):
+        angle = {"brief": str(angle)}
+    brief = angle.get("brief") or angle.get("angle") or row.get("angle") or ""
+    mode = angle.get("mode") or row.get("mode") or "repo"
+
+    lines = [
+        f"Task {run['task_id']}: {task.get('title', run['task_id'])}",
+        "",
+        f"You are investigating ONE research angle (#{idx}) of this task:",
+        f"  {brief}",
+        "",
+    ]
+    if mode == "web":
+        lines += [
+            "Use the `deep-research` skill to research this angle on the open web: "
+            "fan out searches, fetch and read sources, adversarially verify claims, "
+            "and synthesize a cited finding scoped to the brief above.",
+        ]
+    else:
+        lines += [
+            "Investigate this angle IN THE REPOSITORY: use grep/read to find the "
+            "relevant code, configuration, and docs, and ground your finding in "
+            "concrete file references scoped to the brief above.",
+        ]
+    lines += [
+        "",
+        "When finished, emit a `finished` signal whose report is EXACTLY this JSON "
+        f"(no prose around it):\n{_PHASE_JSON.get('investigating', '{}')}",
+    ]
+    return "\n".join(lines)
+
+
+def _spawn_prompt(run: dict, phase: str) -> str:
+    """Dispatch prompt building: a fan-out phase's per-idx investigator prompt vs
+    the generic single-agent phase prompt. The fan-out idx is threaded on the run
+    dict (``fanout_idx``) by ``lifecycle._spawn_fanout``."""
+    kind = run.get("kind") or "code"
+    if phase in lifecycle_templates.fanout_phases(kind) \
+            and run.get("fanout_idx") is not None:
+        return _fanout_prompt(run, phase, run["fanout_idx"])
+    return _phase_prompt(run, phase)
 
 
 def _lifecycle_spawn(run: dict):
@@ -442,8 +534,8 @@ def _lifecycle_spawn(run: dict):
             name=f"{phase}-{run['id']}",
             role=phase,
             project_id=run["project_id"],
-            cwd=run["worktree_path"],
-            task=_phase_prompt(run, phase),
+            cwd=run.get("worktree_path"),
+            task=_spawn_prompt(run, phase),
             mission=run["id"],
             parent=None,
         )

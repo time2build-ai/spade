@@ -24,8 +24,8 @@ import uuid
 from datetime import datetime, timezone
 
 from tui_pilot import (
-    artifacts, db, fanout, gates, gitops, lifecycle_templates, project_git,
-    tasks,
+    artifacts, brain, db, fanout, gates, gitops, lifecycle_templates,
+    project_git, tasks,
 )
 
 # The phase list, agent-phase set, and gate set now live in lifecycle_templates
@@ -540,6 +540,103 @@ def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
                       author="system", kind="gate")
 
 
+# -- research handlers --------------------------------------------------------
+# Research has no workspace: scoping proposes angles → scope gate; the scope-gate
+# approve fans out (via investigating's `fanout` flag in decide_gate); the barrier
+# spawns synthesis (generic _spawn_phase, NOT a research entry handler); synthesis
+# finishes → review gate; review-approve delivers (creates followups + brain nodes).
+
+def _research_angles(run: dict) -> list:
+    """The angles the scoping agent proposed, read back from the latest inline
+    ``plan`` artifact (its content is the JSON scoping handoff). Used by the
+    scope-gate approve path to seed the fan-out."""
+    plans = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "plan"]
+    if not plans:
+        return []
+    try:
+        data = json.loads(plans[-1].get("content") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return data.get("angles") or []
+
+
+def _advance_scoping(run: dict, report: str | None, spawn, git) -> None:
+    """scoping finish → register the plan (inline angles) + open the scope gate.
+
+    The run stays at ``scoping`` while the gate waits; scope-approve fans out."""
+    data = _parse_report(run, "scoping", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    angles = data.get("angles") or []
+    # Inline plan artifact: content is the full scoping JSON so the scope-approve
+    # path (and the human) can read the proposed angles/modes back.
+    artifacts.register(tid, run["id"], "plan", "Research plan",
+                       content=json.dumps(data), by="scoping")
+    tasks.add_comment(tid, body=data.get("summary") or f"Scoped {len(angles)} angle(s).",
+                      author="scoping", kind="progress")
+    gates.open_gate(tid, run["id"], "scope")
+    tasks.add_comment(tid, body="Angles proposed — scope gate opened.",
+                      author="system", kind="gate")
+
+
+def _advance_synthesis(run: dict, report: str | None, spawn, git) -> None:
+    """synthesis finish → register the report (inline), persist the full parsed
+    synthesis JSON (so deliver can read the followups/brain nodes), open review."""
+    data = _parse_report(run, "synthesis", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    artifacts.register(tid, run["id"], "report", "Research report",
+                       content=data.get("report") or "", by="synthesis")
+    _set_run(run["id"], synthesis_json=json.dumps(data))
+    gates.open_gate(tid, run["id"], "review")
+    tasks.add_comment(tid, body="Synthesis complete — review gate opened.",
+                      author="system", kind="gate")
+
+
+def _deliver_research(run: dict, git) -> None:
+    """review-approve → terminal ``delivered``: create every proposed followup task
+    and brain node from the persisted synthesis JSON.
+
+    Brain-node types are validated against ``brain.NODE_TYPES`` — an invalid type
+    is skipped (never a crash) and valid nodes get ``source='research:<task_id>'``.
+    """
+    tid = run["task_id"]
+    _set_run(run["id"], phase="delivered", active=0)
+    tasks.move(tid, "delivered")
+    try:
+        data = json.loads(run.get("synthesis_json") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    followups = data.get("followups") or []
+    created_tasks = 0
+    for f in followups:
+        title = f.get("title") if isinstance(f, dict) else str(f)
+        if not title:
+            continue
+        desc = f.get("description") if isinstance(f, dict) else None
+        tasks.create(project_id=run["project_id"], title=title, description=desc)
+        created_tasks += 1
+    nodes = data.get("brain_nodes") or []
+    created_nodes = skipped = 0
+    for n in nodes:
+        ntype = n.get("type") if isinstance(n, dict) else None
+        if ntype not in brain.NODE_TYPES:
+            skipped += 1     # invalid/unknown type → skip, don't crash create_node
+            continue
+        label = n.get("label") or n.get("title") or "Research finding"
+        brain.create_node(run["project_id"], type=ntype, label=label,
+                          detail=n.get("detail"), source=f"research:{tid}")
+        created_nodes += 1
+    tasks.add_comment(
+        tid,
+        body=f"Delivered — {created_tasks} followup task(s), {created_nodes} brain "
+             f"node(s) created" + (f" ({skipped} skipped)" if skipped else "") + ".",
+        author="system", kind="system",
+    )
+
+
 # -- environment watcher ------------------------------------------------------
 
 def projects_with_pending_env() -> list[str]:
@@ -648,10 +745,16 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
             if nxt is None:
                 return
             _consume_gate()
-            _set_run(run_id, phase=nxt)
-            tasks.move(tid, nxt)
-            if nxt in lifecycle_templates.agent_phases(kind):
-                _spawn_phase(get(run_id), nxt, spawn)
+            if nxt in lifecycle_templates.fanout_phases(kind):
+                # Fan-out phase (research scope→investigating): spawn N angle
+                # agents via the Chunk 2 barrier primitive, NOT a single agent.
+                enter_fanout(get(run_id), nxt, _research_angles(get(run_id)),
+                             spawn, git)
+            else:
+                _set_run(run_id, phase=nxt)
+                tasks.move(tid, nxt)
+                if nxt in lifecycle_templates.agent_phases(kind):
+                    _spawn_phase(get(run_id), nxt, spawn)
     elif decision == "changes_requested":
         # Rework: return to the gate's changes_target and re-spawn it with the
         # reviewer's comment (code: plan→shaping, manual_test/merge→building). An
@@ -688,6 +791,12 @@ _ADVANCE_HANDLERS: dict[str, dict] = {
         "building": _advance_building,
         "pr_review": _advance_pr_review,
     },
+    "research": {
+        "scoping": _advance_scoping,
+        # investigating is a fan-out phase — each angle's finish is consumed by
+        # advance_fanout, not advance(); no per-phase finish handler here.
+        "synthesis": _advance_synthesis,
+    },
 }
 
 # decide_gate() approve dispatch: (kind → gate → approve handler(run, spawn, git)).
@@ -697,5 +806,11 @@ _APPROVE_HANDLERS: dict[str, dict] = {
     "code": {
         "manual_test": _approve_manual_test,
         "merge": lambda run, spawn, git: _approve_merge(run, git),
+    },
+    # review-approve delivers the research run (terminal + followups + brain
+    # nodes). No git side-effect, so it never raises GitError; registering it here
+    # (rather than the plain phase-move branch) is what runs the deliver side-effects.
+    "research": {
+        "review": lambda run, spawn, git: _deliver_research(run, git),
     },
 }

@@ -348,29 +348,29 @@ def test_confirm_kind_unknown_task_404():
 
 
 def test_confirm_unregistered_kind_400_not_500(monkeypatch):
-    # research/docs are valid KINDS but their templates only register in Chunks
-    # 4/5 — confirming them now must be a clean 400 ("not yet runnable"), never a
-    # 500. When those templates land, this guard passes automatically.
+    # docs is a valid KIND but its template only registers in Chunk 5 — confirming
+    # it now must be a clean 400 ("not yet runnable"), never a 500. When the docs
+    # template lands, this guard passes automatically. (research now runs — Chunk 4.)
     _patch(monkeypatch)
     _project()
     from tui_pilot.server import app
     c = TestClient(app)
     tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
-    r = c.post(f"/tasks/{tid}/kind", json={"kind": "research"})
+    r = c.post(f"/tasks/{tid}/kind", json={"kind": "docs"})
     assert r.status_code == 400 and "runnable" in r.json()["detail"]
 
 
 def test_start_unregistered_kind_400_not_500(monkeypatch):
-    # The real 500 repro path: a research-suggested task (kind_suggested set by the
-    # router on create, NOT confirmed) → start resolves kind=research → the
-    # template lookup must NOT surface a KeyError as a 500.
+    # The real 500 repro path: a docs-suggested task (kind_suggested set by the
+    # router on create, NOT confirmed) → start resolves kind=docs → the template
+    # lookup must NOT surface a KeyError as a 500. (research now runs — Chunk 4.)
     _patch(monkeypatch)
     _project()
     from tui_pilot.server import app
     c = TestClient(app)
     tid = c.post("/tasks", json={"project_id": "acme",
-                                 "title": "Investigate auth perf"}).json()["id"]
-    assert c.get(f"/tasks/{tid}").json()["kind_suggested"] == "research"
+                                 "title": "Write documentation for the API"}).json()["id"]
+    assert c.get(f"/tasks/{tid}").json()["kind_suggested"] == "docs"
     r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
     assert r.status_code == 400 and "runnable" in r.json()["detail"]
     # code still starts fine

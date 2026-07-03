@@ -60,7 +60,11 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     # a no-op (the engine's re-entry guard).
     # `kind` (task-type router): the lifecycle kind (code/research/docs) copied
     # onto the run at start, so the engine reads the per-kind template.
-    "lifecycle_runs": {"last_finished_session": "TEXT", "kind": "TEXT"},
+    # `synthesis_json` (research): the full parsed synthesis handoff
+    # ({report, followups, brain_nodes}) persisted at synthesis-finish so the
+    # review-approve deliver step can create the proposed followups + brain nodes.
+    "lifecycle_runs": {"last_finished_session": "TEXT", "kind": "TEXT",
+                       "synthesis_json": "TEXT"},
     # Task-type router: the resolved lifecycle kind + the router's suggestion
     # (kind_suggested/kind_reason) + the chosen doc_template for docs tasks.
     "tasks": {"kind": "TEXT", "kind_suggested": "TEXT", "kind_reason": "TEXT",

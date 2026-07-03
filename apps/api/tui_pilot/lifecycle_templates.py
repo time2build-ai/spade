@@ -62,6 +62,29 @@ LIFECYCLE_TEMPLATES: dict[str, dict] = {
             "merge": {"approve_next": "shipped", "changes_target": "building"},
         },
     },
+    # Research: a non-code kind with NO workspace. scoping proposes angles (scope
+    # gate), investigating fans out one agent per angle (Chunk 2 barrier), synthesis
+    # cross-checks + writes the report (review gate), delivered is terminal. The
+    # scope gate's approve edge fans out (resolved via investigating's `fanout`
+    # flag in decide_gate), not a single _spawn_phase.
+    "research": {
+        "terminal_status": "delivered",
+        "needs_workspace": False,
+        "phases": [
+            {"name": "scoping", "agent": True, "fanout": False,
+             "gate": "scope", "column": "Planning"},
+            {"name": "investigating", "agent": True, "fanout": True,
+             "gate": None, "column": "In progress"},
+            {"name": "synthesis", "agent": True, "fanout": False,
+             "gate": "review", "column": "Review"},
+            {"name": "delivered", "agent": False, "fanout": False,
+             "gate": None, "column": "Done"},
+        ],
+        "gate_advances": {
+            "scope": {"approve_next": "investigating", "changes_target": "scoping"},
+            "review": {"approve_next": "delivered", "changes_target": "synthesis"},
+        },
+    },
 }
 
 
