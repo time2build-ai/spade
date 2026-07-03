@@ -126,7 +126,8 @@ def move(id: str, status: str, force: bool = False) -> None:
     """Move a task to a new status, enforcing the transition table.
 
     Any status may go to 'blocked'. 'blocked' may resume into any status. Other
-    jumps must appear in TRANSITIONS[current]. force=True bypasses the guard
+    jumps must be a registered pair in lifecycle_templates.transition_pairs().
+    force=True bypasses the guard
     (admin override + legacy pipeline moves); callers should log a system note
     when forcing an admin override.
     """

@@ -23,7 +23,9 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from tui_pilot import artifacts, db, gates, gitops, project_git, tasks
+from tui_pilot import (
+    artifacts, db, gates, gitops, lifecycle_templates, project_git, tasks,
+)
 
 PHASES = ["shaping", "plan_review", "building", "pr_review", "shipped", "blocked"]
 AGENT_PHASES = {"shaping", "building", "pr_review"}   # phases that spawn an agent
@@ -110,7 +112,13 @@ def _spawn_phase(run: dict, phase: str, spawn, resume_comment: str | None = None
 # -- start --------------------------------------------------------------------
 
 def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
-    """Create a shaping run, prepare its workspace, spawn the shaping agent.
+    """Create a run at the kind's first phase, (optionally) prepare a workspace,
+    and spawn the first-phase agent.
+
+    The run's ``kind`` is read from the task (default ``code`` for V2 tasks with
+    no kind). ``git.prepare_workspace`` is only called for kinds whose first phase
+    needs a repo (``needs_workspace``); research/docs runs have a null workspace
+    and fall back to a per-agent scratch cwd downstream.
 
     Raises ValueError if the task already has an active run (one active run per
     task; history is retained).
@@ -119,23 +127,26 @@ def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
         raise ValueError(f"task {task_id} already has an active lifecycle run")
     cfg = project_git.get(project_id) or {}
     task = tasks.get(task_id) or {}
+    kind = task.get("kind") or "code"
+    first = lifecycle_templates.first_phase(kind)
     slug = _slugify(task.get("title", task_id))
     run_id = _new_id()
-    ws = git.prepare_workspace(cfg, task_id, slug, kind="feat")
+    ws = (git.prepare_workspace(cfg, task_id, slug, kind="feat")
+          if lifecycle_templates.needs_workspace(kind) else {})
     db.execute(
         "INSERT INTO lifecycle_runs "
-        "(id, project_id, task_id, phase, active, branch_name, worktree_path, "
-        " self_heal_attempts, created_at, updated_at) "
-        "VALUES (?, ?, ?, 'shaping', 1, ?, ?, 0, ?, ?)",
-        (run_id, project_id, task_id, ws.get("branch_name"),
+        "(id, project_id, task_id, phase, kind, active, branch_name, "
+        " worktree_path, self_heal_attempts, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0, ?, ?)",
+        (run_id, project_id, task_id, first, kind, ws.get("branch_name"),
          ws.get("worktree_path"), _now(), _now()),
     )
     run = get(run_id)
-    _spawn_phase(run, "shaping", spawn)
-    tasks.move(task_id, "shaping")
+    _spawn_phase(run, first, spawn)
+    tasks.move(task_id, first)
     tasks.add_comment(
         task_id,
-        body=f"Lifecycle started — shaping on branch {ws.get('branch_name')}.",
+        body=f"Lifecycle started — {first} on branch {ws.get('branch_name')}.",
         author="system", kind="system",
     )
     return get(run_id)
@@ -185,7 +196,8 @@ def advance(run_id: str, *, phase: str, report: str | None, spawn, git,
         return
     if session_id is not None and session_id == run.get("last_finished_session"):
         return  # already processed this exact agent finish
-    if phase not in AGENT_PHASES:
+    kind = run.get("kind") or "code"
+    if phase not in lifecycle_templates.agent_phases(kind):
         # Never silent: a finish for a non-agent phase (plan_review/blocked/
         # shipped) is unexpected — record it rather than fall through.
         tasks.add_comment(
@@ -197,12 +209,9 @@ def advance(run_id: str, *, phase: str, report: str | None, spawn, git,
     if session_id is not None:
         _set_run(run_id, last_finished_session=session_id)
         run = get(run_id)
-    if phase == "shaping":
-        _advance_shaping(run, report, spawn, git)
-    elif phase == "building":
-        _advance_building(run, report, spawn, git)
-    elif phase == "pr_review":
-        _advance_pr_review(run, report, spawn, git)
+    handler = _ADVANCE_HANDLERS.get(kind, {}).get(phase)
+    if handler is not None:
+        handler(run, report, spawn, git)
 
 
 def retry(run_id: str, *, spawn, git) -> None:
@@ -424,27 +433,23 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
             author=by or "human", kind="gate",
         )
 
+    kind = run.get("kind") or "code"
+    adv = lifecycle_templates.gate_advances(kind).get(gate, {})
+
     if decision == "approved":
-        if gate == "plan":
-            _consume_gate()
-            _set_run(run_id, phase="building")
-            tasks.move(tid, "building")
-            _spawn_phase(get(run_id), "building", spawn)
-        elif gate in ("manual_test", "merge"):
-            # manual_test→open_pr and merge→git.merge have an irreversible git
-            # side-effect. Run it FIRST: only consume the gate once it succeeds.
-            # On GitError we _block() the run (recoverable via retry()) and RETURN
-            # with the gate still 'waiting' — never a consumed dead-end that a
-            # retried approve would no-op on. retry() resumes the producing phase
-            # (building for manual_test, pr_review for merge), which re-spawns the
-            # agent and, on success, opens a fresh gate.
+        approve = _APPROVE_HANDLERS.get(kind, {}).get(gate)
+        if approve is not None:
+            # A gate with an irreversible git side-effect (code manual_test→open_pr,
+            # merge→git.merge). Run the side-effect FIRST: only consume the gate
+            # once it succeeds. On GitError we _block() the run (recoverable via
+            # retry()) and RETURN with the gate still 'waiting' — never a consumed
+            # dead-end that a retried approve would no-op on. retry() resumes the
+            # producing phase (the phase whose agent opened this gate), which
+            # re-spawns the agent and, on success, opens a fresh gate.
             try:
-                if gate == "manual_test":
-                    _approve_manual_test(get(run_id), spawn, git)
-                else:
-                    _approve_merge(get(run_id), git)
+                approve(get(run_id), spawn, git)
             except gitops.GitError as e:
-                producing = "building" if gate == "manual_test" else "pr_review"
+                producing = _producing_phase(kind, gate)
                 _block(
                     get(run_id), producing,
                     f"{gate} approve failed on a git operation",
@@ -453,18 +458,56 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
                 )
                 return
             _consume_gate()
+        else:
+            # Plain phase move (code plan gate): advance to approve_next and spawn
+            # its agent (if that phase spawns one).
+            _consume_gate()
+            nxt = adv.get("approve_next")
+            _set_run(run_id, phase=nxt)
+            tasks.move(tid, nxt)
+            if nxt in lifecycle_templates.agent_phases(kind):
+                _spawn_phase(get(run_id), nxt, spawn)
     elif decision == "changes_requested":
         _consume_gate()
-        if gate == "plan":
-            _set_run(run_id, phase="shaping")
-            tasks.move(tid, "shaping", force=True)
-            _spawn_phase(get(run_id), "shaping", spawn, resume_comment=comment)
-        elif gate in ("manual_test", "merge"):
-            # Both send the run back to BUILDING for rework. For merge this is the
-            # clean recovery path: human rejects the merge → builder addresses the
-            # comment → tests → manual_test gate → pr_review → merge gate again.
-            # (Without this, a rejected merge would strand the run in pr_review
-            # with no gate and no agent, and retry() only resumes blocked runs.)
-            _set_run(run_id, phase="building")
-            tasks.move(tid, "building", force=True)
-            _spawn_phase(get(run_id), "building", spawn, resume_comment=comment)
+        # Rework: return to the gate's changes_target and re-spawn it with the
+        # reviewer's comment (code: plan→shaping, manual_test/merge→building).
+        target = adv.get("changes_target")
+        _set_run(run_id, phase=target)
+        tasks.move(tid, target, force=True)
+        _spawn_phase(get(run_id), target, spawn, resume_comment=comment)
+
+
+# -- registry-driven dispatch -------------------------------------------------
+# The engine is generalized over a per-kind template (lifecycle_templates): the
+# code handlers below are UNCHANGED from V2 — only which handler runs for a given
+# (kind, phase)/gate is now resolved from these maps instead of hardcoded
+# if/elif branches. New kinds (research/docs) register their handlers here in
+# later chunks.
+
+def _producing_phase(kind: str, gate: str) -> str | None:
+    """The phase whose agent opens ``gate`` — the block target when the gate's
+    approve side-effect fails (code: manual_test→building, merge→pr_review)."""
+    for p in lifecycle_templates.phases(kind):
+        if p.get("gate") == gate:
+            return p["name"]
+    return None
+
+
+# advance() dispatch: (kind → phase → finished-agent handler(run, report, spawn, git)).
+_ADVANCE_HANDLERS: dict[str, dict] = {
+    "code": {
+        "shaping": _advance_shaping,
+        "building": _advance_building,
+        "pr_review": _advance_pr_review,
+    },
+}
+
+# decide_gate() approve dispatch: (kind → gate → approve handler(run, spawn, git)).
+# Only gates with an irreversible side-effect register here; a gate with no entry
+# is a plain phase move to its gate_advances[gate]["approve_next"].
+_APPROVE_HANDLERS: dict[str, dict] = {
+    "code": {
+        "manual_test": _approve_manual_test,
+        "merge": lambda run, spawn, git: _approve_merge(run, git),
+    },
+}

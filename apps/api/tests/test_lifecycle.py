@@ -481,3 +481,10 @@ def test_projects_with_pending_env():
     assert lifecycle.projects_with_pending_env() == []
     _shipped_run(tid)
     assert lifecycle.projects_with_pending_env() == ["acme"]
+
+
+def test_start_run_stamps_kind_code_by_default():
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    assert run["kind"] == "code"
+    assert run["phase"] == "shaping"
