@@ -131,6 +131,18 @@ CREATE TABLE IF NOT EXISTS gates (
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   FOREIGN KEY(run_id) REFERENCES lifecycle_runs(id) ON DELETE CASCADE
 );
+-- Fan-out agents: N parallel workers for a single fan-out phase of a run.
+-- The phase advances on an all-done barrier (no rows queued/running/blocked);
+-- `dropped` counts as resolved. `idx` is 0-based within a (run_id, phase).
+CREATE TABLE IF NOT EXISTS fanout_agents (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, phase TEXT NOT NULL,
+  idx INTEGER NOT NULL, angle TEXT, mode TEXT,
+  session_id TEXT, account_id TEXT,
+  status TEXT DEFAULT 'queued',          -- queued|running|done|blocked|dropped
+  report_artifact_id TEXT,
+  created_at TEXT, updated_at TEXT,
+  FOREIGN KEY(run_id) REFERENCES lifecycle_runs(id) ON DELETE CASCADE
+);
 -- Documents pinned to a task: spec | plan | test_guide | review_report.
 CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT,
