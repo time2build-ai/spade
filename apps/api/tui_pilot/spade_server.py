@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import (
-    artifacts, brain, chat, feedback, gates, integrations, lifecycle,
+    artifacts, brain, chat, feedback, gates, gitops, integrations, lifecycle,
     lifecycle_git, meeting_samples, meetings, pipelines, project_git,
     projects, sprints, tasks,
 )
@@ -827,7 +827,10 @@ def promote_env(project_id: str, req: PromoteRequest) -> dict:
         titles.append(f"- {run['task_id']}: {task.get('title') or ''}")
     title = f"Promote {req.from_env} → {req.to_env} ({len(grouped)} task(s))"
     body = "Tasks in this release:\n" + ("\n".join(titles) if titles else "- (none)")
-    pr = _lifecycle_git(project_id).promote(from_branch, to_branch, title, body)
+    try:
+        pr = _lifecycle_git(project_id).promote(from_branch, to_branch, title, body)
+    except gitops.GitError as e:
+        raise HTTPException(409, f"promote failed: {e}")
     for run in grouped:
         tasks.add_comment(
             run["task_id"],

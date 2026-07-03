@@ -223,6 +223,28 @@ def test_gates_and_releases_and_promote(monkeypatch):
     assert ("promote", "development", "staging") in git.calls
 
 
+def test_promote_git_error_returns_409(monkeypatch):
+    git = _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    from tui_pilot import lifecycle, db, gitops
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "X"}).json()["id"]
+    run = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid}).json()
+    # a shipped run sitting on dev so there is something to promote
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute("UPDATE lifecycle_runs SET merge_commit='sha', env_dev_at=? WHERE id=?",
+               (now, run["id"]))
+
+    def _boom(*a, **k):
+        raise gitops.GitError("gh pr create: branch protection")
+    monkeypatch.setattr(git, "promote", _boom)
+    r = c.post("/projects/acme/promote", json={"from_env": "dev", "to_env": "staging"})
+    assert r.status_code == 409
+    assert "branch protection" in r.json()["detail"]
+
+
 def test_promote_empty_returns_409(monkeypatch):
     git = _patch(monkeypatch)
     _project()
