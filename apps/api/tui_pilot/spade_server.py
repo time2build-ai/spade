@@ -939,6 +939,19 @@ def list_lifecycle(project_id: str) -> dict:
     return {"runs": lifecycle.list_for_project(project_id)}
 
 
+# Declared BEFORE `/lifecycle/{run_id}` — FastAPI matches in declaration order,
+# so a `{run_id}` route declared first would capture run_id="templates" and 404.
+@router.get("/lifecycle/templates")
+def get_lifecycle_templates() -> dict:
+    """The per-kind board mapping (kind → phase → column) + gate/artifact labels,
+    so the client buckets tasks without hardcoding a second copy of the registry."""
+    return {
+        "templates": lifecycle_templates.client_templates(),
+        "gate_labels": lifecycle_templates.GATE_LABELS,
+        "artifact_labels": lifecycle_templates.ARTIFACT_LABELS,
+    }
+
+
 @router.get("/lifecycle/{run_id}")
 def get_lifecycle(run_id: str) -> dict:
     return _lifecycle_run_or_404(run_id)

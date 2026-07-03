@@ -259,3 +259,59 @@ def test_inline_artifact_content_endpoint():
     r = c.get(f"/tasks/{tid}/artifacts/{a['id']}/content")
     assert r.status_code == 200
     assert r.json()["content"] == "the findings"
+
+
+# -- Chunk 6.1: GET /lifecycle/templates + fanout_count serialization ---------
+
+def test_lifecycle_templates_endpoint():
+    from tui_pilot.server import app
+    c = TestClient(app)
+    r = c.get("/lifecycle/templates")
+    assert r.status_code == 200
+    body = r.json()
+    # all three kinds present, each with a phase→column map
+    assert set(body["templates"]) == {"code", "research", "docs"}
+    assert body["templates"]["code"]["columns"]["building"] == "In progress"
+    assert body["templates"]["research"]["columns"]["investigating"] == "In progress"
+    assert body["templates"]["docs"]["columns"]["delivered"] == "Done"
+    assert body["templates"]["research"]["terminal_status"] == "delivered"
+    # gate labels present
+    assert body["gate_labels"]["scope"] == "Scope review"
+    assert body["gate_labels"]["merge"] == "Merge approval"
+
+
+def test_lifecycle_templates_route_precedes_run_lookup():
+    """The literal `/lifecycle/templates` route must win over `/lifecycle/{run_id}`
+    (declaration order) — it must NOT hit the run-lookup 404 path."""
+    from tui_pilot.server import app
+    c = TestClient(app)
+    r = c.get("/lifecycle/templates")
+    assert r.status_code == 200
+    # a genuinely-missing run still 404s through the {run_id} route
+    assert c.get("/lifecycle/does-not-exist").status_code == 404
+
+
+def test_run_serialization_includes_fanout_count():
+    from tui_pilot.server import app
+    from tui_pilot import projects, tasks, lifecycle, fanout
+    projects.create(id="acme", name="Acme", path="/w")
+    tid = tasks.create(project_id="acme", title="R")["id"]
+    tasks.set_kind(tid, "research")
+
+    class _Git:
+        def prepare_workspace(self, *a, **k):
+            return {}
+
+    run = lifecycle.start_run("acme", tid, spawn=lambda run, phase: ("s", "a"),
+                              git=_Git())
+    c = TestClient(app)
+    # no fan-out rows yet → 0
+    assert c.get(f"/lifecycle/{run['id']}").json()["fanout_count"] == 0
+    # create 3 fan-out rows on the investigating phase → count reflects them
+    fanout.create_rows(run["id"], "investigating",
+                       [{"brief": "a", "mode": "web"},
+                        {"brief": "b", "mode": "web"},
+                        {"brief": "c", "mode": "repo"}])
+    assert c.get(f"/lifecycle/{run['id']}").json()["fanout_count"] == 3
+    listed = c.get("/lifecycle?project_id=acme").json()["runs"]
+    assert listed[0]["fanout_count"] == 3

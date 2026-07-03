@@ -52,9 +52,29 @@ def _slugify(text: str) -> str:
 
 # -- reads --------------------------------------------------------------------
 
+def _annotate(run: dict) -> dict:
+    """Add derived fields to a serialized run.
+
+    ``fanout_count`` = number of fan-out agent rows for the run's fan-out phase
+    (0 for kinds/phases with no fan-out). The client's ``▶ N agents`` badge reads
+    this instead of a hardcoded/absent value.
+    """
+    kind = run.get("kind") or "code"
+    count = 0
+    # Never let serialization crash on a legacy/unknown kind — count 0 fan-out.
+    try:
+        fanout_phases = lifecycle_templates.fanout_phases(kind)
+    except KeyError:
+        fanout_phases = set()
+    for ph in fanout_phases:
+        count += len(fanout.rows_for(run["id"], ph))
+    run["fanout_count"] = count
+    return run
+
+
 def get(run_id: str) -> dict | None:
     rows = db.query("SELECT * FROM lifecycle_runs WHERE id = ?", (run_id,))
-    return dict(rows[0]) if rows else None
+    return _annotate(dict(rows[0])) if rows else None
 
 
 def active_run_for_task(task_id: str) -> dict | None:
@@ -99,7 +119,7 @@ def list_for_project(project_id: str) -> list[dict]:
         "ORDER BY created_at DESC, rowid DESC",
         (project_id,),
     )
-    return [dict(r) for r in rows]
+    return [_annotate(dict(r)) for r in rows]
 
 
 # -- writes -------------------------------------------------------------------

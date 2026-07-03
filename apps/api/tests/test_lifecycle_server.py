@@ -413,6 +413,7 @@ def test_start_no_workspace_kind_does_not_require_repo(monkeypatch):
     tid = c.post("/tasks", json={"project_id": "acme", "title": "Look into caching"}).json()["id"]
     # confirm the task onto the synthetic kind (reuse the real 'research' KIND slot,
     # whose template we inject below). scoping is already a valid task STATUS.
+    _real_research = lifecycle_templates.LIFECYCLE_TEMPLATES.get("research")
     lifecycle_templates.LIFECYCLE_TEMPLATES["research"] = {
         "terminal_status": "delivered",
         "needs_workspace": False,
@@ -431,7 +432,11 @@ def test_start_no_workspace_kind_does_not_require_repo(monkeypatch):
         # needs_workspace False → git.prepare_workspace is NOT called
         assert not any(call[0] == "prepare" for call in git.calls)
     finally:
-        del lifecycle_templates.LIFECYCLE_TEMPLATES["research"]
+        # restore the REAL research template (don't delete the genuine entry).
+        if _real_research is not None:
+            lifecycle_templates.LIFECYCLE_TEMPLATES["research"] = _real_research
+        else:
+            lifecycle_templates.LIFECYCLE_TEMPLATES.pop("research", None)
         lifecycle_templates.transition_pairs.cache_clear()
 
 

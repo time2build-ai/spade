@@ -109,7 +109,54 @@ LIFECYCLE_TEMPLATES: dict[str, dict] = {
 }
 
 
+# Human labels for every gate id across all templates. Exposed to the client via
+# GET /lifecycle/templates so the task view doesn't hardcode a second copy.
+GATE_LABELS: dict[str, str] = {
+    "plan": "Plan review",
+    "manual_test": "Manual test",
+    "merge": "Merge approval",
+    "scope": "Scope review",
+    "outline": "Outline review",
+    "review": "Review",
+}
+
+# Human labels for every artifact kind a lifecycle produces (drives the client
+# Artifacts panel labels).
+ARTIFACT_LABELS: dict[str, str] = {
+    "spec": "Spec",
+    "plan": "Plan",
+    "test_guide": "Test guide",
+    "review_report": "Review report",
+    "finding": "Finding",
+    "report": "Report",
+    "outline": "Outline",
+    "doc": "Document",
+}
+
+
 # -- accessors ----------------------------------------------------------------
+
+def client_templates() -> dict:
+    """kind → board mapping for the client (``GET /lifecycle/templates``).
+
+    Each entry: ``{terminal_status, columns: {phase: column}, phases: [...]}`` so
+    the client can bucket a task's kind+phase into a universal board column
+    without hardcoding a second copy of the registry.
+    """
+    out: dict[str, dict] = {}
+    for kind, tpl in LIFECYCLE_TEMPLATES.items():
+        out[kind] = {
+            "terminal_status": tpl["terminal_status"],
+            "columns": {p["name"]: p["column"] for p in tpl["phases"]},
+            "phases": [
+                {"name": p["name"], "column": p["column"],
+                 "agent": bool(p.get("agent")), "fanout": bool(p.get("fanout")),
+                 "gate": p.get("gate")}
+                for p in tpl["phases"]
+            ],
+        }
+    return out
+
 
 def template_for(kind: str) -> dict:
     """Return the template for ``kind`` (raises KeyError for an unknown kind)."""
