@@ -38,124 +38,17 @@ def test_create_run_builds_four_ordered_stages():
     assert all(s["state"] == "queued" for s in stages)
 
 
-def test_start_moves_task_to_in_progress_then_review_then_shipped():
-    """Starting a stage reflects on the board: Developer → in_progress, later
-    stages → review, completion → shipped."""
-    tid = _setup()
-    assert tasks.get(tid)["status"] == "ready"
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-
-    def fake_spawn(stage_idx, report):
-        return (f"sess{stage_idx}", "acct")
-
-    pipelines.start_stage(run["id"], 0, fake_spawn)  # developer
-    assert tasks.get(tid)["status"] == "in_progress"
-    pipelines.complete_stage(run["id"], 0, report="r0", spawn=fake_spawn)  # → reviewer
-    assert tasks.get(tid)["status"] == "review"
-    for i in range(1, 4):
-        pipelines.complete_stage(run["id"], i, report=f"r{i}", spawn=fake_spawn)
-    assert tasks.get(tid)["status"] == "shipped"
+# NOTE: The pipeline WRITE engine (start_stage/complete_stage — stage spawning,
+# board moves, auto-advance, spawn-failure pausing) was retired in Chunk 6 in
+# favor of the lifecycle engine and DELETED from pipelines.py (it moved tasks to
+# the now-dropped 'in_progress'/'review' statuses). Its tests were removed with
+# it. The CRUD/read path (create_run, stage ordering, derived progress, roles
+# seed) stays for one-release coexistence and is still covered below.
 
 
-def test_advance_runs_stages_then_ships():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-    spawned = []
-
-    def fake_spawn(stage_idx, report):  # returns (session_id, account_id)
-        spawned.append((stage_idx, report))
-        return (f"sess{stage_idx}", "acct")
-
-    pipelines.start_stage(run["id"], 0, fake_spawn)
-    assert pipelines.get(run["id"])["stages"][0]["state"] == "running"
-    assert pipelines.get(run["id"])["stages"][0]["session_id"] == "sess0"
-    for i in range(4):
-        pipelines.complete_stage(run["id"], i, report=f"r{i}", spawn=fake_spawn)
-    run2 = pipelines.get(run["id"])
-    assert run2["status"] == "shipped"
-    assert tasks.get(tid)["status"] == "shipped"
-    assert [s["state"] for s in run2["stages"]] == ["done", "done", "done", "done"]
-    # stage 1..3 were spawned with the PRIOR stage's report threaded in
-    assert (1, "r0") in spawned
-
-
-def test_complete_stage_is_re_entry_safe():
-    # A manual /advance racing the poll loop must not double-spawn the next stage.
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-    spawned = []
-
-    def fake_spawn(stage_idx, report):
-        spawned.append(stage_idx)
-        return (f"sess{stage_idx}", "acct")
-
-    pipelines.start_stage(run["id"], 0, fake_spawn)  # spawns stage 0
-    spawned.clear()
-
-    pipelines.complete_stage(run["id"], 0, report="r0", spawn=fake_spawn)
-    pipelines.complete_stage(run["id"], 0, report="r0", spawn=fake_spawn)  # no-op
-
-    assert spawned == [1]  # stage 1 spawned exactly once
-    stages = pipelines.get(run["id"])["stages"]
-    assert stages[0]["state"] == "done"
-    assert stages[1]["state"] == "running"
-
-
-def test_spawn_failure_pauses_run():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-
-    def boom(idx, report):
-        raise RuntimeError("no account")
-
-    pipelines.start_stage(run["id"], 0, boom)
-    r = pipelines.get(run["id"])
-    assert r["status"] == "paused" and r["stages"][0]["state"] == "failed"
-
-
-# -- auto-posted activity trail (stage reports + ship event) -------------------
-
-def _spawn(stage_idx, report):  # returns (session_id, account_id)
-    return (f"sess{stage_idx}", "acct")
-
-
-def test_completing_a_stage_posts_its_report_as_a_task_comment():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-    pipelines.start_stage(run["id"], 0, _spawn)
-    pipelines.complete_stage(run["id"], 0, report="## Done\nAdded test_hello.py", spawn=_spawn)
-
-    reports = [c for c in tasks.comments(tid) if c["kind"] == "stage_report"]
-    assert len(reports) == 1
-    assert reports[0]["author"] == "developer"
-    assert "Added test_hello.py" in reports[0]["body"]
-
-
-def test_stage_with_no_report_posts_no_stage_report_comment():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-    pipelines.start_stage(run["id"], 0, _spawn)
-    pipelines.complete_stage(run["id"], 0, report=None, spawn=_spawn)
-    assert [c for c in tasks.comments(tid) if c["kind"] == "stage_report"] == []
-
-
-def test_idempotent_complete_does_not_double_post():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-    pipelines.start_stage(run["id"], 0, _spawn)
-    pipelines.complete_stage(run["id"], 0, report="r0", spawn=_spawn)
-    pipelines.complete_stage(run["id"], 0, report="r0", spawn=_spawn)  # racing re-entry
-    assert len([c for c in tasks.comments(tid) if c["kind"] == "stage_report"]) == 1
-
-
-def test_shipping_posts_a_system_comment():
-    tid = _setup()
-    run = pipelines.create_run(project_id="acme", task_id=tid)
-    pipelines.start_stage(run["id"], 0, _spawn)
-    for i in range(4):
-        pipelines.complete_stage(run["id"], i, report=f"r{i}", spawn=_spawn)
-    system = [c for c in tasks.comments(tid) if c["kind"] == "system"]
-    assert any("shipped" in c["body"].lower() for c in system)
+# -- read path: derived progress ----------------------------------------------
+# (The stage-report / ship-comment activity-trail tests exercised the retired
+# write engine and were removed with it.)
 
 
 def test_run_progress_derived_from_stage_states():

@@ -190,10 +190,11 @@ def _poll_loop() -> None:
          through the executor and deliver results/forwards. Each drained item
          takes at most ONE target session lock.
     """
+    global _env_watch_tick
     while True:
         signals: list = []   # (orch_aid, OrchestrationSignal)
         forwards: list = []  # (orch_aid, note)
-        advances: list = []  # (run_id, stage_idx, report) for parentless pipeline stages
+        lifecycle_advances: list = []  # (run_id, phase, report, aid) for lifecycle runs
         for aid, poller in list(_pollers.items()):
             try:
                 # HarnessPoller is not internally synchronized; every poll()
@@ -214,13 +215,14 @@ def _poll_loop() -> None:
                         forwards.extend(
                             orchestrator_server.collect_worker_forward(_module, aid, st)
                         )
-                        # Pipeline stage (parentless, has a pipeline_run_id):
-                        # gather a once-only auto-advance item. collect_worker_forward
-                        # returns early for parentless workers, so there is no
-                        # conflict with orchestrator finish-forwarding.
-                        item = _collect_pipeline_advance(aid, st)
-                        if item is not None:
-                            advances.append(item)
+                        # Lifecycle run (parentless, has a lifecycle_run_id):
+                        # gather a once-only auto-advance item, threading the
+                        # finishing session id (aid) for the engine's dedup guard.
+                        # (The pipeline write path — including its auto-advance —
+                        # was retired; only its read endpoints remain.)
+                        litem = _collect_lifecycle_advance(aid, st)
+                        if litem is not None:
+                            lifecycle_advances.append((*litem, aid))
             except Exception:  # noqa: BLE001 - never let one agent kill the loop
                 pass
         _advance_login_sessions()
@@ -229,55 +231,92 @@ def _poll_loop() -> None:
             orchestrator_server.drain(_module, signals, forwards)
         except Exception:  # noqa: BLE001 - never let drain kill the loop
             pass
-        for run_id, stage_idx, report in advances:
+        for run_id, phase, report, aid in lifecycle_advances:
             try:
-                _drain_pipeline_advance(run_id, stage_idx, report)
+                _drain_lifecycle_advance(run_id, phase, report, aid)
             except Exception:  # noqa: BLE001 - never let one advance kill the loop
                 logger.warning(
-                    "pipeline auto-advance failed for run %s stage %s",
-                    run_id, stage_idx, exc_info=True,
+                    "lifecycle auto-advance failed for run %s phase %s",
+                    run_id, phase, exc_info=True,
                 )
+        # Env watcher: ~every 60th tick, promote-branch reconciliation for runs
+        # whose merge commit may have reached staging/prod. Guarded so a git
+        # error posts a note and never kills the loop.
+        _env_watch_tick += 1
+        if _env_watch_tick % 60 == 0:
+            _run_env_watch_tick()
         time.sleep(1.0)
 
 
-def _collect_pipeline_advance(aid: str, harness_state):
-    """COLLECT phase (under the worker's lock): if ``aid`` is a parentless
-    pipeline stage that just finished, mark it advanced once and return a
-    ``(run_id, stage_idx, report)`` item; else None.
+_env_watch_tick = 0
 
-    The ``pipeline_advanced`` flag is a per-worker scratch key written under the
-    worker's session lock (held by the caller), mirroring the ``finish_forwarded``
-    guard in collect_worker_forward — so a stage advances exactly once.
-    """
+
+def _run_env_watch_tick() -> None:
+    """Reconcile deployed-env stamps for every project with pending runs."""
+    from . import lifecycle, tasks
+    from .spade_server import _lifecycle_git
+    try:
+        pids = lifecycle.projects_with_pending_env()
+    except Exception:  # noqa: BLE001
+        return
+    for pid in pids:
+        try:
+            lifecycle.run_env_watch(pid, _lifecycle_git(pid))
+        except Exception as e:  # noqa: BLE001 - never let one project kill the loop
+            logger.warning("env watch failed for project %s", pid, exc_info=True)
+            # Plan 4.4: a git error posts a system note and never kills the loop.
+            # Attach it to each pending run's task so it's visible in the trail.
+            try:
+                for run in lifecycle.list_for_project(pid):
+                    if run.get("merge_commit") and not run.get("env_prod_at"):
+                        tasks.add_comment(
+                            run["task_id"],
+                            body=f"Environment watch failed: {e}",
+                            author="system", kind="system",
+                        )
+            except Exception:  # noqa: BLE001 - note-posting must not kill the loop
+                pass
+
+
+def _collect_lifecycle_advance(aid: str, harness_state):
+    """COLLECT phase (under the worker's lock): if ``aid`` is a parentless
+    lifecycle-phase agent that just finished, mark it advanced once and return a
+    ``(run_id, phase, report)`` item; else None.
+
+    The ``lifecycle_advanced`` flag is a per-worker scratch key written under the
+    worker's session lock, so a run advances exactly once per finished agent."""
+    from . import lifecycle
     m = _meta.get(aid)
     if not m or m.get("parent") or m.get("is_orchestrator"):
         return None
-    run_id = m.get("pipeline_run_id")
+    run_id = m.get("lifecycle_run_id")
     if not run_id:
         return None
     if harness_state is None or harness_state.kind != "done":
         return None
-    if m.get("pipeline_advanced"):
+    if m.get("lifecycle_advanced"):
         return None
-    # Confirm the run still exists before claiming the advance.
-    from . import pipelines
-    if pipelines.get(run_id) is None:
+    if lifecycle.get(run_id) is None:  # vanished run — don't burn the once-flag
         return None
-    m["pipeline_advanced"] = True
+    m["lifecycle_advanced"] = True
     report = (harness_state.report or "").strip()
-    return (run_id, m.get("pipeline_stage_idx", 0), report)
+    return (run_id, m.get("lifecycle_phase"), report)
 
 
-def _drain_pipeline_advance(run_id: str, stage_idx: int, report: str) -> None:
-    """DRAIN phase (no session lock held): complete the finished stage and start
-    the next (or ship the run). The spawn callback may take _registry_lock."""
-    from . import pipelines
-    from .spade_server import _pipeline_spawn
-
-    run = pipelines.get(run_id)
+def _drain_lifecycle_advance(run_id: str, phase: str, report: str, aid: str) -> None:
+    """DRAIN phase (no session lock held): drive the lifecycle state machine on a
+    finished agent. ``aid`` (the finishing session) is passed as ``session_id``
+    so the engine's idempotency guard dedups a repeated delivery."""
+    from . import lifecycle, spade_server
+    run = lifecycle.get(run_id)
     if run is None:
         return
-    pipelines.complete_stage(run_id, stage_idx, report, spawn=_pipeline_spawn(run))
+    lifecycle.advance(
+        run_id, phase=phase, report=report,
+        spawn=spade_server._lifecycle_spawn(run),
+        git=spade_server._lifecycle_git(run["project_id"]),
+        session_id=aid,
+    )
 
 
 threading.Thread(target=_poll_loop, daemon=True).start()
@@ -816,6 +855,11 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                 # auto-advance collector. Best-effort: never break reconcile.
                 # Deliberately do NOT set pipeline_advanced, so a stage that
                 # finished during downtime can still advance after reattach.
+                #
+                # NOTE: the pipeline linkage restore below is effectively dead
+                # now that the poll loop no longer runs the pipeline collector
+                # (flagged for the next-release pipeline cleanup). Left in place
+                # deliberately — do not remove the pipeline reads here.
                 try:
                     from tui_pilot import pipelines
                     link = pipelines.stage_by_session(sid)
@@ -825,6 +869,23 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                 except Exception:  # noqa: BLE001 - best-effort linkage restore
                     logger.warning(
                         "failed to restore pipeline linkage for %s", sid,
+                        exc_info=True,
+                    )
+                # Restore LIFECYCLE linkage the same way: a reattached lifecycle
+                # agent (shaping/building/pr_review) must stay visible to the
+                # auto-advance collector so its finished report isn't dropped.
+                # Stamp phase then run_id LAST (matches the spawn ordering). Do
+                # NOT set lifecycle_advanced, so a run that finished during
+                # downtime can still advance after reattach.
+                try:
+                    from tui_pilot import lifecycle
+                    lrun = lifecycle.run_by_session(sid)
+                    if lrun is not None:
+                        _meta[sid]["lifecycle_phase"] = lrun["phase"]
+                        _meta[sid]["lifecycle_run_id"] = lrun["id"]
+                except Exception:  # noqa: BLE001 - best-effort linkage restore
+                    logger.warning(
+                        "failed to restore lifecycle linkage for %s", sid,
                         exc_info=True,
                     )
                 kept.append(sid)

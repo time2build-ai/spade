@@ -26,7 +26,7 @@ export default function OrchestratorPage() {
   const { project, loading: projectLoading } = useProject();
   const [filter, setFilter] = useState<Filter>("all");
 
-  const { data, error, isLoading, mutate } = useSWR(
+  const { data, error, isLoading } = useSWR(
     project ? ["pipelines", project.id] : null,
     () => api.pipelines(project!.id),
     { refreshInterval: 2500 },
@@ -48,15 +48,8 @@ export default function OrchestratorPage() {
   const accountById: Record<string, string> = {};
   for (const a of accountsData?.accounts ?? []) accountById[a.id] = a.label;
 
-  async function onStart(id: string) {
-    await api.startPipeline(id);
-    await mutate();
-  }
-  async function onAdvance(id: string) {
-    await api.advancePipeline(id);
-    await mutate();
-  }
-
+  // The pipeline WRITE path was retired; this page is now a read-only view of
+  // legacy runs (Start/Advance moved to the lifecycle engine on the task page).
   let body: React.ReactNode;
   if (projectLoading) {
     body = <StateMessage>Loading…</StateMessage>;
@@ -116,8 +109,6 @@ export default function OrchestratorPage() {
               runs={filtered}
               titleById={titleById}
               accountById={accountById}
-              onStart={onStart}
-              onAdvance={onAdvance}
             />
           )}
         </div>

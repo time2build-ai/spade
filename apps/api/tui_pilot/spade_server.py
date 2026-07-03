@@ -8,11 +8,16 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import (
-    brain, chat, feedback, integrations, meeting_samples, meetings,
-    pipelines, projects, sprints, tasks,
+    artifacts, brain, chat, feedback, gates, gitops, integrations, lifecycle,
+    lifecycle_git, meeting_samples, meetings, pipelines, project_git,
+    projects, sprints, tasks,
 )
 
 router = APIRouter()
+
+# Per-project git facade the lifecycle engine calls (persistent clone + gh).
+# Tests monkeypatch this module attribute with a fake so no real git/gh runs.
+_lifecycle_git = lifecycle_git.for_project
 
 
 # ---- request models -------------------------------------------------------
@@ -121,7 +126,7 @@ def delete_task(task_id: str) -> dict:
 def move_task(task_id: str, req: MoveRequest) -> dict:
     _task_or_404(task_id)
     try:
-        tasks.move(task_id, req.status)
+        tasks.move(task_id, req.status, force=True)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return _enrich(tasks.get(task_id))
@@ -305,80 +310,96 @@ def delete_brain_edge(edge_id: str) -> dict:
     return {"id": edge_id, "status": "deleted"}
 
 
-# ---- pipeline request models ------------------------------------------------
+# ---- lifecycle spawn callback ----------------------------------------------
 
-class PipelineCreate(BaseModel):
-    project_id: str
-    task_id: str
-
-
-class AdvanceRequest(BaseModel):
-    report: str | None = None
-
-
-# ---- pipeline spawn callback ------------------------------------------------
-
-def _stage_prompt(run: dict, idx: int) -> str:
-    """Build the prompt for stage ``idx`` of ``run``.
-
-    Stage 0 (developer) gets the task title + description + grounded brain-node
-    labels for context; later stages get a short instruction to continue the
-    pipeline (the report_context carries the prior stage's work)."""
-    role = pipelines.STAGES[idx]
-    if idx == 0:
-        task = tasks.get(run["task_id"]) or {}
-        lines = [f"Implement this task: {task.get('title', run['task_id'])}"]
-        if task.get("description"):
-            lines.append("")
-            lines.append(task["description"])
-        node_labels = []
-        for nid in tasks.nodes(run["task_id"]):
-            node = brain.get_node(nid)
-            if node:
-                node_labels.append(f"- [{node['type']}] {node['label']}")
-        if node_labels:
-            lines.append("")
-            lines.append("Grounded product-brain context:")
-            lines.extend(node_labels)
-        return "\n".join(lines)
-    return (
-        f"Continue this pipeline as the {role}. The previous stage's handoff "
-        "report (above) is your input — act on it and emit a `finished` signal "
-        "when done."
-    )
+_PHASE_JSON = {
+    "shaping": '{"spec_path": "...", "plan_path": "...", "summary": "..."}',
+    "building": '{"tests": "green", "test_guide_path": "...", "failing": []}',
+    "pr_review": '{"findings": [{"path": "...", "line": 1, "body": "..."}], '
+                 '"summary": "...", "review_report_path": "..."}',
+}
 
 
-def _pipeline_spawn(run: dict):
-    """Return a ``spawn(idx, report)`` closure that spawns a real worker for the
-    given pipeline run via ``server._spawn_agent`` and returns
-    ``(session_id, account_id)``. Stamps the run/stage onto the session's _meta
-    so the poll loop can auto-advance the pipeline on finish."""
+def _phase_prompt(run: dict, phase: str) -> str:
+    """Build the prompt for a lifecycle ``phase`` agent.
+
+    Invokes the relevant superpowers skills by name, replays any prior artifacts
+    and the latest changes-requested comment (``run['resume_comment']``, set by
+    the engine before spawn), and instructs the agent to end with a ``finished``
+    handoff whose report is the exact JSON payload the engine parses for the
+    phase.
+    """
+    task = tasks.get(run["task_id"]) or {}
+    lines: list[str] = [f"Task {run['task_id']}: {task.get('title', run['task_id'])}"]
+    if task.get("description"):
+        lines += ["", task["description"]]
+
+    prior = artifacts.for_task(run["task_id"])
+    if prior:
+        lines += ["", "Prior artifacts pinned to this task:"]
+        lines += [f"- [{a['kind']}] {a.get('title') or ''} @ {a.get('repo_path') or '?'}"
+                  for a in prior]
+
+    resume = run.get("resume_comment")
+    if resume:
+        lines += ["", f"Changes requested — address this feedback:\n{resume}"]
+
+    lines += [""]
+    if phase == "shaping":
+        lines += [
+            "Use the superpowers:brainstorming skill to explore the problem, then "
+            "the superpowers:writing-plans skill to produce a spec and an "
+            "implementation plan committed to this worktree.",
+        ]
+    elif phase == "building":
+        lines += [
+            "Use the superpowers:executing-plans skill and "
+            "superpowers:test-driven-development to implement the approved plan in "
+            "this worktree. Commit your work and make sure the test suite is green.",
+        ]
+    elif phase == "pr_review":
+        lines += [
+            "Use the superpowers:requesting-code-review skill (plus the project's "
+            "PR review conventions) to review the open PR for this branch and "
+            "collect actionable findings.",
+        ]
+
+    lines += [
+        "",
+        "When finished, emit a `finished` signal whose report is EXACTLY this JSON "
+        f"(no prose around it):\n{_PHASE_JSON.get(phase, '{}')}",
+    ]
+    return "\n".join(lines)
+
+
+def _lifecycle_spawn(run: dict):
+    """Return a ``spawn(run, phase)`` closure that spawns a real lifecycle agent
+    via ``server._spawn_agent`` and returns ``(session_id, account_id)``.
+
+    The engine passes the live run to the closure on each phase, so the outer
+    ``run`` argument is unused (kept for symmetry with the drainer call site).
+    Stamps the run/phase onto the session's ``_meta`` so the
+    poll loop's auto-advance branch can find and advance this run on finish."""
     from . import server
 
-    project = projects.get(run["project_id"]) or {}
-
-    def spawn(idx: int, report: str | None):
+    def spawn(run: dict, phase: str):
         info = server._spawn_agent(
-            name=f"{pipelines.STAGES[idx]}-{run['id']}",
-            role=pipelines.STAGES[idx],
+            name=f"{phase}-{run['id']}",
+            role=phase,
             project_id=run["project_id"],
-            cwd=project.get("path"),
-            task=_stage_prompt(run, idx),
+            cwd=run["worktree_path"],
+            task=_phase_prompt(run, phase),
             mission=run["id"],
             parent=None,
-            report_context=report,
         )
         sid = info["id"]
-        # Stamp the run/stage onto the session's _meta so the poll loop's
-        # auto-advance branch can find and advance this pipeline on finish.
-        # Write pipeline_run_id LAST: the collector gates on pipeline_run_id then
-        # reads pipeline_stage_idx (defaulting to 0). Single-key dict writes are
-        # GIL-atomic, so writing the gate key last guarantees a tick that sees
-        # the run id also sees the correct stage_idx — closing the advance race.
+        # Stamp phase then run_id LAST (matches the pipeline gate-key ordering):
+        # single-key dict writes are GIL-atomic, so a tick that sees the run id
+        # also sees the correct phase — closing the advance race.
         meta = server._meta.get(sid)
         if meta is not None:
-            meta["pipeline_stage_idx"] = idx
-            meta["pipeline_run_id"] = run["id"]  # gate key written last
+            meta["lifecycle_phase"] = phase
+            meta["lifecycle_run_id"] = run["id"]  # gate key written last
         return (sid, info.get("account_id"))
 
     return spawn
@@ -393,16 +414,11 @@ def _run_or_404(run_id: str) -> dict:
     return run
 
 
-# ---- pipeline endpoints -----------------------------------------------------
-
-@router.post("/pipelines")
-def create_pipeline(req: PipelineCreate) -> dict:
-    if projects.get(req.project_id) is None:
-        raise HTTPException(404, f"no project {req.project_id!r}")
-    if tasks.get(req.task_id) is None:
-        raise HTTPException(404, f"no task {req.task_id!r}")
-    return pipelines.create_run(project_id=req.project_id, task_id=req.task_id)
-
+# ---- pipeline endpoints (READ-ONLY) -----------------------------------------
+# The pipeline WRITE path (create/start/advance) was retired in favor of the
+# lifecycle engine. These GET endpoints remain for one release so existing
+# client read sites keep resolving; the tables stay read-only. See
+# schema.sql's TODO(cleanup, next release).
 
 @router.get("/pipelines")
 def list_pipelines(project_id: str) -> dict:
@@ -613,21 +629,213 @@ def get_pipeline(run_id: str) -> dict:
     return _run_or_404(run_id)
 
 
-@router.post("/pipelines/{run_id}/start")
-def start_pipeline(run_id: str) -> dict:
-    run = _run_or_404(run_id)
-    pipelines.start_stage(run_id, 0, _pipeline_spawn(run))
-    return _run_or_404(run_id)
+# ---- lifecycle request models ----------------------------------------------
 
 
-@router.post("/pipelines/{run_id}/advance")
-def advance_pipeline(run_id: str, req: AdvanceRequest) -> dict:
-    """Manually complete the current running stage and start the next one."""
-    run = _run_or_404(run_id)
-    # Idempotent on a finished run: a shipped/paused run is not advanced again
-    # (so we never re-run complete_stage or re-call tasks.move).
-    if run["status"] in ("shipped", "paused"):
-        return run
-    idx = run["current_stage"]
-    pipelines.complete_stage(run_id, idx, report=req.report, spawn=_pipeline_spawn(run))
-    return _run_or_404(run_id)
+class LifecycleStart(BaseModel):
+    project_id: str
+    task_id: str
+
+
+class GateDecision(BaseModel):
+    comment: str | None = None
+
+
+class ProjectGitPut(BaseModel):
+    repo_ssh_url: str | None = None
+    dev_branch: str | None = None
+    staging_branch: str | None = None
+    prod_branch: str | None = None
+    worktrees_root: str | None = None
+
+
+class PromoteRequest(BaseModel):
+    from_env: str
+    to_env: str
+
+
+# ---- lifecycle helpers ------------------------------------------------------
+
+_ENV_STAMP = {"dev": "env_dev_at", "staging": "env_staging_at", "prod": "env_prod_at"}
+_ENV_BRANCH = {"dev": "dev_branch", "staging": "staging_branch", "prod": "prod_branch"}
+_ENV_ORDER = ["dev", "staging", "prod"]
+
+
+def _lifecycle_run_or_404(run_id: str) -> dict:
+    run = lifecycle.get(run_id)
+    if run is None:
+        raise HTTPException(404, f"no lifecycle run {run_id!r}")
+    return run
+
+
+def _active_run_or_404(task_id: str) -> dict:
+    run = lifecycle.active_run_for_task(task_id)
+    if run is None:
+        raise HTTPException(404, f"no active lifecycle run for task {task_id!r}")
+    return run
+
+
+def _furthest_env(run: dict) -> str | None:
+    """The furthest deployment env a shipped run has reached, or None."""
+    reached = None
+    for env in _ENV_ORDER:
+        if run.get(_ENV_STAMP[env]):
+            reached = env
+    return reached
+
+
+# ---- lifecycle endpoints ----------------------------------------------------
+
+@router.post("/lifecycle/start")
+def lifecycle_start(req: LifecycleStart) -> dict:
+    if projects.get(req.project_id) is None:
+        raise HTTPException(404, f"no project {req.project_id!r}")
+    if tasks.get(req.task_id) is None:
+        raise HTTPException(404, f"no task {req.task_id!r}")
+    cfg = project_git.get(req.project_id)
+    if not cfg or not cfg.get("repo_ssh_url"):
+        raise HTTPException(404, f"project {req.project_id!r} has no configured repo")
+    try:
+        return lifecycle.start_run(
+            req.project_id, req.task_id,
+            spawn=_lifecycle_spawn(None),
+            git=_lifecycle_git(req.project_id),
+        )
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.get("/lifecycle")
+def list_lifecycle(project_id: str) -> dict:
+    return {"runs": lifecycle.list_for_project(project_id)}
+
+
+@router.get("/lifecycle/{run_id}")
+def get_lifecycle(run_id: str) -> dict:
+    return _lifecycle_run_or_404(run_id)
+
+
+@router.post("/lifecycle/{run_id}/retry")
+def retry_lifecycle(run_id: str) -> dict:
+    run = _lifecycle_run_or_404(run_id)
+    lifecycle.retry(run_id, spawn=_lifecycle_spawn(run),
+                    git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run_id)
+
+
+@router.post("/tasks/{task_id}/gates/{gate}/approve")
+def approve_gate(task_id: str, gate: str, req: GateDecision) -> dict:
+    run = _active_run_or_404(task_id)
+    lifecycle.decide_gate(run["id"], gate, "approved", comment=req.comment,
+                          by="human", spawn=_lifecycle_spawn(run),
+                          git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run["id"])
+
+
+@router.post("/tasks/{task_id}/gates/{gate}/request-changes")
+def request_changes_gate(task_id: str, gate: str, req: GateDecision) -> dict:
+    run = _active_run_or_404(task_id)
+    lifecycle.decide_gate(run["id"], gate, "changes_requested", comment=req.comment,
+                          by="human", spawn=_lifecycle_spawn(run),
+                          git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run["id"])
+
+
+@router.get("/tasks/{task_id}/artifacts")
+def list_task_artifacts(task_id: str) -> dict:
+    _task_or_404(task_id)
+    return {"artifacts": artifacts.for_task(task_id)}
+
+
+@router.get("/tasks/{task_id}/artifacts/{artifact_id}/content")
+def get_artifact_content(task_id: str, artifact_id: str) -> dict:
+    art = artifacts.get(artifact_id)
+    if art is None or art["task_id"] != task_id:
+        raise HTTPException(404, f"no artifact {artifact_id!r}")
+    task = _task_or_404(task_id)
+    if not art.get("repo_path") or not art.get("branch"):
+        raise HTTPException(404, "artifact has no pinned repo path/branch")
+    try:
+        content = _lifecycle_git(task["project_id"]).read_at_branch(
+            art["repo_path"], art["branch"])
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(404, f"could not read artifact: {e}")
+    return {"content": content}
+
+
+@router.get("/projects/{project_id}/git")
+def get_project_git(project_id: str) -> dict:
+    if projects.get(project_id) is None:
+        raise HTTPException(404, f"no project {project_id!r}")
+    return project_git.get(project_id) or {}
+
+
+@router.put("/projects/{project_id}/git")
+def put_project_git(project_id: str, req: ProjectGitPut) -> dict:
+    if projects.get(project_id) is None:
+        raise HTTPException(404, f"no project {project_id!r}")
+    fields = {k: v for k, v in req.model_dump().items() if v is not None}
+    return project_git.upsert(project_id, **fields)
+
+
+@router.get("/projects/{project_id}/gates")
+def list_project_gates(project_id: str) -> dict:
+    return {"gates": gates.waiting_for_project(project_id)}
+
+
+@router.get("/projects/{project_id}/releases")
+def list_releases(project_id: str) -> dict:
+    """Tasks grouped by the furthest deployment env their run has reached."""
+    lanes: dict[str, list] = {env: [] for env in _ENV_ORDER}
+    for run in lifecycle.list_for_project(project_id):
+        env = _furthest_env(run)
+        if env is None:
+            continue
+        task = tasks.get(run["task_id"]) or {}
+        lanes[env].append({
+            "run_id": run["id"], "task_id": run["task_id"],
+            "title": task.get("title"), "merge_commit": run.get("merge_commit"),
+            "env_dev_at": run.get("env_dev_at"),
+            "env_staging_at": run.get("env_staging_at"),
+            "env_prod_at": run.get("env_prod_at"),
+        })
+    return {"releases": lanes}
+
+
+@router.post("/projects/{project_id}/promote")
+def promote_env(project_id: str, req: PromoteRequest) -> dict:
+    cfg = project_git.get(project_id)
+    if not cfg or not cfg.get("repo_ssh_url"):
+        raise HTTPException(404, f"project {project_id!r} has no configured repo")
+    if req.from_env not in _ENV_BRANCH or req.to_env not in _ENV_BRANCH:
+        raise HTTPException(400, "from_env/to_env must be dev, staging, or prod")
+    from_branch = cfg.get(_ENV_BRANCH[req.from_env])
+    to_branch = cfg.get(_ENV_BRANCH[req.to_env])
+    # Runs that sit in from_env but not yet to_env.
+    from_stamp = _ENV_STAMP[req.from_env]
+    to_stamp = _ENV_STAMP[req.to_env]
+    grouped = [
+        run for run in lifecycle.list_for_project(project_id)
+        if run.get(from_stamp) and not run.get(to_stamp)
+    ]
+    if not grouped:
+        raise HTTPException(
+            409, f"no tasks in {req.from_env!r} awaiting promotion to {req.to_env!r}")
+    titles = []
+    for run in grouped:
+        task = tasks.get(run["task_id"]) or {}
+        titles.append(f"- {run['task_id']}: {task.get('title') or ''}")
+    title = f"Promote {req.from_env} → {req.to_env} ({len(grouped)} task(s))"
+    body = "Tasks in this release:\n" + ("\n".join(titles) if titles else "- (none)")
+    try:
+        pr = _lifecycle_git(project_id).promote(from_branch, to_branch, title, body)
+    except gitops.GitError as e:
+        raise HTTPException(409, f"promote failed: {e}")
+    for run in grouped:
+        tasks.add_comment(
+            run["task_id"],
+            body=f"Promotion PR opened {req.from_env} → {req.to_env}: "
+                 f"#{pr.get('pr_number')} {pr.get('pr_url')}",
+            author="system", kind="system",
+        )
+    return pr

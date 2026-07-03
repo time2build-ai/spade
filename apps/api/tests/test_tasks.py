@@ -30,8 +30,10 @@ def test_spd_ids_are_globally_sequential_and_unique():
 def test_move_validates_status():
     _proj()
     t = tasks.create(project_id="acme", title="X")
-    tasks.move(t["id"], "in_progress")
-    assert tasks.get(t["id"])["status"] == "in_progress"
+    # force bypasses the transition guard (admin override): ready -> pr_review is
+    # not a legal forward transition, but force allows the jump.
+    tasks.move(t["id"], "pr_review", force=True)
+    assert tasks.get(t["id"])["status"] == "pr_review"
     with pytest.raises(ValueError):
         tasks.move(t["id"], "bogus")
 
@@ -99,3 +101,33 @@ def test_comments_cascade_on_task_delete():
     tasks.add_comment(t["id"], body="hi")
     tasks.delete(t["id"])
     assert tasks.comments(t["id"]) == []
+
+
+def test_move_rejects_illegal_transition():
+    projects.create(id="p", name="P", path="/w")
+    tid = tasks.create(project_id="p", title="X")["id"]  # status 'ready'
+    with pytest.raises(ValueError):
+        tasks.move(tid, "shipped")  # ready -> shipped is not legal
+
+
+def test_move_allows_legal_transition_chain():
+    projects.create(id="p", name="P", path="/w")
+    tid = tasks.create(project_id="p", title="X")["id"]
+    for nxt in ["shaping", "plan_review", "building", "pr_review", "shipped"]:
+        tasks.move(tid, nxt)
+    assert tasks.get(tid)["status"] == "shipped"
+
+
+def test_move_force_bypasses_transition_rules():
+    projects.create(id="p", name="P", path="/w")
+    tid = tasks.create(project_id="p", title="X")["id"]
+    tasks.move(tid, "shipped", force=True)
+    assert tasks.get(tid)["status"] == "shipped"
+
+
+def test_any_status_can_go_to_blocked_and_back_via_force():
+    projects.create(id="p", name="P", path="/w")
+    tid = tasks.create(project_id="p", title="X")["id"]
+    tasks.move(tid, "shaping")
+    tasks.move(tid, "blocked")  # any -> blocked is always legal
+    assert tasks.get(tid)["status"] == "blocked"

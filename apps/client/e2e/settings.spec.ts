@@ -10,6 +10,12 @@ async function mock(page: Page) {
       json: { projects: [{ id: "p1", name: "Acme Storefront", path: "acme/web", account_strategy: "round_robin", model_ceiling: "opus", autopilot: 1, created_at: "" }] },
     }),
   );
+  await page.route("**/api/projects/*/git", (r) => {
+    if (r.request().method() === "GET") {
+      return r.fulfill({ json: { project_id: "p1", repo_ssh_url: "git@github.com:acme/web.git", dev_branch: "development", staging_branch: "staging", prod_branch: "main", worktrees_root: null, created_at: "" } });
+    }
+    return r.fulfill({ json: {} });
+  });
 }
 
 test.describe("settings", () => {
@@ -53,6 +59,30 @@ test.describe("settings", () => {
     const box = (await groups.boundingBox())!;
     // spans most of the content area (>1000px on the desktop viewport), not capped at 760
     expect(box.width).toBeGreaterThan(1000);
+  });
+
+  test("repository section hydrates from GET and Save PUTs the config", async ({ page }) => {
+    // inputs hydrate from the mocked GET /projects/p1/git
+    await expect(page.getByTestId("repo-group")).toBeVisible();
+    await expect(page.getByTestId("repo-ssh-url")).toHaveValue("git@github.com:acme/web.git");
+    await expect(page.getByTestId("branch-dev")).toHaveValue("development");
+
+    // capture the PUT
+    let put: { url: string; body: unknown } | null = null;
+    await page.route("**/api/projects/p1/git", async (route) => {
+      if (route.request().method() === "PUT") {
+        put = { url: route.request().url(), body: route.request().postDataJSON() };
+        return route.fulfill({ json: {} });
+      }
+      return route.fulfill({ json: { project_id: "p1", repo_ssh_url: "git@github.com:acme/web.git", dev_branch: "development", staging_branch: "staging", prod_branch: "main", worktrees_root: null, created_at: "" } });
+    });
+
+    await page.getByTestId("branch-staging").fill("stage");
+    await page.getByTestId("save-repo").click();
+
+    await expect.poll(() => put).not.toBeNull();
+    expect(put!.url).toContain("/api/projects/p1/git");
+    expect((put!.body as { staging_branch: string }).staging_branch).toBe("stage");
   });
 
   test("danger zone deletes the project and returns home", async ({ page }) => {

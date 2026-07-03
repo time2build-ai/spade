@@ -1,12 +1,106 @@
 export const STATUSES = [
   "ready",
-  "in_progress",
-  "review",
+  // Task Lifecycle V2 phases (brainstorm → ship state machine).
+  "shaping",
+  "plan_review",
+  "building",
+  "pr_review",
+  // The legacy pipeline statuses ('in_progress'/'review') were retired with the
+  // pipeline write path (Chunk 6) and remapped to 'building'/'pr_review' by the
+  // backend db._migrate.
   "shipped",
   "blocked",
 ] as const;
 
 export type Status = (typeof STATUSES)[number];
+
+// -- Task Lifecycle V2 ---------------------------------------------------------
+
+/** A durable per-task lifecycle run (the brainstorm→ship state machine row). */
+export interface LifecycleRun {
+  id: string;
+  project_id: string;
+  task_id: string;
+  phase: string;
+  active: number;
+  branch_name: string | null;
+  worktree_path: string | null;
+  pr_number: number | null;
+  pr_url: string | null;
+  merge_commit: string | null;
+  env_dev_at: string | null;
+  env_staging_at: string | null;
+  env_prod_at: string | null;
+  agent_session_id: string | null;
+  account_id: string | null;
+  blocked_reason: string | null;
+  blocked_from_phase: string | null;
+  self_heal_attempts: number;
+  last_finished_session: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** A code-enforced human approval gate (plan / manual_test / merge). The
+ *  project-scoped waiting list joins in the task title + the run's phase. */
+export interface Gate {
+  id: string;
+  task_id: string;
+  run_id: string;
+  gate: string;
+  status: string;
+  comment: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string | null;
+  // Present on the project waiting list (GET /projects/{id}/gates).
+  task_title?: string | null;
+  phase?: string | null;
+}
+
+/** A document pinned to a task — a repo_path on a branch (spec / plan /
+ *  test_guide / review_report). */
+export interface Artifact {
+  id: string;
+  task_id: string;
+  run_id: string | null;
+  kind: string;
+  title: string | null;
+  repo_path: string | null;
+  branch: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+/** Per-project git config (the separate Repository entity). GET returns {} when
+ *  unconfigured, so every field is optional. */
+export interface ProjectGit {
+  project_id?: string;
+  repo_ssh_url?: string | null;
+  dev_branch?: string | null;
+  staging_branch?: string | null;
+  prod_branch?: string | null;
+  worktrees_root?: string | null;
+  created_at?: string | null;
+}
+
+/** One task in a release lane (furthest env its run has reached). */
+export interface ReleaseItem {
+  run_id: string;
+  task_id: string;
+  title: string | null;
+  merge_commit: string | null;
+  env_dev_at: string | null;
+  env_staging_at: string | null;
+  env_prod_at: string | null;
+}
+
+/** Tasks grouped by deployment env (Development / Staging / Production lanes). */
+export interface ReleaseLanes {
+  dev: ReleaseItem[];
+  staging: ReleaseItem[];
+  prod: ReleaseItem[];
+}
 
 export interface Project {
   id: string;

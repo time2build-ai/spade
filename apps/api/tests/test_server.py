@@ -182,6 +182,93 @@ def test_reconcile_restores_pipeline_linkage():
             server._pollers.pop("psess", None)
 
 
+def test_reconcile_restores_lifecycle_linkage():
+    from tui_pilot import sessions_store, server, lifecycle, projects, tasks, project_git
+
+    projects.create(id="acme", name="Acme", path="/w")
+    project_git.upsert("acme", repo_ssh_url="git@github.com:acme/app.git")
+    tid = tasks.create(project_id="acme", title="Build X")["id"]
+
+    class FakeGit:
+        def prepare_workspace(self, cfg=None, task_id=None, slug=None, kind="feat"):
+            return {"branch_name": "feat/x", "worktree_path": "/wt/x"}
+
+    # start_run stamps agent_session_id from the spawn's returned session id.
+    run = lifecycle.start_run("acme", tid, spawn=lambda r, p: ("lsess", "acct"),
+                              git=FakeGit())
+    sessions_store.insert(id="lsess", status="live", cwd="/wt/x", name="lsess")
+    try:
+        kept = server._reconcile_sessions(is_alive=lambda sid: True)
+        assert "lsess" in kept
+        meta = server._meta["lsess"]
+        assert meta["lifecycle_run_id"] == run["id"]
+        assert meta["lifecycle_phase"] == "shaping"
+        # not pre-advanced, so a finish during downtime still advances
+        assert "lifecycle_advanced" not in meta
+    finally:
+        with server._registry_lock:
+            server._sessions.pop("lsess", None)
+            server._locks.pop("lsess", None)
+            server._meta.pop("lsess", None)
+            server._pollers.pop("lsess", None)
+
+
+def test_collect_lifecycle_advance_once_guard():
+    from tui_pilot import server
+    from tui_pilot.harness import HarnessState
+    from tui_pilot import lifecycle, projects, tasks, project_git
+
+    projects.create(id="acme", name="Acme", path="/w")
+    project_git.upsert("acme", repo_ssh_url="git@github.com:acme/app.git")
+    tid = tasks.create(project_id="acme", title="Build X")["id"]
+
+    class FakeGit:
+        def prepare_workspace(self, cfg=None, task_id=None, slug=None, kind="feat"):
+            return {"branch_name": f"feat/{task_id}", "worktree_path": f"/wt/{task_id}"}
+
+    def _spawn(run):
+        def spawn(run, phase):
+            return (f"sess-{phase}", "acct")
+        return spawn
+
+    run = lifecycle.start_run("acme", tid, spawn=_spawn(None), git=FakeGit())
+    aid = "lsess"
+    server._meta[aid] = {"id": aid, "lifecycle_run_id": run["id"],
+                         "lifecycle_phase": "shaping"}
+    st = HarnessState("done", report='{"spec_path": "s", "plan_path": "p"}')
+    try:
+        first = server._collect_lifecycle_advance(aid, st)
+        assert first == (run["id"], "shaping", '{"spec_path": "s", "plan_path": "p"}')
+        # once-guard: a second collect for the same finished agent yields None
+        assert server._collect_lifecycle_advance(aid, st) is None
+    finally:
+        server._meta.pop(aid, None)
+
+
+def test_env_watch_tick_posts_system_note_on_git_error(monkeypatch):
+    from tui_pilot import server, spade_server, lifecycle, tasks, projects, project_git, db
+
+    projects.create(id="acme", name="Acme", path="/w")
+    project_git.upsert("acme", repo_ssh_url="git@github.com:acme/app.git")
+    tid = tasks.create(project_id="acme", title="X")["id"]
+
+    class FakeGit:
+        def prepare_workspace(self, cfg=None, task_id=None, slug=None, kind="feat"):
+            return {"branch_name": "feat/x", "worktree_path": "/wt/x"}
+
+    run = lifecycle.start_run("acme", tid, spawn=lambda r, p: ("s", "a"), git=FakeGit())
+    db.execute("UPDATE lifecycle_runs SET merge_commit='sha' WHERE id=?", (run["id"],))
+
+    class BoomGit:
+        def commit_reached_branch(self, *a, **k):
+            raise RuntimeError("ssh exploded")
+
+    monkeypatch.setattr(spade_server, "_lifecycle_git", lambda pid: BoomGit())
+    server._run_env_watch_tick()  # must not raise
+    bodies = [c["body"] for c in tasks.comments(tid)]
+    assert any("Environment watch failed" in b for b in bodies)
+
+
 # ---- registry HTTP endpoints ----------------------------------------------
 
 

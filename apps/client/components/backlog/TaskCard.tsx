@@ -2,7 +2,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Priority } from "@/components/ui";
 import { groupNodesByType, type TaskExecState } from "@/lib/adapters";
-import type { BrainNode, Task } from "@/lib/types";
+import type { BrainNode, LifecycleRun, Task } from "@/lib/types";
 
 export interface TaskCardProps {
   task: Task;
@@ -10,6 +10,10 @@ export interface TaskCardProps {
   nodesById: Record<string, BrainNode>;
   /** Dependency-derived readiness (startable / blocked / epic). */
   exec?: TaskExecState;
+  /** The task has a `waiting` lifecycle gate → amber "waiting on you" + Review link. */
+  gated?: boolean;
+  /** The task's active lifecycle run → env badges on shipped cards. */
+  run?: LifecycleRun;
 }
 
 /**
@@ -17,7 +21,7 @@ export interface TaskCardProps {
  * linked intelligence — feedback/bug/decision/metric counts come from the REAL
  * linked brain nodes; the "building" pill reflects the real task status.
  */
-export function TaskCard({ task, nodesById, exec }: TaskCardProps) {
+export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
   const resolved: BrainNode[] = [];
   for (const id of task.nodes) {
     const node = nodesById[id];
@@ -38,7 +42,16 @@ export function TaskCard({ task, nodesById, exec }: TaskCardProps) {
     { k: "metric", color: "var(--teal)", n: links.metrics },
   ];
   const total = segs.reduce((acc, s) => acc + s.n, 0);
-  const building = task.status === "in_progress";
+  const building = task.status === "building";
+
+  // Env badges on shipped cards — the furthest deployment env the run reached.
+  // (Env stamps are only written post-merge, so gate on shipped to match intent.)
+  const envs: { key: "dev" | "staging" | "prod"; label: string; at: string | null | undefined }[] = [
+    { key: "dev", label: "dev", at: run?.env_dev_at },
+    { key: "staging", label: "staging", at: run?.env_staging_at },
+    { key: "prod", label: "prod", at: run?.env_prod_at },
+  ];
+  const reachedEnvs = task.status === "shipped" ? envs.filter((e) => e.at) : [];
 
   return (
     <Link
@@ -69,6 +82,44 @@ export function TaskCard({ task, nodesById, exec }: TaskCardProps) {
         {links.decisions > 0 && <span className="chip decision"><span className="d" />{links.decisions} ADR</span>}
         {links.metrics > 0 && <span className="chip metric"><span className="d" />metric</span>}
       </div>
+
+      {/* Waiting on a human gate — amber banner + inline Review link. The whole
+          card already links to the task, so this reads as a link (not a nested
+          anchor, which would be invalid). */}
+      {gated && (
+        <div
+          className="tc-gate"
+          style={{
+            marginTop: 8, display: "flex", alignItems: "center", gap: 8,
+            padding: "6px 8px", borderRadius: 8,
+            border: "1px solid rgba(230,184,106,.35)",
+            background: "rgba(230,184,106,.08)", color: "var(--amber)", fontSize: 11.5,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--amber)" }} />
+          <span style={{ fontWeight: 500 }}>waiting on you</span>
+          <span data-testid="card-gate-review" style={{ marginLeft: "auto", fontWeight: 500 }}>
+            Review →
+          </span>
+        </div>
+      )}
+
+      {/* Env badges — the furthest deployment env a shipped run has reached. */}
+      {reachedEnvs.length > 0 && (
+        <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {reachedEnvs.map((e) => (
+            <span
+              key={e.key}
+              data-testid={`env-badge-${e.key}`}
+              className="chip"
+              style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".04em" }}
+            >
+              <span className="d" style={{ background: "var(--green)" }} />
+              {e.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="tc-foot">
         <div className="left">

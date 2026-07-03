@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS brain_edges (
   FOREIGN KEY(from_id) REFERENCES brain_nodes(id) ON DELETE CASCADE,
   FOREIGN KEY(to_id) REFERENCES brain_nodes(id) ON DELETE CASCADE
 );
+-- TODO(cleanup, next release): drop pipeline_runs/pipeline_stages. The pipeline
+-- WRITE path was retired in favor of the lifecycle engine (Chunk 6); only the
+-- read endpoints remain for one release of client coexistence.
 CREATE TABLE IF NOT EXISTS pipeline_runs (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL,
   status TEXT DEFAULT 'queued', current_stage INTEGER DEFAULT 0, created_at TEXT,
@@ -90,6 +93,48 @@ CREATE TABLE IF NOT EXISTS pipeline_stages (
   stage_order INTEGER NOT NULL, state TEXT DEFAULT 'queued',
   session_id TEXT, account_id TEXT, created_at TEXT,
   FOREIGN KEY(pipeline_run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
+);
+
+-- Per-project git/GitHub config. One row per project; created on demand.
+CREATE TABLE IF NOT EXISTS project_git (
+  project_id TEXT PRIMARY KEY,
+  repo_ssh_url TEXT,
+  dev_branch TEXT DEFAULT 'development',
+  staging_branch TEXT DEFAULT 'staging',
+  prod_branch TEXT DEFAULT 'main',
+  worktrees_root TEXT,
+  created_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+-- One active lifecycle run per task (history retained). phase is the state-machine node.
+CREATE TABLE IF NOT EXISTS lifecycle_runs (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL,
+  phase TEXT DEFAULT 'shaping', active INTEGER DEFAULT 1,
+  branch_name TEXT, worktree_path TEXT,
+  pr_number INTEGER, pr_url TEXT, merge_commit TEXT,
+  env_dev_at TEXT, env_staging_at TEXT, env_prod_at TEXT,
+  agent_session_id TEXT, account_id TEXT,
+  blocked_reason TEXT, blocked_from_phase TEXT,
+  self_heal_attempts INTEGER DEFAULT 0,
+  last_finished_session TEXT,
+  created_at TEXT, updated_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+-- Durable human gates. Survives restart (unlike in-memory brakes).
+CREATE TABLE IF NOT EXISTS gates (
+  id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT NOT NULL,
+  gate TEXT NOT NULL, status TEXT DEFAULT 'waiting',
+  comment TEXT, decided_by TEXT, decided_at TEXT, created_at TEXT,
+  FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY(run_id) REFERENCES lifecycle_runs(id) ON DELETE CASCADE
+);
+-- Documents pinned to a task: spec | plan | test_guide | review_report.
+CREATE TABLE IF NOT EXISTS artifacts (
+  id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT,
+  kind TEXT NOT NULL, title TEXT,
+  repo_path TEXT, branch TEXT, created_by TEXT, created_at TEXT,
+  FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
 -- Simple key/value app settings (string values; booleans stored as '0'/'1').

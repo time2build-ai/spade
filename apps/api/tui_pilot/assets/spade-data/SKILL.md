@@ -35,7 +35,7 @@ curl -s $B/accounts                        # cloud accounts
 curl -s $B/sessions                        # live agents
 ```
 
-Task `status` is the kanban column: `ready | in_progress | review | shipped | blocked`.
+Task `status` is the kanban column: `ready | shaping | plan_review | building | pr_review | shipped | blocked`.
 Priority is `0`(P0)..`3`. A pipeline run `status` is `queued|running|gated|shipped|paused|failed`;
 its stages are `developer → reviewer → integrator → documentor`, each `queued|running|done|failed`.
 
@@ -52,7 +52,7 @@ curl -s -X PUT $B/current-project -H 'content-type: application/json' -d '{"proj
 curl -s -X POST $B/tasks -H 'content-type: application/json' \
   -d '{"project_id":"<id>","title":"...","feature":"...","priority":1,"description":"..."}'
 # move a task across the kanban
-curl -s -X POST $B/tasks/<task_id>/move -H 'content-type: application/json' -d '{"status":"in_progress"}'
+curl -s -X POST $B/tasks/<task_id>/move -H 'content-type: application/json' -d '{"status":"building"}'
 # ground a task in the brain (link it to nodes for context)
 curl -s -X PUT $B/tasks/<task_id>/nodes -H 'content-type: application/json' -d '{"node_ids":["<n1>","<n2>"]}'
 # link tasks (rel: blocks | related | subtask). "A blocks B" = A must finish before B.

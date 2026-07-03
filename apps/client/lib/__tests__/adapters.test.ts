@@ -142,7 +142,7 @@ describe("tasksByStatus", () => {
     }
     expect(buckets.ready.map((t) => t.id)).toEqual(["SPD-1", "SPD-2"]);
     expect(buckets.shipped.map((t) => t.id)).toEqual(["SPD-3"]);
-    expect(buckets.in_progress).toEqual([]);
+    expect(buckets.building).toEqual([]);
   });
 
   it("ignores tasks with an unknown status", () => {

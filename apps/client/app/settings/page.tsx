@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { mutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { PageHead, TogglePill } from "@/components/ui";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
@@ -42,6 +42,46 @@ export default function SettingsPage() {
 
   const [state, setState] = React.useState<Record<string, boolean>>(initial);
   React.useEffect(() => setState(initial), [initial]);
+
+  // Repository config — the separate ProjectGit entity (repo_ssh_url + the three
+  // env branches). Load current values via SWR; persist via PUT.
+  const gitKey = project ? (["project-git", project.id] as const) : null;
+  const { data: gitData, mutate: mutateGit } = useSWR(gitKey, () => api.projectGit(project!.id));
+  const [repo, setRepo] = React.useState({ repo_ssh_url: "", dev_branch: "", staging_branch: "", prod_branch: "" });
+  const [savingRepo, setSavingRepo] = React.useState(false);
+  const [repoSaved, setRepoSaved] = React.useState(false);
+  const [repoErr, setRepoErr] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (gitData) {
+      setRepo({
+        repo_ssh_url: gitData.repo_ssh_url ?? "",
+        dev_branch: gitData.dev_branch ?? "",
+        staging_branch: gitData.staging_branch ?? "",
+        prod_branch: gitData.prod_branch ?? "",
+      });
+    }
+  }, [gitData]);
+
+  const setRepoField = (k: keyof typeof repo, v: string) => {
+    setRepo((p) => ({ ...p, [k]: v }));
+    setRepoSaved(false);
+  };
+
+  const saveRepo = async () => {
+    if (!project || savingRepo) return;
+    setSavingRepo(true);
+    setRepoErr(null);
+    try {
+      await api.updateProjectGit(project.id, repo);
+      await mutateGit();
+      setRepoSaved(true);
+    } catch (e) {
+      setRepoErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingRepo(false);
+    }
+  };
 
   // Autopilot is a real project column → persist via PATCH (optimistic). Other
   // toggles stay local until their backend columns exist.
@@ -85,6 +125,44 @@ export default function SettingsPage() {
             </section>
           ))}
         </div>
+
+        {/* Repository — the per-project git config that the lifecycle engine
+            clones and promotes across env branches (dev / staging / prod). */}
+        {project && (
+          <section className="set-group" data-testid="repo-group">
+            <div className="set-group-h">Repository</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+              The lifecycle engine clones this repo into a worktree per task and opens PRs against these branches.
+            </div>
+            {[
+              { k: "repo_ssh_url", label: "Repo SSH URL", testid: "repo-ssh-url", placeholder: "git@github.com:org/repo.git", mono: true },
+              { k: "dev_branch", label: "Development branch", testid: "branch-dev", placeholder: "development", mono: true },
+              { k: "staging_branch", label: "Staging branch", testid: "branch-staging", placeholder: "staging", mono: true },
+              { k: "prod_branch", label: "Production branch", testid: "branch-prod", placeholder: "main", mono: true },
+            ].map((f) => (
+              <div className="set-row" data-testid="set-row" key={f.k}>
+                <div className="set-row-text">
+                  <div className="set-row-label">{f.label}</div>
+                </div>
+                <input
+                  data-testid={f.testid}
+                  className={f.mono ? "mono" : undefined}
+                  value={repo[f.k as keyof typeof repo]}
+                  onChange={(e) => setRepoField(f.k as keyof typeof repo, e.target.value)}
+                  placeholder={f.placeholder}
+                  style={{ minWidth: 260, fontSize: 12.5, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-2)", color: "inherit" }}
+                />
+              </div>
+            ))}
+            {repoErr && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 8 }}>{repoErr}</div>}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+              <button type="button" className="btn primary" data-testid="save-repo" onClick={saveRepo} disabled={savingRepo}>
+                {savingRepo ? "Saving…" : "Save repository"}
+              </button>
+              {repoSaved && <span className="muted" style={{ fontSize: 12.5, color: "var(--green)" }}>Saved</span>}
+            </div>
+          </section>
+        )}
 
         {/* Danger zone — delete the project and everything in it. */}
         {project && (

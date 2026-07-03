@@ -6,12 +6,13 @@ import { test, expect, type Page } from "@playwright/test";
  * real conflict drives the two-panel decision conflict. No seeded narrative,
  * no fake ADR-014 / diff / signal cards.
  */
-async function mock(page: Page, brakes: unknown[] = []) {
+async function mock(page: Page, brakes: unknown[] = [], gates: unknown[] = []) {
   await page.route("**/api/brakes", (r) => r.fulfill({ json: { brakes } }));
   await page.route("**/api/projects", (r) =>
     r.fulfill({ json: { projects: [{ id: "p1", name: "Demo", path: "/d", account_strategy: "round_robin", model_ceiling: null, autopilot: 0, created_at: "" }] } }),
   );
   await page.route("**/api/gate/conflict**", (r) => r.fulfill({ json: { conflict: null } }));
+  await page.route("**/api/projects/*/gates", (r) => r.fulfill({ json: { gates } }));
 }
 
 test.describe("gate (real)", () => {
@@ -35,6 +36,37 @@ test.describe("gate (real)", () => {
     await expect(screen.getByRole("button", { name: /Approve & resume/ })).toBeVisible();
     // No real conflict → the no-conflict note, not a seeded ADR conflict.
     await expect(page.getByTestId("gate-no-conflict")).toBeVisible();
+  });
+
+  test("a lifecycle gate renders with no brake present, and Approve calls the endpoint", async ({ page }) => {
+    let approved = false;
+    await mock(page, [], [
+      { id: "g1", task_id: "T-9", run_id: "r9", gate: "plan", status: "waiting", comment: null, decided_by: null, decided_at: null, created_at: "", task_title: "Ship the roadmap", phase: "plan_review" },
+    ]);
+    await page.route("**/api/tasks/*/gates/*/approve", (r) => {
+      approved = true;
+      return r.fulfill({ json: { id: "r9", project_id: "p1", task_id: "T-9", phase: "building", active: 1 } });
+    });
+    await page.goto("/gate");
+    // No brake → the brake wrap is absent, but the lifecycle gate still renders.
+    await expect(page.getByTestId("gate-conflict")).toHaveCount(0);
+    const card = page.getByTestId("lifecycle-gate-card");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("Plan review");
+    await expect(card).toContainText("Ship the roadmap");
+    await card.getByTestId("lifecycle-gate-approve").click();
+    await expect.poll(() => approved).toBe(true);
+  });
+
+  test("lifecycle gates render alongside a brake", async ({ page }) => {
+    await mock(page, [
+      { id: "b1", mission: "SPD-300", brake: "wants a human call", detail: "", worker: "sess_z" },
+    ], [
+      { id: "g1", task_id: "T-9", run_id: "r9", gate: "merge", status: "waiting", comment: null, decided_by: null, decided_at: null, created_at: "", task_title: "Merge auth", phase: "pr_review" },
+    ]);
+    await page.goto("/gate");
+    await expect(page.getByTestId("gate-conflict")).toBeVisible();
+    await expect(page.getByTestId("lifecycle-gate-card")).toBeVisible();
   });
 
   test("a real brain conflict drives the two conflict panels", async ({ page }) => {
