@@ -241,35 +241,46 @@ def advance_fanout(run_id: str, phase: str, idx: int, *, report: str | None,
     (or a duplicate delivery of a ``done`` one) is a no-op — it neither flips the
     row nor registers a finding after synthesis started. After a successful claim,
     the report is stored as an inline ``finding`` artifact and the barrier is
-    (maybe) released via the once-only CAS advance."""
+    (maybe) released via the once-only CAS advance.
+
+    The claim + finding-registration + report link run in a SINGLE ``db.tx()`` so
+    a concurrent ``drop_angle`` on another angle can never observe this row as
+    ``done`` (and win the barrier CAS, spawning synthesis) BEFORE its finding
+    artifact is committed — otherwise a completed angle's findings would be
+    silently dropped from the synthesis context (db.tx is re-entrant, so the
+    nested mark_done/register/set_report calls join this one outer transaction)."""
     run = get(run_id)
     if run is None:
         return
     row = fanout.get_row(run_id, phase, idx)
     if row is None or row["status"] in ("done", "dropped"):
         return  # fast-path: already resolved
-    if not fanout.mark_done(run_id, phase, idx):
-        return  # lost the claim race to a concurrent drop / finish
-    art = artifacts.register(run["task_id"], run_id, "finding",
-                             f"Finding — angle {idx}", content=report, by=phase)
-    fanout.set_report(run_id, phase, idx, art["id"])
+    with db.tx():
+        if not fanout.mark_done(run_id, phase, idx):
+            return  # lost the claim race to a concurrent drop / finish
+        art = artifacts.register(run["task_id"], run_id, "finding",
+                                 f"Finding — angle {idx}", content=report, by=phase)
+        fanout.set_report(run_id, phase, idx, art["id"])
     _release_barrier(run_id, phase, spawn, git)
 
 
 def retry_angle(run_id: str, phase: str, idx: int, *, spawn, git) -> None:
-    """Re-spawn one fan-out angle. Guarded: an already ``done`` or ``dropped`` row
-    is a no-op (with a system note) so a resolved angle is never re-spawned."""
+    """Re-spawn one fan-out angle. Only a ``blocked`` row (a dead/failed agent) is
+    re-spawnable — a ``done``/``dropped`` row is already resolved, and a
+    ``queued``/``running`` one still has a live agent (re-spawning it would leave
+    two live agents racing the same idx). Any non-``blocked`` status is a no-op
+    with a system note."""
     run = get(run_id)
     if run is None:
         return
     row = fanout.get_row(run_id, phase, idx)
     if row is None:
         return
-    if row["status"] in ("done", "dropped"):
+    if row["status"] != "blocked":
         tasks.add_comment(
             run["task_id"],
-            body=f"Retry ignored — fan-out angle [{phase} #{idx}] is already "
-                 f"{row['status']}.",
+            body=f"Retry ignored — fan-out angle [{phase} #{idx}] is "
+                 f"{row['status']}, not blocked.",
             author="system", kind="system",
         )
         return

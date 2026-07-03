@@ -143,6 +143,10 @@ CREATE TABLE IF NOT EXISTS fanout_agents (
   created_at TEXT, updated_at TEXT,
   FOREIGN KEY(run_id) REFERENCES lifecycle_runs(id) ON DELETE CASCADE
 );
+-- One row per (run, phase, idx): a duplicate create_rows fails loudly rather
+-- than silently double-spawning N agents (belt on enter_fanout's rows_for guard).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fanout_run_phase_idx
+  ON fanout_agents(run_id, phase, idx);
 -- Documents pinned to a task: spec | plan | test_guide | review_report.
 CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT,

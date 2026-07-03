@@ -216,6 +216,86 @@ def test_lifecycle_spawn_stamps_distinct_fanout_trigger_key(synth_kind, monkeypa
                 server._meta.pop(k, None)
 
 
+def test_finding_committed_before_synthesis_spawns(synth_kind):
+    """Regression: a done row must never be observable without its finding.
+
+    The finish's claim + finding-registration is a single tx, so when a concurrent
+    drop wins the barrier CAS and spawns synthesis, the finished angle's finding
+    already exists (Chunk 4's synthesis prompt embeds finding CONTENT at spawn —
+    a gap here would silently drop a completed angle's findings)."""
+    class SnapRec(Rec):
+        def __init__(self):
+            super().__init__()
+            self.done_without_finding = None
+            self.findings_at_synthesis = None
+
+        def __call__(self, run, phase):
+            if phase == "synthesis":
+                rows = fanout.rows_for(run["id"], "investigating")
+                self.done_without_finding = [
+                    r for r in rows
+                    if r["status"] == "done" and not r["report_artifact_id"]
+                ]
+                self.findings_at_synthesis = [
+                    a for a in artifacts.for_task(run["task_id"])
+                    if a["kind"] == "finding"
+                ]
+            return super().__call__(run, phase)
+
+    rec = SnapRec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    # race the last finish (idx 0) against a drop (idx 1), which resolves the
+    # barrier: whichever resolver wins the CAS, no done-without-finding is visible.
+    barrier = threading.Barrier(2)
+
+    def do_finish():
+        barrier.wait()
+        lifecycle.advance_fanout(rid, "investigating", 0, report='{"found":1}',
+                                 spawn=rec, git=FakeGit())
+
+    def do_drop():
+        barrier.wait()
+        lifecycle.drop_angle(rid, "investigating", 1, spawn=rec, git=FakeGit())
+
+    t1, t2 = threading.Thread(target=do_finish), threading.Thread(target=do_drop)
+    t1.start(); t2.start(); t1.join(); t2.join()
+    assert lifecycle.get(rid)["phase"] == "synthesis"
+    assert rec.count("synthesis") == 1
+    # the invariant: at synthesis spawn, every done row already had its finding
+    assert rec.done_without_finding == []
+    assert len(rec.findings_at_synthesis) == 1     # the finished angle's finding
+
+
+def test_create_rows_rejects_duplicate_idx(synth_kind):
+    """The UNIQUE(run_id, phase, idx) index makes a duplicate create_rows fail
+    loudly rather than silently double-spawning (belt on the rows_for fast-path)."""
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    fanout.create_rows(rid, "investigating", ["a", "b"])
+    with pytest.raises(Exception):
+        fanout.create_rows(rid, "investigating", ["c"])
+
+
+def test_retry_angle_only_respawns_blocked_rows(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    # rows are 'running' after spawn — retrying one must NOT spawn a second agent
+    before = rec.count("investigating")
+    lifecycle.retry_angle(rid, "investigating", 0, spawn=rec, git=FakeGit())
+    assert rec.count("investigating") == before
+    # only a blocked row re-spawns
+    fanout.block(rid, "investigating", 0)
+    lifecycle.retry_angle(rid, "investigating", 0, spawn=rec, git=FakeGit())
+    assert rec.count("investigating") == before + 1
+
+
 def test_concurrent_drop_vs_finish_resolves_to_one_advance(synth_kind):
     rec = Rec()
     run = _start_synth(synth_kind, rec)
