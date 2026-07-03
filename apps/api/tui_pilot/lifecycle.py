@@ -460,18 +460,24 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
             _consume_gate()
         else:
             # Plain phase move (code plan gate): advance to approve_next and spawn
-            # its agent (if that phase spawns one).
-            _consume_gate()
+            # its agent (if that phase spawns one). An unregistered gate (no
+            # approve_next) is a no-op, matching V2's implicit else.
             nxt = adv.get("approve_next")
+            if nxt is None:
+                return
+            _consume_gate()
             _set_run(run_id, phase=nxt)
             tasks.move(tid, nxt)
             if nxt in lifecycle_templates.agent_phases(kind):
                 _spawn_phase(get(run_id), nxt, spawn)
     elif decision == "changes_requested":
-        _consume_gate()
         # Rework: return to the gate's changes_target and re-spawn it with the
-        # reviewer's comment (code: plan→shaping, manual_test/merge→building).
+        # reviewer's comment (code: plan→shaping, manual_test/merge→building). An
+        # unregistered gate (no changes_target) is a no-op.
         target = adv.get("changes_target")
+        if target is None:
+            return
+        _consume_gate()
         _set_run(run_id, phase=target)
         tasks.move(tid, target, force=True)
         _spawn_phase(get(run_id), target, spawn, resume_comment=comment)
