@@ -12,6 +12,7 @@ from . import (
     lifecycle_git, lifecycle_templates, meeting_samples, meetings, pipelines,
     project_git, projects, sprints, tasks,
 )
+from . import router as task_router
 
 router = APIRouter()
 
@@ -60,6 +61,11 @@ class LinkCreate(BaseModel):
     rel: str
 
 
+class KindConfirm(BaseModel):
+    kind: str
+    doc_template: str | None = None
+
+
 # ---- helpers ----------------------------------------------------------------
 
 def _task_or_404(task_id: str) -> dict:
@@ -96,7 +102,11 @@ def create_task(req: TaskCreate) -> dict:
         origin_quote=req.origin_quote,
         origin_source=req.origin_source,
     )
-    return _enrich(t)
+    # Route on creation: store the router's suggestion (advisory), NOT the
+    # authoritative kind — a human (or Start) confirms it later.
+    guess = task_router.classify(req.title, req.description or "")
+    tasks.set_suggestion(t["id"], guess["kind"], guess["reason"])
+    return _enrich(tasks.get(t["id"]))
 
 
 @router.get("/tasks/{task_id}")
@@ -164,6 +174,41 @@ def add_task_link(task_id: str, req: LinkCreate) -> dict:
         raise HTTPException(400, "a task cannot link to itself")
     tasks.add_link(task_id, req.to_task, req.rel)
     return _enrich(tasks.get(task_id))
+
+
+@router.post("/tasks/{task_id}/kind")
+def confirm_task_kind(task_id: str, req: KindConfirm) -> dict:
+    """Confirm / override a task's lifecycle ``kind``.
+
+    Rejected with 409 once ANY lifecycle run exists for the task (active OR
+    terminal) — the kind is locked at Start and stays locked through
+    shipped/delivered. The guard lives here (not in ``tasks.set_kind``) because
+    ``lifecycle`` imports ``tasks``; calling ``lifecycle`` from the setter would
+    be a circular import.
+    """
+    _task_or_404(task_id)
+    if req.kind not in tasks.KINDS:
+        raise HTTPException(400, f"invalid kind {req.kind!r}; must be one of {tasks.KINDS}")
+    if lifecycle.has_run_for_task(task_id):
+        raise HTTPException(409, f"task {task_id!r} has a lifecycle run; kind is locked")
+    tasks.set_kind(task_id, req.kind, doc_template=req.doc_template)
+    return _enrich(tasks.get(task_id))
+
+
+@router.post("/projects/{project_id}/route-untyped")
+def route_untyped(project_id: str) -> dict:
+    """Backfill: classify every null-``kind`` task in the project, storing the
+    router's suggestion (leaves the authoritative kind untouched)."""
+    if projects.get(project_id) is None:
+        raise HTTPException(404, f"no project {project_id!r}")
+    routed = 0
+    for t in tasks.list_for_project(project_id):
+        if t.get("kind") is not None:
+            continue
+        guess = task_router.classify(t["title"], t.get("description") or "")
+        tasks.set_suggestion(t["id"], guess["kind"], guess["reason"])
+        routed += 1
+    return {"project_id": project_id, "routed": routed}
 
 
 @router.delete("/tasks/{task_id}/links/{link_id}")
@@ -697,11 +742,32 @@ def _furthest_env(run: dict) -> str | None:
 def lifecycle_start(req: LifecycleStart) -> dict:
     if projects.get(req.project_id) is None:
         raise HTTPException(404, f"no project {req.project_id!r}")
-    if tasks.get(req.task_id) is None:
+    task = tasks.get(req.task_id)
+    if task is None:
         raise HTTPException(404, f"no task {req.task_id!r}")
-    cfg = project_git.get(req.project_id)
-    if not cfg or not cfg.get("repo_ssh_url"):
-        raise HTTPException(404, f"project {req.project_id!r} has no configured repo")
+    # Resolve + LOCK the kind onto the task before start_run reads it. Precedence:
+    # confirmed kind → router suggestion → code default.
+    if task.get("kind"):
+        kind, source = task["kind"], "confirmed"
+    elif task.get("kind_suggested"):
+        kind, source = task["kind_suggested"], "router suggestion"
+    else:
+        kind, source = "code", "default"
+    if kind not in tasks.KINDS:
+        kind, source = "code", "default"
+    if not task.get("kind"):
+        tasks.set_kind(req.task_id, kind, doc_template=task.get("doc_template"))
+        tasks.add_comment(
+            req.task_id,
+            body=f"Lifecycle kind resolved to {kind!r} ({source}).",
+            author="system", kind="system",
+        )
+    # The repo hard-requirement is KIND-CONDITIONAL: only kinds whose first phase
+    # needs a workspace (code) require a configured repo; research/docs don't.
+    if lifecycle_templates.needs_workspace(kind):
+        cfg = project_git.get(req.project_id)
+        if not cfg or not cfg.get("repo_ssh_url"):
+            raise HTTPException(404, f"project {req.project_id!r} has no configured repo")
     try:
         return lifecycle.start_run(
             req.project_id, req.task_id,

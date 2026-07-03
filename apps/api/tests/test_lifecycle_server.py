@@ -295,3 +295,116 @@ def test_promote_empty_returns_409(monkeypatch):
     r = c.post("/projects/acme/promote", json={"from_env": "dev", "to_env": "staging"})
     assert r.status_code == 409
     assert not any(call and call[0] == "promote" for call in git.calls)
+
+
+# ---- Task 3.2: routing / kind endpoints -----------------------------------
+
+def test_create_task_populates_kind_suggestion():
+    projects.create(id="acme", name="Acme", path="/w")
+    from tui_pilot.server import app
+    c = TestClient(app)
+    t = c.post("/tasks", json={"project_id": "acme",
+                               "title": "Investigate auth perf"}).json()
+    assert t["kind"] is None
+    assert t["kind_suggested"] == "research"
+    assert isinstance(t["kind_reason"], str) and t["kind_reason"]
+
+
+def test_route_untyped_tags_all_null_kind_tasks():
+    projects.create(id="acme", name="Acme", path="/w")
+    from tui_pilot.server import app
+    c = TestClient(app)
+    a = c.post("/tasks", json={"project_id": "acme", "title": "Write the SOW"}).json()
+    b = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()
+    # confirm one so it already has a kind and is skipped by the batch
+    c.post(f"/tasks/{b['id']}/kind", json={"kind": "code"})
+    r = c.post("/projects/acme/route-untyped")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["routed"] >= 1
+    assert c.get(f"/tasks/{a['id']}").json()["kind_suggested"] == "docs"
+
+
+def test_confirm_kind_sets_kind_then_409_after_run(monkeypatch):
+    _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
+    r = c.post(f"/tasks/{tid}/kind", json={"kind": "docs", "doc_template": "sow"})
+    assert r.status_code == 200
+    row = c.get(f"/tasks/{tid}").json()
+    assert row["kind"] == "docs" and row["doc_template"] == "sow"
+    # confirm to code and start a run (code needs a repo, which _project set up)
+    c.post(f"/tasks/{tid}/kind", json={"kind": "code"})
+    c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
+    # now kind is locked → 409
+    r2 = c.post(f"/tasks/{tid}/kind", json={"kind": "research"})
+    assert r2.status_code == 409 and "detail" in r2.json()
+
+
+def test_confirm_kind_unknown_task_404():
+    from tui_pilot.server import app
+    c = TestClient(app)
+    assert c.post("/tasks/SPD-999/kind", json={"kind": "code"}).status_code == 404
+
+
+def test_start_no_workspace_kind_does_not_require_repo(monkeypatch):
+    # The repo hard-requirement is KIND-CONDITIONAL: a kind whose template says
+    # needs_workspace=False must NOT require a configured repo. The REAL research/
+    # docs templates land in Chunks 4/5; here we inject a SYNTHETIC no-workspace
+    # kind (mirroring Chunk 2's fan-out test) to prove the conditional in isolation
+    # — then clean it up so it never persists.
+    from tui_pilot import lifecycle_templates
+    git = _patch(monkeypatch)
+    projects.create(id="acme", name="Acme", path="/w")  # NO repo configured
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Look into caching"}).json()["id"]
+    # confirm the task onto the synthetic kind (reuse the real 'research' KIND slot,
+    # whose template we inject below). scoping is already a valid task STATUS.
+    lifecycle_templates.LIFECYCLE_TEMPLATES["research"] = {
+        "terminal_status": "delivered",
+        "needs_workspace": False,
+        "phases": [{"name": "scoping", "agent": True, "fanout": False,
+                    "gate": None, "column": "Planning"}],
+        "gate_advances": {},
+    }
+    lifecycle_templates.transition_pairs.cache_clear()
+    try:
+        c.post(f"/tasks/{tid}/kind", json={"kind": "research"})
+        r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
+        assert r.status_code == 200, r.text
+        run = r.json()
+        assert run["kind"] == "research" and run["phase"] == "scoping"
+        assert c.get(f"/tasks/{tid}").json()["kind"] == "research"
+        # needs_workspace False → git.prepare_workspace is NOT called
+        assert not any(call[0] == "prepare" for call in git.calls)
+    finally:
+        del lifecycle_templates.LIFECYCLE_TEMPLATES["research"]
+        lifecycle_templates.transition_pairs.cache_clear()
+
+
+def test_start_code_kind_still_requires_repo(monkeypatch):
+    # The other half of the conditional: code needs_workspace=True → still 404s
+    # without a configured repo.
+    _patch(monkeypatch)
+    projects.create(id="acme", name="Acme", path="/w")  # NO repo
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
+    r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
+    assert r.status_code == 404
+
+
+def test_start_writes_resolved_kind_default_code(monkeypatch):
+    _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    c = TestClient(app)
+    # a plain code title with kind_suggested=code
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
+    r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
+    assert r.status_code == 200
+    assert r.json()["kind"] == "code"
+    assert c.get(f"/tasks/{tid}").json()["kind"] == "code"

@@ -66,6 +66,19 @@ def active_run_for_task(task_id: str) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
+def has_run_for_task(task_id: str) -> bool:
+    """True if the task has ANY lifecycle run — active OR terminal.
+
+    Used by the kind-confirm endpoint to lock the kind once a run exists: spec §3
+    locks kind at Start and it must stay locked through shipped/delivered, so this
+    matches any row (not just the active one).
+    """
+    rows = db.query(
+        "SELECT 1 FROM lifecycle_runs WHERE task_id = ? LIMIT 1", (task_id,)
+    )
+    return bool(rows)
+
+
 def run_by_session(session_id: str) -> dict | None:
     """The active run whose current phase agent is ``session_id`` (or None).
 

@@ -25,6 +25,9 @@ STATUSES = ["ready", "shaping", "plan_review", "building", "pr_review",
 # "related" is symmetric. See add_link / links for semantics.
 LINK_RELS = ["blocks", "related", "subtask"]
 
+# Lifecycle kinds the task-type router can assign (see router.classify).
+KINDS = ["code", "research", "docs"]
+
 _WRITABLE_COLS = {"title", "feature", "priority", "description", "origin_quote", "origin_source"}
 
 
@@ -149,6 +152,39 @@ def move(id: str, status: str, force: bool = False) -> None:
         raise ValueError(f"illegal transition {current!r} -> {status!r}")
     with db.tx() as cx:
         cx.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, id))
+
+
+# -- Kind (task-type router) --------------------------------------------------
+
+def set_kind(task_id: str, kind: str, doc_template: str | None = None) -> None:
+    """Set a task's resolved lifecycle ``kind`` (+ optional ``doc_template``).
+
+    A **pure setter**: writes the columns; it does NOT validate ``kind`` against
+    ``KINDS`` (callers/tests may inject synthetic kinds), does NOT import
+    ``lifecycle``, and does NOT enforce the run-existence lock. Kind validation
+    and the "kind is locked once a run exists" guard both live in the endpoint
+    layer (spade_server), because ``lifecycle`` already imports ``tasks`` and
+    calling back the other way here would be a circular import.
+    """
+    with db.tx() as cx:
+        cx.execute(
+            "UPDATE tasks SET kind = ?, doc_template = ? WHERE id = ?",
+            (kind, doc_template, task_id),
+        )
+
+
+def set_suggestion(task_id: str, kind_suggested: str, kind_reason: str) -> None:
+    """Store the router's *suggestion* (not the resolved kind) on a task.
+
+    Written at create time and by the ``route-untyped`` backfill. Leaves the
+    authoritative ``kind`` column untouched — a suggestion is advisory until a
+    human (or Start) confirms it.
+    """
+    with db.tx() as cx:
+        cx.execute(
+            "UPDATE tasks SET kind_suggested = ?, kind_reason = ? WHERE id = ?",
+            (kind_suggested, kind_reason, task_id),
+        )
 
 
 # -- Grounding (task_nodes) ---------------------------------------------------
