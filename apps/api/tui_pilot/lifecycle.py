@@ -27,9 +27,9 @@ from tui_pilot import (
     artifacts, db, gates, gitops, lifecycle_templates, project_git, tasks,
 )
 
-PHASES = ["shaping", "plan_review", "building", "pr_review", "shipped", "blocked"]
-AGENT_PHASES = {"shaping", "building", "pr_review"}   # phases that spawn an agent
-GATES = {"plan", "manual_test", "merge"}
+# The phase list, agent-phase set, and gate set now live in lifecycle_templates
+# (the per-kind registry) — the engine reads them from there so there is a single
+# source of truth. Do NOT reintroduce module-level copies here.
 
 _MAX_SELF_HEAL = 3
 

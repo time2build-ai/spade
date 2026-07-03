@@ -49,3 +49,10 @@ def test_gate_advance_edges_are_transition_pairs():
     # plan gate: source phase is plan_review (where the run sits while gate waits)
     assert ("plan_review", "building") in pairs
     assert ("plan_review", "shaping") in pairs
+
+
+def test_v2_self_loops_preserved():
+    # V2's TRANSITIONS had building->building and pr_review->pr_review self-loops.
+    pairs = LT.transition_pairs()
+    assert ("building", "building") in pairs
+    assert ("pr_review", "pr_review") in pairs

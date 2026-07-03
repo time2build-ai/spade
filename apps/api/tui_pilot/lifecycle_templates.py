@@ -34,6 +34,8 @@ IMPORTANT (V2 parity): a gate is not a phase. ``review`` is a reserved gate id
 
 from __future__ import annotations
 
+import functools
+
 LIFECYCLE_TEMPLATES: dict[str, dict] = {
     "code": {
         "terminal_status": "shipped",
@@ -141,19 +143,27 @@ def _gate_source_phase(kind: str, gate: str, adv: dict) -> str | None:
     return None
 
 
-def transition_pairs() -> set[tuple[str, str]]:
+@functools.cache
+def transition_pairs() -> frozenset[tuple[str, str]]:
     """Union across all templates of legal ``(from, to)`` status transitions.
 
     (a) consecutive ``(phase[i], phase[i+1])`` pairs;
     (b) each gate's ``(source_phase, approve_next)`` and ``(source_phase,
         changes_target)`` edges;
-    (c) the entry edge ``(ready, first_phase(kind))`` — ``start_run`` does a
+    (c) a self-loop ``(source_phase, source_phase)`` for any gate whose run waits
+        at an AGENT phase — that phase can re-spawn / re-review without leaving
+        itself (V2 parity: building→building via manual_test, pr_review→pr_review
+        via merge; plan's source is the non-agent plan_review, so no self-loop);
+    (d) the entry edge ``(ready, first_phase(kind))`` — ``start_run`` does a
         non-forced ``tasks.move(task_id, first_phase(kind))``, so without this a
         non-code start would raise an illegal-transition error.
+
+    Cached: the registry is static at import, so the pair set never changes.
     """
     pairs: set[tuple[str, str]] = set()
     for kind in LIFECYCLE_TEMPLATES:
         names = [p["name"] for p in phases(kind)]
+        agents = agent_phases(kind)
         for a, b in zip(names, names[1:]):
             pairs.add((a, b))
         for gate, adv in gate_advances(kind).items():
@@ -164,5 +174,7 @@ def transition_pairs() -> set[tuple[str, str]]:
                 pairs.add((src, adv["approve_next"]))
             if adv.get("changes_target"):
                 pairs.add((src, adv["changes_target"]))
+            if src in agents:
+                pairs.add((src, src))          # re-spawn/re-review self-loop
         pairs.add(("ready", first_phase(kind)))
-    return pairs
+    return frozenset(pairs)
