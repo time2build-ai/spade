@@ -1022,13 +1022,27 @@ def get_artifact_content(task_id: str, artifact_id: str) -> dict:
 # `/lifecycle`, `/brain`, etc. routes. Read-only; serves a `doc` artifact's
 # BODY-only content wrapped ONCE in the shared render_shell (no double-shell).
 
+# Belt-and-suspenders with render_shell's body sanitizer: a restrictive CSP so
+# even if malicious markup slips the regex strip, the browser runs no script and
+# fetches nothing external (render_shell is self-contained — inline styles + inline
+# SVG only). nosniff stops content-type confusion on this shareable surface.
+_DOC_HEADERS = {
+    "Content-Security-Policy":
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
 @router.get("/doc/{artifact_id}", response_class=HTMLResponse)
 def get_doc(artifact_id: str) -> HTMLResponse:
     art = artifacts.get(artifact_id)
     if art is None or art.get("kind") != "doc":
         raise HTTPException(404, f"no doc artifact {artifact_id!r}")
     title = art.get("title") or "Document"
-    return HTMLResponse(doc_templates.render_shell(title, art.get("content") or ""))
+    return HTMLResponse(
+        doc_templates.render_shell(title, art.get("content") or ""),
+        headers=_DOC_HEADERS,
+    )
 
 
 @router.get("/projects/{project_id}/git")

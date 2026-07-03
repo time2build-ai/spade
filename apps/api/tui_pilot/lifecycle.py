@@ -678,7 +678,10 @@ def _advance_drafting(run: dict, report: str | None, spawn, git) -> None:
     if data is None:
         return
     tid = run["task_id"]
-    artifacts.register(tid, run["id"], "doc", "Document",
+    # Title the doc with the TASK title so the shared /doc/{id} page (which renders
+    # the artifact title as <title>/<h1>) is not generically "Document".
+    doc_title = (tasks.get(tid) or {}).get("title") or "Document"
+    artifacts.register(tid, run["id"], "doc", doc_title,
                        content=data.get("doc_html") or "", by="drafting")
     tasks.add_comment(tid, body=data.get("summary") or "Draft ready.",
                       author="drafting", kind="progress")

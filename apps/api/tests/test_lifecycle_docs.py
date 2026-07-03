@@ -177,6 +177,8 @@ def test_drafting_finish_registers_doc_body_only_and_opens_review():
     assert "<head" not in body.lower()
     g = gates.gate_for(run["id"], "review")
     assert g is not None and g["status"] == "waiting"
+    # the doc artifact is titled with the TASK title (not a hardcoded "Document")
+    assert docs[0]["title"] == tasks.get(tid)["title"]
 
 
 def test_drafting_bad_json_blocks():

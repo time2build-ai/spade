@@ -17,6 +17,7 @@ pure-data pieces:
 from __future__ import annotations
 
 import html as _html
+import re
 
 # Per doc-template required sections (the drafting prompt embeds these; the agent
 # emits one <section> per required section). Order is the document order.
@@ -114,6 +115,51 @@ body {
 """.strip()
 
 
+# -- body hardening -----------------------------------------------------------
+# The /doc/{id} route is a SHAREABLE top-level navigation at the API origin (NOT
+# the client's sandboxed iframe), and the body is agent-authored HTML — buggy or
+# prompt-injected (via the task title/description) content could carry <script>,
+# inline `on*=` handlers, or `javascript:` URLs → stored XSS at the API origin.
+# The drafting prompt only *asks* for script-free body-only output; this enforces
+# it. NOT a full HTML sanitizer — a deliberately simple regex strip sufficient for
+# this internal surface, paired with a restrictive CSP on the response.
+
+_SCRIPT_RE = re.compile(r"(?is)<script\b.*?</script\s*>")
+_BARE_SCRIPT_RE = re.compile(r"(?is)</?script\b[^>]*>")
+_ON_ATTR_RE = re.compile(r"""(?i)\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
+_JS_URL_RE = re.compile(r"(?i)javascript:")
+# outer full-document wrapper the agent may emit despite the body-only instruction
+_DOCTYPE_RE = re.compile(r"(?is)<!doctype[^>]*>")
+_HEAD_RE = re.compile(r"(?is)<head\b.*?</head\s*>")
+_BODY_INNER_RE = re.compile(r"(?is)<body\b[^>]*>(.*?)</body\s*>")
+_HTML_TAGS_RE = re.compile(r"(?is)</?(?:html|head|body)\b[^>]*>")
+
+
+def _strip_outer_shell(body: str) -> str:
+    """Single-wrap defense: if the agent emitted a full ``<html>``/``<body>``
+    document (ignoring the body-only instruction), reduce it to the inner body
+    content so ``render_shell`` doesn't produce a nested double-document. The
+    agent ``<head>`` (and any ``<style>`` in it) is dropped — the house style
+    wins."""
+    b = _DOCTYPE_RE.sub("", body)
+    b = _HEAD_RE.sub("", b)
+    m = _BODY_INNER_RE.search(b)
+    if m:
+        b = m.group(1)
+    return _HTML_TAGS_RE.sub("", b)
+
+
+def sanitize_body(body: str) -> str:
+    """Strip scripts, inline event handlers, and ``javascript:`` URLs from an
+    agent-authored doc body (after unwrapping any outer document shell)."""
+    b = _strip_outer_shell(body or "")
+    b = _SCRIPT_RE.sub("", b)
+    b = _BARE_SCRIPT_RE.sub("", b)      # lone/unclosed <script ...> too
+    b = _ON_ATTR_RE.sub("", b)
+    b = _JS_URL_RE.sub("", b)
+    return b
+
+
 def render_shell(title: str, body_html: str) -> str:
     """Wrap a doc's BODY sections in the full styled, theme-aware HTML document.
 
@@ -124,6 +170,7 @@ def render_shell(title: str, body_html: str) -> str:
     body-only), so there is never a double-shell.
     """
     safe_title = _html.escape(title or "Document")
+    safe_body = sanitize_body(body_html or "")
     return (
         "<!doctype html>\n"
         '<html lang="en">\n<head>\n'
@@ -134,6 +181,6 @@ def render_shell(title: str, body_html: str) -> str:
         "</head>\n<body>\n"
         '<article class="doc">\n'
         f'<h1 class="doc-title">{safe_title}</h1>\n'
-        f"{body_html or ''}\n"
+        f"{safe_body}\n"
         "</article>\n</body>\n</html>"
     )
