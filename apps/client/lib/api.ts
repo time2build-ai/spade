@@ -14,7 +14,9 @@ import type {
   FeedbackClusterReal,
   GateConflictSide,
   Integration,
+  Kind,
   LifecycleRun,
+  LifecycleTemplates,
   Meeting,
   MeetingIngestResult,
   MeetingSample,
@@ -217,6 +219,25 @@ export const api = {
       body: JSON.stringify({ project_id: projectId, task_id: taskId }),
     }),
   lifecycle: (runId: string) => http<LifecycleRun>(`/lifecycle/${runId}`),
+  // -- Task-Type Router ------------------------------------------------------
+  // The per-kind board mapping (kind → phase → column) + gate/artifact labels,
+  // so the board and task view don't hardcode a second copy of the registry.
+  templates: () => http<LifecycleTemplates>("/lifecycle/templates"),
+  // Confirm / override a task's lifecycle kind (409s once a run exists — locked).
+  setKind: (taskId: string, kind: Kind, docTemplate?: string) =>
+    http<Task>(`/tasks/${taskId}/kind`, {
+      method: "POST",
+      body: JSON.stringify({ kind, doc_template: docTemplate ?? null }),
+    }),
+  // Backfill: classify every null-kind task in the project, storing suggestions.
+  routeUntyped: (projectId: string) =>
+    http<{ project_id: string; routed: number }>(
+      `/projects/${projectId}/route-untyped`,
+      { method: "POST" },
+    ),
+  // The shareable styled-doc URL for a `doc` artifact. NOT an http<T> call — it's
+  // an <iframe> src. Next only proxies `/api/:path*`, so it must be `/api/doc/…`.
+  docUrl: (artifactId: string) => `/api/doc/${artifactId}`,
   lifecycleList: (projectId: string) =>
     http<{ runs: LifecycleRun[] }>(
       `/lifecycle?project_id=${encodeURIComponent(projectId)}`,

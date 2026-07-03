@@ -45,4 +45,41 @@ describe("api client", () => {
     mockFetch("boom", false, 500);
     await expect(api.projects()).rejects.toThrow(/500/);
   });
+
+  // -- Task-Type Router ------------------------------------------------------
+
+  it("GETs the lifecycle templates mapping", async () => {
+    const fetchMock = mockFetch({ templates: {}, gate_labels: {}, artifact_labels: {} });
+    await api.templates();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/lifecycle/templates");
+  });
+
+  it("POSTs kind + doc_template when confirming a kind", async () => {
+    const fetchMock = mockFetch({ id: "SPD-1" });
+    await api.setKind("SPD-1", "docs", "sow");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/tasks/SPD-1/kind");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ kind: "docs", doc_template: "sow" }));
+  });
+
+  it("sends a null doc_template when omitted", async () => {
+    const fetchMock = mockFetch({ id: "SPD-1" });
+    await api.setKind("SPD-1", "research");
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({ kind: "research", doc_template: null }),
+    );
+  });
+
+  it("POSTs to route-untyped for a project", async () => {
+    const fetchMock = mockFetch({ project_id: "p1", routed: 3 });
+    await api.routeUntyped("p1");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/projects/p1/route-untyped");
+    expect(init.method).toBe("POST");
+  });
+
+  it("builds the /api/doc/{id} url (Next proxies /api/*)", () => {
+    expect(api.docUrl("art-9")).toBe("/api/doc/art-9");
+  });
 });
