@@ -23,7 +23,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from tui_pilot import artifacts, db, gates, project_git, tasks
+from tui_pilot import artifacts, db, gates, gitops, project_git, tasks
 
 PHASES = ["shaping", "plan_review", "building", "pr_review", "shipped", "blocked"]
 AGENT_PHASES = {"shaping", "building", "pr_review"}   # phases that spawn an agent
@@ -398,23 +398,47 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
     g = gates.gate_for(run_id, gate)
     if g is None or g["status"] != "waiting":
         return
-    gates.decide(g["id"], decision, comment=comment, by=by)
     tid = run["task_id"]
-    tasks.add_comment(
-        tid,
-        body=f"{gate} gate: {decision}" + (f" — {comment}" if comment else ""),
-        author=by or "human", kind="gate",
-    )
+
+    def _consume_gate() -> None:
+        gates.decide(g["id"], decision, comment=comment, by=by)
+        tasks.add_comment(
+            tid,
+            body=f"{gate} gate: {decision}" + (f" — {comment}" if comment else ""),
+            author=by or "human", kind="gate",
+        )
+
     if decision == "approved":
         if gate == "plan":
+            _consume_gate()
             _set_run(run_id, phase="building")
             tasks.move(tid, "building")
             _spawn_phase(get(run_id), "building", spawn)
-        elif gate == "manual_test":
-            _approve_manual_test(get(run_id), spawn, git)
-        elif gate == "merge":
-            _approve_merge(get(run_id), git)
+        elif gate in ("manual_test", "merge"):
+            # manual_test→open_pr and merge→git.merge have an irreversible git
+            # side-effect. Run it FIRST: only consume the gate once it succeeds.
+            # On GitError we _block() the run (recoverable via retry()) and RETURN
+            # with the gate still 'waiting' — never a consumed dead-end that a
+            # retried approve would no-op on. retry() resumes the producing phase
+            # (building for manual_test, pr_review for merge), which re-spawns the
+            # agent and, on success, opens a fresh gate.
+            try:
+                if gate == "manual_test":
+                    _approve_manual_test(get(run_id), spawn, git)
+                else:
+                    _approve_merge(get(run_id), git)
+            except gitops.GitError as e:
+                producing = "building" if gate == "manual_test" else "pr_review"
+                _block(
+                    get(run_id), producing,
+                    f"{gate} approve failed on a git operation",
+                    note=f"{gate} gate approve failed on a git operation; blocking "
+                         f"so it can be retried after fixing the cause.\n\n{e}",
+                )
+                return
+            _consume_gate()
     elif decision == "changes_requested":
+        _consume_gate()
         if gate == "plan":
             _set_run(run_id, phase="shaping")
             tasks.move(tid, "shaping", force=True)

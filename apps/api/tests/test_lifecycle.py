@@ -236,6 +236,71 @@ def test_merge_request_changes_sends_back_to_building_not_stranded():
     assert ("merge",) not in git.calls
 
 
+# -- Robustness: gate git side-effect failure blocks (not strands) ------------
+
+class _OpenPRRaisesGit(FakeGit):
+    def open_pr(self, *a, **k):
+        from tui_pilot import gitops
+        self.calls.append(("open_pr_attempt",))
+        raise gitops.GitError("gh pr create failed")
+
+
+class _MergeRaisesGit(FakeGit):
+    def merge(self, *a, **k):
+        from tui_pilot import gitops
+        self.calls.append(("merge_attempt",))
+        raise gitops.GitError("gh pr merge failed")
+
+
+def test_manual_test_approve_git_error_blocks_and_leaves_gate_waiting():
+    from tui_pilot import gates
+    tid = _setup()
+    git = _OpenPRRaisesGit()
+    # drive to a waiting manual_test gate
+    run = _build(tid)
+    lifecycle.advance(run["id"], phase="building",
+                      report='{"tests":"green","test_guide_path":"docs/tg.md"}',
+                      spawn=_spawn, git=git)
+    lifecycle.decide_gate(run["id"], "manual_test", "approved", spawn=_spawn, git=git)
+    r = lifecycle.get(run["id"])
+    # run blocked (recoverable), NOT stranded in a consumed-gate dead-end
+    assert r["phase"] == "blocked"
+    assert r["blocked_from_phase"] == "building"
+    assert r["active"] == 1
+    assert tasks.get(tid)["status"] == "blocked"
+    # the gate is NOT consumed — it can be re-decided after a retry re-opens things
+    g = gates.gate_for(run["id"], "manual_test")
+    assert g["status"] == "waiting"
+    # retry re-spawns the producing (building) agent
+    seen = {}
+    def rec(run, phase): seen["phase"] = phase; return ("s2", "a")
+    lifecycle.retry(run["id"], spawn=rec, git=FakeGit())
+    assert seen["phase"] == "building"
+    assert lifecycle.get(run["id"])["phase"] == "building"
+
+
+def test_merge_approve_git_error_blocks_and_leaves_gate_waiting():
+    from tui_pilot import gates
+    tid = _setup()
+    git = _MergeRaisesGit()
+    run = _to_pr_review(tid, git)
+    lifecycle.advance(run["id"], phase="pr_review",
+                      report='{"findings":[],"summary":"ok"}', spawn=_spawn, git=git)
+    lifecycle.decide_gate(run["id"], "merge", "approved", spawn=_spawn, git=git)
+    r = lifecycle.get(run["id"])
+    assert r["phase"] == "blocked"
+    assert r["blocked_from_phase"] == "pr_review"
+    assert r["active"] == 1  # not shipped
+    assert not r["merge_commit"]
+    g = gates.gate_for(run["id"], "merge")
+    assert g["status"] == "waiting"  # gate not consumed
+    seen = {}
+    def rec(run, phase): seen["phase"] = phase; return ("s2", "a")
+    lifecycle.retry(run["id"], spawn=rec, git=FakeGit())
+    assert seen["phase"] == "pr_review"
+    assert lifecycle.get(run["id"])["phase"] == "pr_review"
+
+
 # -- Task 3.6: retry from blocked + shaping no_changes -> blocked -------------
 
 def test_retry_from_blocked_resumes_producing_phase():
