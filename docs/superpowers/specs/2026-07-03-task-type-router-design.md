@@ -89,9 +89,30 @@ Rejected alternatives:
 - `kind TEXT` — copied from the task at `start_run`, so a run is self-describing
   and the engine never re-reads the task to know its template.
 
-### Statuses
-Add `delivered` (Research/Docs terminal) to `tasks.STATUSES` and the transition
-guard. `shipped` stays Code's terminal. The board's **Done** column shows both.
+### Statuses (keeps V2's status = phase mirror)
+V2's invariant holds unchanged: `tasks.status` **mirrors the active run's phase**
+(identical names), and `tasks.move` is the single writer. Generalizing to three
+kinds therefore means **every new phase name is a status**. `tasks.STATUSES`
+gains the union of all templates' phases plus the new terminal:
+
+`scoping, investigating, synthesis` (research), `outline, drafting, review`
+(docs), and `delivered` (research/docs terminal). `shipped` stays Code's
+terminal. Code's phases (`shaping, plan_review, building, pr_review, shipped`) are
+already in STATUSES from V2.
+
+**Status derivation (extends V2's table):**
+
+| run state | task status |
+| --- | --- |
+| no active run | `ready` |
+| active run, phase = P | `P` (the phase name) |
+| terminal, kind=code | `shipped` |
+| terminal, kind=research/docs | `delivered` |
+| phase `blocked` | `blocked` (banner) |
+
+So the board still groups by `tasks.status`; the universal **column** for a card
+is a pure lookup `column_for(kind, status)` using the template's per-phase
+`column` field (§6) — no separate "read run.phase" path.
 
 ### `LIFECYCLE_TEMPLATES` (a registry, `lifecycle_templates.py`)
 A pure-data description per kind. Each template lists ordered **phases**; each
@@ -109,8 +130,16 @@ phase has:
 `advance()` / `decide_gate()` consult `LIFECYCLE_TEMPLATES[run["kind"]]` to find
 the current phase, its gate, and the next phase — replacing V2's hardcoded
 `code`-only transitions. The **Code** template is exactly the V2 graph (no
-behavior change for code tasks). Transition legality for `tasks.move` is derived
-from the union of all templates' `column` mappings (see §6).
+behavior change for code tasks).
+
+**Transition guard** for `tasks.move` is derived at the **phase level** (matching
+V2's precision, not the coarser column level): the legal set is the **union of
+each template's consecutive-phase pairs** (`shaping→plan_review`,
+`scoping→investigating`, `outline→drafting`, …) plus V2's special rules
+(`any→blocked`, `blocked→<resume>`). A column-level guard would be lossy (Code's
+`shaping` and `plan_review` both map to the Planning column, so a column guard
+couldn't reject an illegal jump between them) — so the guard stays phase-level and
+`column` is used **only** for board grouping (§6), never for transition legality.
 
 **Unit boundary:** the registry is pure data + a `template_for(kind)` accessor and
 a `phase_after(kind, phase)` / `gate_for_phase(kind, phase)` helper. The engine
@@ -135,14 +164,26 @@ agents via the existing `_spawn_agent` — each with its own scratch `cwd`, each
 `_meta` stamped `lifecycle_run_id`, `lifecycle_phase`, and a new
 `lifecycle_fanout_idx` so the poll loop can tie a finished agent to its row.
 
-### Barrier (poll-loop collector)
-On a fan-out agent's `finished`: mark its `fanout_agents` row `done`, store its
-report as a per-angle artifact (`kind=finding`). Then check: if **all** rows for
-`(run_id, phase)` are `done`, advance the run to the next phase (spawning the
-synthesis agent, handed all N reports as context). If not all done, do nothing
-(wait for the stragglers). This mirrors V2's collector, extended with the
-all-done check. The single-agent path is unchanged (a non-fanout phase advances
-immediately).
+### Barrier (poll-loop collector) — dedup & once-only advance
+V2's single run-level `last_finished_session` cannot dedup N concurrent sessions
+(one field can't remember N ids), so fan-out dedups **per row** instead:
+
+On a fan-out agent's `finished`, keyed by its `lifecycle_fanout_idx`:
+1. **Per-row idempotency:** if that `fanout_agents` row is already `done` (a
+   duplicate/late `finished`), ignore it — do nothing. Otherwise mark the row
+   `done` and store its report as a per-angle artifact (`kind=finding`).
+2. **Once-only advance:** re-read all rows for `(run_id, phase)`. Advance to the
+   next phase (spawning the synthesis agent with all N reports) **only** in the
+   transaction that flips the **last** row from not-done to `done` — i.e. the
+   advance is performed inside the same guarded step that completed the row, and
+   is gated on `run.phase == <this fanout phase>`. A late `finished` arriving
+   after the run already advanced hits either the per-row idempotency check (row
+   already `done`) or the phase guard (run no longer in the fan-out phase), so it
+   cannot double-advance or re-spawn synthesis.
+
+This is the per-row analogue of V2's `last_finished_session` dedup + the V2
+`advance` phase guard, extended to N sessions. The single-agent path is unchanged
+(a non-fanout phase advances immediately via V2's existing dedup).
 
 ### Failure
 A fan-out agent that dies → its row `blocked`; the phase surfaces as blocked with
@@ -163,13 +204,15 @@ Classifies a task into `code | research | docs` from title + description.
 
 ### Classification
 A single cheap one-shot LLM call (small model, via the existing account/model-tier
-infra — NOT a full agent session) with a tight prompt returning `{kind, reason}`.
-A **keyword fallback** (`research|investigate|compare|analimport` → research;
-`sow|doc|explainer|write-up` → docs; else `code`) runs when no account is free, so
-routing never blocks task creation.
+infra — NOT a full agent session) with a tight prompt returning
+`{kind, reason, doc_template?}` (`doc_template` — `sow`/`explainer` — is suggested
+only when `kind=docs`, and is itself human-confirmable). A **keyword fallback**
+(`research|investigate|compare|analyze` → research; `sow|doc|explainer|write-up`
+→ docs; else `code`) runs when no account is free, so routing never blocks task
+creation.
 
-**Unit boundary:** `router.classify(title, description) -> {kind, reason}` is the
-only interface; the LLM-vs-fallback choice is internal.
+**Unit boundary:** `router.classify(title, description) -> {kind, reason,
+doc_template?}` is the only interface; the LLM-vs-fallback choice is internal.
 
 ### When it runs
 - **On task creation** → sets `kind_suggested` + `kind_reason`. The card shows the
@@ -212,7 +255,8 @@ in the tools each investigating agent is told to use.
 
 ### Docs template (standalone client deliverable)
 - **Outline** (agent) — the kind is `docs`; the specific template (**SOW** or
-  **Explainer**) is chosen by the router/you at creation and stored on the task
+  **Explainer**) is suggested by the router (`classify` returns `doc_template`
+  when `kind=docs`) and confirmable by you at creation, stored on the task
   (`doc_template`). The agent drafts the section outline for that template.
   Registers an **outline** artifact. → **Outline gate**: approve the structure
   before the full draft (saves rework on a client SOW).
@@ -253,7 +297,17 @@ in a repo**, so `artifacts` gains an optional `content TEXT` column: when
 `repo_path` is null, the artifact's content is stored inline (the report / doc
 HTML / findings markdown). The drawer/renderer reads `content` when `repo_path` is
 null, else reads from the branch (V2 behavior). This is the one schema change that
-touches a V2 table.
+touches a V2 table, and the V2 artifact writer (`artifacts.register`, which took
+`repo_path`/`branch`) gains an optional `content` parameter. `repoint_to_branch`
+is never called for research/docs (they never run `merge()`), so the two paths
+don't interact.
+
+### Fan-out concurrency note
+A `web` investigating agent invokes the `deep-research` skill, which itself fans
+out web searches **inside that single agent session**. The account-pool bound (§2)
+therefore governs only the **outer** fan-out agents (one per angle); the inner
+deep-research concurrency lives within one session and is not multiplied by the
+pool.
 
 ---
 
@@ -265,13 +319,17 @@ phases map on via the template `column` field:
 
 | kind | Planning | In progress | Review | Done |
 | --- | --- | --- | --- | --- |
-| Code | shaping | building | pr_review | shipped |
+| Code | shaping, plan_review | building | pr_review | shipped |
 | Research | scoping | investigating (fan-out) | synthesis | delivered |
 | Docs | outline | drafting | review | delivered |
 
-(Plan/scope/outline gates paint the **Planning** card amber; manual-test gate →
-**In progress**; merge/review gates → **Review**. The amber overlay = any waiting
-gate, unchanged from V2.)
+This table is **illustrative** — the authoritative mapping is the `column` field
+defined on **every** phase in each template (§1). Every phase maps to exactly one
+column; `ready→Ready` and `blocked→`(banner) are handled outside the table. Code's
+`plan_review` phase maps to Planning (its plan gate paints that card amber);
+`manual_test` is a gate (not a phase) opened during `building`, so it paints the
+In-progress card amber; merge/review/scope/outline gates paint their column's card
+amber. The amber overlay = any waiting gate, unchanged from V2.
 
 - Cards gain a **kind badge** (✨ Code / 🔬 Research / 📄 Docs) + the precise phase
   label; fan-out cards show **"▶ N agents"**.
@@ -294,9 +352,10 @@ gate, unchanged from V2.)
 - Releases page stays **Code-only** (guarded: research/docs never appear there).
 
 ### Transition guard
-`tasks.move` legality is derived from the union of all templates' phase→column
-orderings plus the existing `any→blocked` / `blocked→any` rules, so the guard
-stays honest across kinds.
+`tasks.move` legality is derived from the union of each template's
+**consecutive-phase pairs** (§1) plus the existing `any→blocked` /
+`blocked→<resume>` rules — a phase-level guard, matching V2's precision. `column`
+is used only for board grouping here, never for transition legality.
 
 ---
 
@@ -347,6 +406,11 @@ Matches repo conventions (`.venv` pytest, in-memory SQLite via `db._migrate`).
 3. Generalize the board + task view + add the doc renderer / shareable route.
 4. Ship behind the assumption that V2 is merged; Code tasks behave exactly as
    today.
+
+Steps 1–2 (schema + registry + fan-out + router, all backend) are independently
+testable and shippable before the UI generalization in step 3 — Code tasks keep
+working throughout, and Research/Docs become drivable via the API before the board
+is generalized.
 
 ## Open Questions (non-blocking)
 
