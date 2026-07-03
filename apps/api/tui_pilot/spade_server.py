@@ -753,7 +753,11 @@ def get_artifact_content(task_id: str, artifact_id: str) -> dict:
     if art is None or art["task_id"] != task_id:
         raise HTTPException(404, f"no artifact {artifact_id!r}")
     task = _task_or_404(task_id)
-    if not art.get("repo_path") or not art.get("branch"):
+    # Inline artifacts (research findings/reports, docs) store their body in
+    # `content` with a null repo_path — return it directly (no git read).
+    if not art.get("repo_path"):
+        return {"content": art.get("content")}
+    if not art.get("branch"):
         raise HTTPException(404, "artifact has no pinned repo path/branch")
     try:
         content = _lifecycle_git(task["project_id"]).read_at_branch(

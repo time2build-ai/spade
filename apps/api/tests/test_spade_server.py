@@ -247,3 +247,15 @@ def test_task_link_endpoints():
     assert c.get(f"/tasks/{a}").json()["links"] == []
     # Deleting an unknown link -> 404.
     assert c.delete(f"/tasks/{a}/links/{link['id']}").status_code == 404
+
+
+def test_inline_artifact_content_endpoint():
+    from tui_pilot.server import app
+    from tui_pilot import projects, artifacts
+    projects.create(id="acme", name="Acme", path="/w")
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "R"}).json()["id"]
+    a = artifacts.register(tid, None, "report", "Report", content="the findings")
+    r = c.get(f"/tasks/{tid}/artifacts/{a['id']}/content")
+    assert r.status_code == 200
+    assert r.json()["content"] == "the findings"
