@@ -5,14 +5,15 @@ Mounted into server.py via app.include_router(spade_server.router).
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 import json
 
 from . import (
-    artifacts, brain, chat, fanout, feedback, gates, gitops, integrations,
-    lifecycle, lifecycle_git, lifecycle_templates, meeting_samples, meetings,
-    pipelines, project_git, projects, sprints, tasks,
+    artifacts, brain, chat, doc_templates, fanout, feedback, gates, gitops,
+    integrations, lifecycle, lifecycle_git, lifecycle_templates, meeting_samples,
+    meetings, pipelines, project_git, projects, sprints, tasks,
 )
 from . import router as task_router
 
@@ -383,6 +384,10 @@ _PHASE_JSON = {
                  '"followups": [{"title": "...", "description": "..."}], '
                  '"brain_nodes": [{"type": "feature|decision|convention|feedback|'
                  'bug|metric", "label": "...", "detail": "..."}]}',
+    # docs phases (Chunk 5): outline proposes the structure; drafting emits the
+    # styled BODY sections ONLY (render_shell wraps them once at render time).
+    "outline": '{"outline": "...", "summary": "..."}',
+    "drafting": '{"doc_html": "...", "summary": "..."}',
 }
 
 
@@ -472,6 +477,31 @@ def _phase_prompt(run: dict, phase: str) -> str:
             "`report`. Propose any concrete `followups` (new tasks) and "
             "`brain_nodes` (durable knowledge: type one of feature/decision/"
             "convention/feedback/bug/metric) the research warrants.",
+        ]
+    elif phase == "outline":
+        dt = (task.get("doc_template") or "explainer")
+        tpl = doc_templates.TEMPLATES.get(dt, doc_templates.TEMPLATES["explainer"])
+        lines += [
+            f"Outline a {tpl['label']} document for this task. Propose the section "
+            "structure and the key points each section will cover — the human "
+            "reviews this outline before you write the full draft. The required "
+            f"sections for this template are: {', '.join(tpl['sections'])}.",
+        ]
+    elif phase == "drafting":
+        dt = (task.get("doc_template") or "explainer")
+        tpl = doc_templates.TEMPLATES.get(dt, doc_templates.TEMPLATES["explainer"])
+        lines += [
+            f"Write the full {tpl['label']} document per the approved outline. "
+            f"Include these required sections, each as one `<section>` with an "
+            f"`<h2>` heading: {', '.join(tpl['sections'])}.",
+            "",
+            "Emit BODY sections ONLY — a sequence of `<section>` elements. Do NOT "
+            "wrap them in `<html>`, `<head>`, `<body>`, or any full-document shell "
+            "and do NOT add `<style>`/`<script>`: a shared house-style shell is "
+            "applied once at render time.",
+            "Any diagrams MUST be PRE-RENDERED to inline `<svg>` (render mermaid to "
+            "static SVG yourself and embed the SVG) — the rendered doc is served in "
+            "a locked, script-less sandbox, so no client-side mermaid/JS will run.",
         ]
 
     lines += [
@@ -985,6 +1015,20 @@ def get_artifact_content(task_id: str, artifact_id: str) -> dict:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(404, f"could not read artifact: {e}")
     return {"content": content}
+
+
+# ---- shareable styled-doc route ---------------------------------------------
+# Distinct top-level path (`/doc/...`) so it never collides with the `/tasks`,
+# `/lifecycle`, `/brain`, etc. routes. Read-only; serves a `doc` artifact's
+# BODY-only content wrapped ONCE in the shared render_shell (no double-shell).
+
+@router.get("/doc/{artifact_id}", response_class=HTMLResponse)
+def get_doc(artifact_id: str) -> HTMLResponse:
+    art = artifacts.get(artifact_id)
+    if art is None or art.get("kind") != "doc":
+        raise HTTPException(404, f"no doc artifact {artifact_id!r}")
+    title = art.get("title") or "Document"
+    return HTMLResponse(doc_templates.render_shell(title, art.get("content") or ""))
 
 
 @router.get("/projects/{project_id}/git")
