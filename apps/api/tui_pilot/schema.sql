@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL,
   feature TEXT, priority INTEGER DEFAULT 2, status TEXT DEFAULT 'ready',
   origin_quote TEXT, origin_source TEXT, description TEXT, created_at TEXT,
+  kind TEXT, kind_suggested TEXT, kind_reason TEXT, doc_template TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 -- Directional/symmetric links between tasks: blocks | related | subtask.
@@ -117,6 +118,7 @@ CREATE TABLE IF NOT EXISTS lifecycle_runs (
   blocked_reason TEXT, blocked_from_phase TEXT,
   self_heal_attempts INTEGER DEFAULT 0,
   last_finished_session TEXT,
+  kind TEXT,
   created_at TEXT, updated_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
@@ -133,7 +135,7 @@ CREATE TABLE IF NOT EXISTS gates (
 CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT,
   kind TEXT NOT NULL, title TEXT,
-  repo_path TEXT, branch TEXT, created_by TEXT, created_at TEXT,
+  repo_path TEXT, branch TEXT, content TEXT, created_by TEXT, created_at TEXT,
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 

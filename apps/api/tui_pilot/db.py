@@ -58,7 +58,16 @@ _ADDED_COLUMNS: dict[str, dict[str, str]] = {
     # Lifecycle idempotency: the session id of the last finished agent whose
     # handoff advance() processed, so a duplicate delivery of the same finish is
     # a no-op (the engine's re-entry guard).
-    "lifecycle_runs": {"last_finished_session": "TEXT"},
+    # `kind` (task-type router): the lifecycle kind (code/research/docs) copied
+    # onto the run at start, so the engine reads the per-kind template.
+    "lifecycle_runs": {"last_finished_session": "TEXT", "kind": "TEXT"},
+    # Task-type router: the resolved lifecycle kind + the router's suggestion
+    # (kind_suggested/kind_reason) + the chosen doc_template for docs tasks.
+    "tasks": {"kind": "TEXT", "kind_suggested": "TEXT", "kind_reason": "TEXT",
+              "doc_template": "TEXT"},
+    # Non-code deliverables (research report / doc / findings) are stored inline
+    # rather than as a repo_path pointer.
+    "artifacts": {"content": "TEXT"},
 }
 
 
@@ -74,6 +83,14 @@ def _migrate(conn) -> None:
     # must be moved forward or it would fail validation on the next move().
     conn.execute("UPDATE tasks SET status = 'building'  WHERE status = 'in_progress'")
     conn.execute("UPDATE tasks SET status = 'pr_review' WHERE status = 'review'")
+    # Task-type router backfill (idempotent): every pre-existing lifecycle run is
+    # a code run, and any task that already has a run is a code task. New tasks
+    # get their kind at Start; untyped backlog tasks stay NULL until routed.
+    conn.execute("UPDATE lifecycle_runs SET kind = 'code' WHERE kind IS NULL")
+    conn.execute(
+        "UPDATE tasks SET kind = 'code' "
+        "WHERE kind IS NULL AND id IN (SELECT task_id FROM lifecycle_runs)"
+    )
 
 
 @contextlib.contextmanager
