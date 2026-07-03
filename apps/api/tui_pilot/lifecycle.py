@@ -647,6 +647,56 @@ def _deliver_research(run: dict, git) -> None:
     )
 
 
+# -- docs handlers ------------------------------------------------------------
+# Docs has no workspace and no PR/merge: outline proposes the structure → outline
+# gate; outline-approve advances to drafting (generic phase move); drafting writes
+# the styled BODY sections → review gate; review-approve delivers (terminal). Both
+# artifacts are INLINE. The `doc` artifact stores BODY sections ONLY — the shared
+# render_shell wraps it once at the /doc/{id} render step, never here.
+
+def _advance_outline(run: dict, report: str | None, spawn, git) -> None:
+    """outline finish → register the inline ``outline`` artifact + open the outline
+    gate. The run stays at ``outline`` while the gate waits; approve → drafting."""
+    data = _parse_report(run, "outline", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    artifacts.register(tid, run["id"], "outline", "Document outline",
+                       content=data.get("outline") or "", by="outline")
+    tasks.add_comment(tid, body=data.get("summary") or "Outline ready.",
+                      author="outline", kind="progress")
+    gates.open_gate(tid, run["id"], "outline")
+    tasks.add_comment(tid, body="Outline ready — outline gate opened.",
+                      author="system", kind="gate")
+
+
+def _advance_drafting(run: dict, report: str | None, spawn, git) -> None:
+    """drafting finish → register the inline ``doc`` artifact whose content is the
+    BODY/sections ONLY (no shell — render_shell wraps it once at render time) +
+    open the review gate. The run stays at ``drafting`` while the gate waits."""
+    data = _parse_report(run, "drafting", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    artifacts.register(tid, run["id"], "doc", "Document",
+                       content=data.get("doc_html") or "", by="drafting")
+    tasks.add_comment(tid, body=data.get("summary") or "Draft ready.",
+                      author="drafting", kind="progress")
+    gates.open_gate(tid, run["id"], "review")
+    tasks.add_comment(tid, body="Draft complete — review gate opened.",
+                      author="system", kind="gate")
+
+
+def _deliver_docs(run: dict, git) -> None:
+    """review-approve → terminal ``delivered``: no repo/PR/merge, just mark the run
+    and task done. The `doc` artifact is already inline and shareable at /doc/{id}."""
+    tid = run["task_id"]
+    _set_run(run["id"], phase="delivered", active=0)
+    tasks.move(tid, "delivered")
+    tasks.add_comment(tid, body="Delivered — document is ready to share.",
+                      author="system", kind="system")
+
+
 # -- environment watcher ------------------------------------------------------
 
 def projects_with_pending_env() -> list[str]:
@@ -807,6 +857,10 @@ _ADVANCE_HANDLERS: dict[str, dict] = {
         # advance_fanout, not advance(); no per-phase finish handler here.
         "synthesis": _advance_synthesis,
     },
+    "docs": {
+        "outline": _advance_outline,
+        "drafting": _advance_drafting,
+    },
 }
 
 # decide_gate() approve dispatch: (kind → gate → approve handler(run, spawn, git)).
@@ -822,5 +876,11 @@ _APPROVE_HANDLERS: dict[str, dict] = {
     # (rather than the plain phase-move branch) is what runs the deliver side-effects.
     "research": {
         "review": lambda run, spawn, git: _deliver_research(run, git),
+    },
+    # docs review-approve delivers (terminal). No git side-effect, so it never
+    # raises GitError; registering it here runs the deliver side-effects (rather
+    # than the plain phase-move branch which would just move to `delivered`).
+    "docs": {
+        "review": lambda run, spawn, git: _deliver_docs(run, git),
     },
 }

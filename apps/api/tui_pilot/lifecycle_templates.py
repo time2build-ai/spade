@@ -85,6 +85,27 @@ LIFECYCLE_TEMPLATES: dict[str, dict] = {
             "review": {"approve_next": "delivered", "changes_target": "synthesis"},
         },
     },
+    # Docs: a non-code kind with NO workspace and NO PR/merge. outline proposes the
+    # document structure (outline gate), drafting writes the styled BODY sections
+    # (review gate), delivered is terminal. Both artifacts are INLINE (content, no
+    # repo_path), like research. The `doc` body is stored WITHOUT the shared shell
+    # — render_shell wraps it once at the /doc/{id} render step (no double-shell).
+    "docs": {
+        "terminal_status": "delivered",
+        "needs_workspace": False,
+        "phases": [
+            {"name": "outline", "agent": True, "fanout": False,
+             "gate": "outline", "column": "Planning"},
+            {"name": "drafting", "agent": True, "fanout": False,
+             "gate": "review", "column": "Review"},
+            {"name": "delivered", "agent": False, "fanout": False,
+             "gate": None, "column": "Done"},
+        ],
+        "gate_advances": {
+            "outline": {"approve_next": "drafting", "changes_target": "outline"},
+            "review": {"approve_next": "delivered", "changes_target": "drafting"},
+        },
+    },
 }
 
 

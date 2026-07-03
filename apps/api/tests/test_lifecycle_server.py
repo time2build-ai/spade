@@ -348,29 +348,34 @@ def test_confirm_kind_unknown_task_404():
 
 
 def test_confirm_unregistered_kind_400_not_500(monkeypatch):
-    # docs is a valid KIND but its template only registers in Chunk 5 — confirming
-    # it now must be a clean 400 ("not yet runnable"), never a 500. When the docs
-    # template lands, this guard passes automatically. (research now runs — Chunk 4.)
+    # A valid KIND with no registered template must confirm as a clean 400 ("not
+    # yet runnable"), never a 500 (a KeyError from template_for()). All real kinds
+    # (code/research/docs) now run, so we inject a SYNTHETIC kind into KINDS with
+    # NO template registered to prove the guard in isolation (do NOT weaken it).
     _patch(monkeypatch)
     _project()
+    monkeypatch.setattr(tasks, "KINDS", tasks.KINDS + ["_ghost"])
     from tui_pilot.server import app
     c = TestClient(app)
     tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
-    r = c.post(f"/tasks/{tid}/kind", json={"kind": "docs"})
+    r = c.post(f"/tasks/{tid}/kind", json={"kind": "_ghost"})
     assert r.status_code == 400 and "runnable" in r.json()["detail"]
 
 
 def test_start_unregistered_kind_400_not_500(monkeypatch):
-    # The real 500 repro path: a docs-suggested task (kind_suggested set by the
-    # router on create, NOT confirmed) → start resolves kind=docs → the template
-    # lookup must NOT surface a KeyError as a 500. (research now runs — Chunk 4.)
+    # The 500 repro path: a task whose kind_suggested is a valid KIND with no
+    # registered template → start resolves that kind → the template lookup must NOT
+    # surface a KeyError as a 500. All real kinds now run, so we inject a SYNTHETIC
+    # kind (in KINDS, no template) as the suggestion to prove the guard in isolation.
     _patch(monkeypatch)
     _project()
+    monkeypatch.setattr(tasks, "KINDS", tasks.KINDS + ["_ghost"])
     from tui_pilot.server import app
     c = TestClient(app)
     tid = c.post("/tasks", json={"project_id": "acme",
-                                 "title": "Write documentation for the API"}).json()["id"]
-    assert c.get(f"/tasks/{tid}").json()["kind_suggested"] == "docs"
+                                 "title": "Add a toggle"}).json()["id"]
+    tasks.set_suggestion(tid, "_ghost", "synthetic unregistered kind")
+    assert c.get(f"/tasks/{tid}").json()["kind_suggested"] == "_ghost"
     r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
     assert r.status_code == 400 and "runnable" in r.json()["detail"]
     # code still starts fine
