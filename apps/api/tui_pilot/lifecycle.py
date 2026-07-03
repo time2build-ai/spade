@@ -569,6 +569,16 @@ def _advance_scoping(run: dict, report: str | None, spawn, git) -> None:
         return
     tid = run["task_id"]
     angles = data.get("angles") or []
+    if not angles:
+        # Zero angles → block (recoverable via retry), never open the scope gate.
+        # An empty fan-out would move to investigating with 0 rows, and
+        # `fanout.all_done` is False when no rows exist, so the barrier would never
+        # release and there'd be no retry/drop target — an unrecoverable stall. A
+        # research task with no angles is a scoping failure the human should see.
+        _block(run, "scoping", "scoping produced no angles",
+               note="Scoping agent proposed no research angles; blocking so it can "
+                    "be retried. Raw report:\n" + (report or ""))
+        return
     # Inline plan artifact: content is the full scoping JSON so the scope-approve
     # path (and the human) can read the proposed angles/modes back.
     artifacts.register(tid, run["id"], "plan", "Research plan",

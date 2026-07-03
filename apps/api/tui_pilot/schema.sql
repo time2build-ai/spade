@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS lifecycle_runs (
   self_heal_attempts INTEGER DEFAULT 0,
   last_finished_session TEXT,
   kind TEXT,
+  synthesis_json TEXT,
   created_at TEXT, updated_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE

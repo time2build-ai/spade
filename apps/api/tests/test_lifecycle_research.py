@@ -145,6 +145,27 @@ def test_scoping_bad_json_blocks():
     assert tasks.get(run["task_id"])["status"] == "blocked"
 
 
+def test_scoping_zero_angles_blocks_recoverably():
+    """A scoping finish with no angles must BLOCK (not stall): an empty fan-out
+    would never release the barrier (0 rows → all_done False forever) and there is
+    no retry/drop target, so the run would be stuck at investigating active=1. The
+    run must instead go to blocked and be recoverable via retry()."""
+    rec = Rec()
+    run = _start(rec)
+    rid = run["id"]
+    lifecycle.advance(rid, phase="scoping",
+                      report=json.dumps({"angles": [], "summary": "found nothing"}),
+                      spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "blocked"       # not stuck at investigating
+    assert tasks.get(run["task_id"])["status"] == "blocked"
+    assert gates.gate_for(rid, "scope") is None           # scope gate never opened
+    assert rec.count("investigating") == 0                # no fan-out spawned
+    # recoverable: retry() re-runs scoping
+    lifecycle.retry(rid, spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "scoping"
+    assert rec.count("scoping") == 2                       # scoping re-spawned
+
+
 # -- Task 4.2: fan-out → synthesis → deliver ----------------------------------
 
 _ANGLES = [
@@ -221,6 +242,19 @@ def test_synthesis_prompt_embeds_finding_content():
     assert "FINDING-ALPHA repo evidence" in prompt
     assert "FINDING-BETA web evidence" in prompt
     assert "@ None" not in prompt and "@ ?" not in prompt
+
+
+def test_embedded_content_is_capped_and_backtick_safe():
+    """Embedded inline content must be size-capped and use a delimiter that agent
+    content containing a ``` fence can't break out of."""
+    from tui_pilot import spade_server
+    fenced = "```python\nprint('x')\n```  end"
+    block = spade_server._embed_block(fenced)
+    assert fenced in block                       # content preserved verbatim
+    assert block.startswith("<<<CONTENT") and block.rstrip().endswith("CONTENT>>>")
+    big = spade_server._embed_block("a" * (spade_server._EMBED_MAX_CHARS + 500))
+    assert "…[truncated]" in big
+    assert len(big) < spade_server._EMBED_MAX_CHARS + 200
 
 
 def test_fanout_prompt_is_angle_aware():

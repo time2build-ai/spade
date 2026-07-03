@@ -386,6 +386,23 @@ _PHASE_JSON = {
 }
 
 
+# Per-artifact cap on embedded inline content (research findings/report can be
+# large deep-research outputs; N of them concatenated is otherwise unbounded).
+_EMBED_MAX_CHARS = 6000
+
+
+def _embed_block(content: str | None) -> str:
+    """Render inline artifact ``content`` as a safely-delimited, size-capped block.
+
+    Uses a ``<<<CONTENT>>> … <<<END>>>`` delimiter rather than triple-backticks so
+    agent content that itself contains a ``` fence can't break out, and truncates
+    to ``_EMBED_MAX_CHARS`` with a marker to bound context bloat."""
+    text = content or ""
+    if len(text) > _EMBED_MAX_CHARS:
+        text = text[:_EMBED_MAX_CHARS] + "\n…[truncated]"
+    return f"<<<CONTENT\n{text}\nCONTENT>>>"
+
+
 def _phase_prompt(run: dict, phase: str) -> str:
     """Build the prompt for a lifecycle ``phase`` agent.
 
@@ -411,8 +428,10 @@ def _phase_prompt(run: dict, phase: str) -> str:
             else:
                 # inline content (research findings/report, docs): EMBED it so the
                 # synthesis manager actually sees the findings, not a `@ None` list.
+                # Delimited + size-capped so a ``` inside content can't break out
+                # and N large findings don't blow up the context.
                 lines.append(f"- [{a['kind']}] {title}:")
-                lines.append(f"```\n{a.get('content') or ''}\n```")
+                lines.append(_embed_block(a.get("content")))
 
     resume = run.get("resume_comment")
     if resume:
