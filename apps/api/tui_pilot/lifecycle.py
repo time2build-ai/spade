@@ -24,7 +24,8 @@ import uuid
 from datetime import datetime, timezone
 
 from tui_pilot import (
-    artifacts, db, gates, gitops, lifecycle_templates, project_git, tasks,
+    artifacts, db, fanout, gates, gitops, lifecycle_templates, project_git,
+    tasks,
 )
 
 # The phase list, agent-phase set, and gate set now live in lifecycle_templates
@@ -150,6 +151,163 @@ def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
         author="system", kind="system",
     )
     return get(run_id)
+
+
+# -- fan-out ------------------------------------------------------------------
+# A fan-out phase runs N agents in parallel (one per angle) and advances on an
+# all-done barrier. The barrier advance is an atomic compare-and-swap on the run's
+# phase (NOT read-then-act): drop/retry HTTP threads run concurrently with the
+# poll-loop drainer, so several resolvers can observe `all_done` at once — only
+# the ONE whose CAS UPDATE affected a row spawns synthesis. This is the N-resolver
+# analogue of V2's phase-guarded once-only advance.
+
+def _spawn_fanout(run: dict, phase: str, idx: int, spawn) -> None:
+    """Spawn one fan-out agent for angle ``idx`` and mark its row ``running``.
+
+    The per-idx angle is threaded via ``run['fanout_idx']`` (mirroring how
+    ``_spawn_phase`` threads ``resume_comment``) so the real spawn closure can
+    stamp the fan-out ``_meta`` keys and the prompt builder can read the angle.
+    """
+    run = dict(run)
+    run["fanout_idx"] = idx
+    session_id, account_id = spawn(run, phase)
+    fanout.mark_running(run["id"], phase, idx, session_id, account_id)
+
+
+def _cas_advance_phase(run_id: str, from_phase: str, to_phase: str) -> bool:
+    """Atomic barrier advance: move the run to ``to_phase`` iff it is still at
+    ``from_phase``. Returns True for the single resolver whose UPDATE won the
+    race (rowcount == 1); all concurrent losers see rowcount 0 and get False."""
+    with db.tx() as cx:
+        cur = cx.execute(
+            "UPDATE lifecycle_runs SET phase = ?, updated_at = ? "
+            "WHERE id = ? AND phase = ?",
+            (to_phase, _now(), run_id, from_phase),
+        )
+        return cur.rowcount == 1
+
+
+def _release_barrier(run_id: str, phase: str, spawn, git) -> None:
+    """If every angle is resolved, CAS-advance to the next phase and (only for the
+    CAS winner) move the task + spawn the synthesis agent with the findings as
+    context. Safe to call from any resolver (finish / drop / all-dropped edge)."""
+    if not fanout.all_done(run_id, phase):
+        return
+    run = get(run_id)
+    if run is None:
+        return
+    kind = run.get("kind") or "code"
+    nxt = lifecycle_templates.phase_after(kind, phase)
+    if nxt is None:
+        return
+    if not _cas_advance_phase(run_id, phase, nxt):
+        return  # another resolver already advanced the barrier
+    tid = run["task_id"]
+    tasks.move(tid, nxt)
+    n = len(fanout.rows_for(run_id, phase))
+    done = sum(1 for r in fanout.rows_for(run_id, phase) if r["status"] == "done")
+    tasks.add_comment(
+        tid,
+        body=f"Fan-out {phase} complete — {done}/{n} angle(s) delivered findings; "
+             f"advancing to {nxt}.",
+        author="system", kind="system",
+    )
+    if nxt in lifecycle_templates.agent_phases(kind):
+        _spawn_phase(get(run_id), nxt, spawn)
+
+
+def enter_fanout(run: dict, phase: str, angles: list, spawn, git) -> None:
+    """Enter a fan-out ``phase``: create N rows and spawn N agents.
+
+    Idempotent — if any ``fanout_agents`` rows already exist for ``(run_id,
+    phase)`` this is a no-op (guards a double scope-approve from double-spawning N
+    agents). Sets the run's phase to ``phase`` and moves the task there."""
+    run_id = run["id"]
+    if fanout.rows_for(run_id, phase):
+        return
+    fanout.create_rows(run_id, phase, angles)
+    _set_run(run_id, phase=phase)
+    tasks.move(run["task_id"], phase)
+    for idx in range(len(angles)):
+        _spawn_fanout(get(run_id), phase, idx, spawn)
+
+
+def advance_fanout(run_id: str, phase: str, idx: int, *, report: str | None,
+                   spawn, git, session_id: str | None = None) -> None:
+    """Consume one fan-out angle's finished handoff.
+
+    Per-row idempotency is atomic: the row is CLAIMED (unresolved → done) before
+    the finding is registered, so a late finish for an already ``dropped`` angle
+    (or a duplicate delivery of a ``done`` one) is a no-op — it neither flips the
+    row nor registers a finding after synthesis started. After a successful claim,
+    the report is stored as an inline ``finding`` artifact and the barrier is
+    (maybe) released via the once-only CAS advance."""
+    run = get(run_id)
+    if run is None:
+        return
+    row = fanout.get_row(run_id, phase, idx)
+    if row is None or row["status"] in ("done", "dropped"):
+        return  # fast-path: already resolved
+    if not fanout.mark_done(run_id, phase, idx):
+        return  # lost the claim race to a concurrent drop / finish
+    art = artifacts.register(run["task_id"], run_id, "finding",
+                             f"Finding — angle {idx}", content=report, by=phase)
+    fanout.set_report(run_id, phase, idx, art["id"])
+    _release_barrier(run_id, phase, spawn, git)
+
+
+def retry_angle(run_id: str, phase: str, idx: int, *, spawn, git) -> None:
+    """Re-spawn one fan-out angle. Guarded: an already ``done`` or ``dropped`` row
+    is a no-op (with a system note) so a resolved angle is never re-spawned."""
+    run = get(run_id)
+    if run is None:
+        return
+    row = fanout.get_row(run_id, phase, idx)
+    if row is None:
+        return
+    if row["status"] in ("done", "dropped"):
+        tasks.add_comment(
+            run["task_id"],
+            body=f"Retry ignored — fan-out angle [{phase} #{idx}] is already "
+                 f"{row['status']}.",
+            author="system", kind="system",
+        )
+        return
+    tasks.add_comment(run["task_id"],
+                      body=f"Retrying fan-out angle [{phase} #{idx}].",
+                      author="system", kind="system")
+    _spawn_fanout(run, phase, idx, spawn)
+
+
+def drop_angle(run_id: str, phase: str, idx: int, *, spawn, git) -> None:
+    """Give up on one fan-out angle: mark it ``dropped`` + note. If that resolves
+    the last outstanding row, run the SAME CAS barrier advance (so dropping every
+    angle spawns synthesis with zero findings)."""
+    run = get(run_id)
+    if run is None:
+        return
+    if not fanout.drop(run_id, phase, idx):
+        return  # already resolved (done/dropped) — no-op
+    tasks.add_comment(run["task_id"],
+                      body=f"Dropped fan-out angle [{phase} #{idx}].",
+                      author="system", kind="system")
+    _release_barrier(run_id, phase, spawn, git)
+
+
+def fanout_agent_died(run_id: str, phase: str, idx: int) -> None:
+    """A fan-out agent whose harness exited without a ``done`` handoff → move its
+    row to ``blocked`` and surface it, so the barrier never stalls in ``running``.
+    The blocked row holds the barrier until a ``retry_angle``/``drop_angle``."""
+    run = get(run_id)
+    if run is None:
+        return
+    if fanout.block(run_id, phase, idx):
+        tasks.add_comment(
+            run["task_id"],
+            body=f"Fan-out agent [{phase} #{idx}] exited without finishing — "
+                 f"blocked. Retry or drop it to release the barrier.",
+            author="system", kind="system",
+        )
 
 
 # -- blocking -----------------------------------------------------------------

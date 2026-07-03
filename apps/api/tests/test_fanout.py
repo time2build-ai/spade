@@ -2,7 +2,208 @@
 
 import threading
 
-from tui_pilot import db, fanout, projects, tasks
+import pytest
+
+from tui_pilot import (
+    artifacts, db, fanout, lifecycle, lifecycle_templates as LT, projects, tasks,
+)
+
+
+# -- synthetic fan-out template (scoping -> investigating[fanout] -> synthesis) -
+
+_SYNTH = {
+    "terminal_status": "delivered",
+    "needs_workspace": False,
+    "phases": [
+        {"name": "scoping", "agent": True, "fanout": False,
+         "gate": None, "column": "Planning"},
+        {"name": "investigating", "agent": True, "fanout": True,
+         "gate": None, "column": "In progress"},
+        {"name": "synthesis", "agent": True, "fanout": False,
+         "gate": None, "column": "Review"},
+        {"name": "delivered", "agent": False, "fanout": False,
+         "gate": None, "column": "Done"},
+    ],
+    "gate_advances": {},
+}
+
+
+@pytest.fixture
+def synth_kind():
+    """Register a throwaway fan-out kind and refresh the transition-pair cache."""
+    LT.LIFECYCLE_TEMPLATES["_synth"] = _SYNTH
+    LT.transition_pairs.cache_clear()
+    try:
+        yield "_synth"
+    finally:
+        LT.LIFECYCLE_TEMPLATES.pop("_synth", None)
+        LT.transition_pairs.cache_clear()
+
+
+class Rec:
+    """Recording spawn: threads fanout_idx via the run dict, returns a session."""
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, run, phase):
+        idx = run.get("fanout_idx")
+        self.calls.append((phase, idx))
+        sid = f"sess-{phase}" + (f"-{idx}" if idx is not None else "")
+        return (sid, "acct")
+
+    def count(self, phase):
+        return sum(1 for p, _ in self.calls if p == phase)
+
+
+class FakeGit:
+    def prepare_workspace(self, cfg, task_id, slug, kind="feat"):
+        return {}
+
+
+def _start_synth(kind, rec):
+    projects.create(id="acme", name="Acme", path="/w")
+    tid = tasks.create(project_id="acme", title="Research X")["id"]
+    tasks.set_kind(tid, kind) if hasattr(tasks, "set_kind") else \
+        db.execute("UPDATE tasks SET kind = ? WHERE id = ?", (kind, tid))
+    run = lifecycle.start_run("acme", tid, spawn=rec, git=FakeGit())
+    return run
+
+
+# -- Task 2.2: fan-out entry + barrier ----------------------------------------
+
+def test_fanout_advances_only_when_all_done(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    lifecycle.enter_fanout(run, "investigating",
+                           angles=["a", "b", "c"], spawn=rec, git=FakeGit())
+    assert rec.count("investigating") == 3          # 3 agents spawned
+    # idempotent: a second enter for the same (run, phase) spawns nothing
+    lifecycle.enter_fanout(run, "investigating",
+                           angles=["x"], spawn=rec, git=FakeGit())
+    assert rec.count("investigating") == 3
+    rid = run["id"]
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{"k":1}',
+                             spawn=rec, git=FakeGit())
+    lifecycle.advance_fanout(rid, "investigating", 1, report='{}',
+                             spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "investigating"   # barrier held
+    lifecycle.advance_fanout(rid, "investigating", 2, report='{}',
+                             spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "synthesis"       # barrier released
+    assert rec.count("synthesis") == 1
+    # three findings registered as inline artifacts
+    findings = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "finding"]
+    assert len(findings) == 3
+
+
+def test_duplicate_advance_is_noop(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{}',
+                             spawn=rec, git=FakeGit())
+    # duplicate for a done row: no new finding, barrier not touched
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{"dup":1}',
+                             spawn=rec, git=FakeGit())
+    findings = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "finding"]
+    assert len(findings) == 1
+    assert lifecycle.get(rid)["phase"] == "investigating"
+
+
+def test_blocked_angle_holds_then_drop_releases(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{}',
+                             spawn=rec, git=FakeGit())
+    fanout.block(rid, "investigating", 1)
+    assert lifecycle.get(rid)["phase"] == "investigating"   # blocked holds
+    lifecycle.drop_angle(rid, "investigating", 1, spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "synthesis"       # drop released
+    assert rec.count("synthesis") == 1
+
+
+def test_all_angles_dropped_spawns_synthesis_with_zero_findings(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    lifecycle.drop_angle(rid, "investigating", 0, spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "investigating"
+    lifecycle.drop_angle(rid, "investigating", 1, spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "synthesis"
+    assert rec.count("synthesis") == 1
+    findings = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "finding"]
+    assert findings == []
+
+
+def test_late_finish_after_drop_does_not_flip_or_register(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{}',
+                             spawn=rec, git=FakeGit())
+    lifecycle.drop_angle(rid, "investigating", 1, spawn=rec, git=FakeGit())
+    assert lifecycle.get(rid)["phase"] == "synthesis"
+    syntheses_before = rec.count("synthesis")
+    # a LATE finish for the dropped angle must not flip it or add a finding
+    lifecycle.advance_fanout(rid, "investigating", 1, report='{"late":1}',
+                             spawn=rec, git=FakeGit())
+    assert fanout.get_row(rid, "investigating", 1)["status"] == "dropped"
+    findings = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "finding"]
+    assert len(findings) == 1
+    assert rec.count("synthesis") == syntheses_before      # no second synthesis
+
+
+def test_retry_angle_guards_resolved_rows(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    before = rec.count("investigating")
+    fanout.block(rid, "investigating", 0)
+    lifecycle.retry_angle(rid, "investigating", 0, spawn=rec, git=FakeGit())
+    assert rec.count("investigating") == before + 1        # blocked → re-spawned
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{}',
+                             spawn=rec, git=FakeGit())
+    # retry on a done row: no re-spawn
+    now = rec.count("investigating")
+    lifecycle.retry_angle(rid, "investigating", 0, spawn=rec, git=FakeGit())
+    assert rec.count("investigating") == now
+
+
+def test_concurrent_drop_vs_finish_resolves_to_one_advance(synth_kind):
+    rec = Rec()
+    run = _start_synth(synth_kind, rec)
+    rid = run["id"]
+    lifecycle.enter_fanout(run, "investigating", angles=["a", "b"],
+                           spawn=rec, git=FakeGit())
+    lifecycle.advance_fanout(rid, "investigating", 0, report='{}',
+                             spawn=rec, git=FakeGit())
+    # row 1 is the last outstanding: race a drop against a finish
+    barrier = threading.Barrier(2)
+
+    def do_finish():
+        barrier.wait()
+        lifecycle.advance_fanout(rid, "investigating", 1, report='{}',
+                                 spawn=rec, git=FakeGit())
+
+    def do_drop():
+        barrier.wait()
+        lifecycle.drop_angle(rid, "investigating", 1, spawn=rec, git=FakeGit())
+
+    t1, t2 = threading.Thread(target=do_finish), threading.Thread(target=do_drop)
+    t1.start(); t2.start(); t1.join(); t2.join()
+    assert lifecycle.get(rid)["phase"] == "synthesis"
+    assert rec.count("synthesis") == 1     # exactly one — never zero, never two
 
 
 def _run(run_id: str) -> str:
