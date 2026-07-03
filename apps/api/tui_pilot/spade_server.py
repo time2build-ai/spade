@@ -189,8 +189,18 @@ def confirm_task_kind(task_id: str, req: KindConfirm) -> dict:
     _task_or_404(task_id)
     if req.kind not in tasks.KINDS:
         raise HTTPException(400, f"invalid kind {req.kind!r}; must be one of {tasks.KINDS}")
+    if req.doc_template is not None and (
+        req.kind != "docs" or req.doc_template not in ("sow", "explainer")
+    ):
+        raise HTTPException(
+            400,
+            f"invalid doc_template {req.doc_template!r}; only valid for kind='docs' "
+            "as one of ('sow', 'explainer')",
+        )
     if lifecycle.has_run_for_task(task_id):
         raise HTTPException(409, f"task {task_id!r} has a lifecycle run; kind is locked")
+    if req.kind not in lifecycle_templates.LIFECYCLE_TEMPLATES:
+        raise HTTPException(400, f"kind {req.kind!r} is not yet runnable (no template registered)")
     tasks.set_kind(task_id, req.kind, doc_template=req.doc_template)
     return _enrich(tasks.get(task_id))
 
@@ -755,6 +765,11 @@ def lifecycle_start(req: LifecycleStart) -> dict:
         kind, source = "code", "default"
     if kind not in tasks.KINDS:
         kind, source = "code", "default"
+    # Guard on REGISTERED kinds: research/docs are valid KINDS but their templates
+    # only register in Chunks 4/5. A clean 400 here beats letting template_for()
+    # raise a KeyError → HTTP 500. When those templates land, this passes.
+    if kind not in lifecycle_templates.LIFECYCLE_TEMPLATES:
+        raise HTTPException(400, f"kind {kind!r} is not yet runnable (no template registered)")
     if not task.get("kind"):
         tasks.set_kind(req.task_id, kind, doc_template=task.get("doc_template"))
         tasks.add_comment(

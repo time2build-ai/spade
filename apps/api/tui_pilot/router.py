@@ -20,6 +20,9 @@ from __future__ import annotations
 import re
 
 # Word-boundary keyword sets. Research is checked BEFORE docs (see classify).
+# These lists are intentionally LEAN and ADVISORY: the output is only stored as
+# `kind_suggested` (a suggestion), never the authoritative kind — a human confirms
+# it — so we optimize for a few high-signal tokens over exhaustive coverage.
 #
 # NOTE the docs set deliberately uses ``\bdoc\b`` / ``\bdocs\b`` word-boundary
 # tokens, NOT a ``"doc "`` substring — the substring approach both missed the

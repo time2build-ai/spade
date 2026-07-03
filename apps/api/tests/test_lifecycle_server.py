@@ -331,14 +331,12 @@ def test_confirm_kind_sets_kind_then_409_after_run(monkeypatch):
     from tui_pilot.server import app
     c = TestClient(app)
     tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
-    r = c.post(f"/tasks/{tid}/kind", json={"kind": "docs", "doc_template": "sow"})
+    # code is a REGISTERED (runnable) kind → confirm succeeds
+    r = c.post(f"/tasks/{tid}/kind", json={"kind": "code"})
     assert r.status_code == 200
-    row = c.get(f"/tasks/{tid}").json()
-    assert row["kind"] == "docs" and row["doc_template"] == "sow"
-    # confirm to code and start a run (code needs a repo, which _project set up)
-    c.post(f"/tasks/{tid}/kind", json={"kind": "code"})
+    assert c.get(f"/tasks/{tid}").json()["kind"] == "code"
     c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
-    # now kind is locked → 409
+    # now kind is locked → 409 (lock takes precedence over the runnable guard)
     r2 = c.post(f"/tasks/{tid}/kind", json={"kind": "research"})
     assert r2.status_code == 409 and "detail" in r2.json()
 
@@ -347,6 +345,53 @@ def test_confirm_kind_unknown_task_404():
     from tui_pilot.server import app
     c = TestClient(app)
     assert c.post("/tasks/SPD-999/kind", json={"kind": "code"}).status_code == 404
+
+
+def test_confirm_unregistered_kind_400_not_500(monkeypatch):
+    # research/docs are valid KINDS but their templates only register in Chunks
+    # 4/5 — confirming them now must be a clean 400 ("not yet runnable"), never a
+    # 500. When those templates land, this guard passes automatically.
+    _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
+    r = c.post(f"/tasks/{tid}/kind", json={"kind": "research"})
+    assert r.status_code == 400 and "runnable" in r.json()["detail"]
+
+
+def test_start_unregistered_kind_400_not_500(monkeypatch):
+    # The real 500 repro path: a research-suggested task (kind_suggested set by the
+    # router on create, NOT confirmed) → start resolves kind=research → the
+    # template lookup must NOT surface a KeyError as a 500.
+    _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme",
+                                 "title": "Investigate auth perf"}).json()["id"]
+    assert c.get(f"/tasks/{tid}").json()["kind_suggested"] == "research"
+    r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
+    assert r.status_code == 400 and "runnable" in r.json()["detail"]
+    # code still starts fine
+    tid2 = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
+    assert c.post("/lifecycle/start",
+                  json={"project_id": "acme", "task_id": tid2}).status_code == 200
+
+
+def test_confirm_rejects_bad_doc_template(monkeypatch):
+    _patch(monkeypatch)
+    _project()
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
+    # doc_template on a non-docs kind → 400
+    r = c.post(f"/tasks/{tid}/kind", json={"kind": "code", "doc_template": "sow"})
+    assert r.status_code == 400 and "doc_template" in r.json()["detail"]
+    # invalid doc_template value (even with kind=docs) → 400 (fires before the
+    # not-yet-runnable guard, so we see the doc_template message)
+    r2 = c.post(f"/tasks/{tid}/kind", json={"kind": "docs", "doc_template": "bogus"})
+    assert r2.status_code == 400 and "doc_template" in r2.json()["detail"]
 
 
 def test_start_no_workspace_kind_does_not_require_repo(monkeypatch):
