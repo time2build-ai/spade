@@ -16,13 +16,28 @@ const PRIORITY_LABEL = ["critical", "high", "medium", "low"] as const;
 /** Status → dot color, matching the backlog column colors. */
 const STATUS_COLOR: Record<string, string> = {
   ready: "var(--text-4)",
-  // Task Lifecycle V2 phases.
+  // Task Lifecycle V2 phases (code).
   shaping: "var(--pink)",
   plan_review: "var(--amber)",
   building: "var(--blue)",
   pr_review: "var(--accent)",
   shipped: "var(--green)",
+  // Task-Type Router per-kind phases (research + docs).
+  scoping: "var(--amber)",
+  investigating: "var(--blue)",
+  synthesis: "var(--accent)",
+  outline: "var(--amber)",
+  drafting: "var(--blue)",
+  review: "var(--accent)",
+  delivered: "var(--green)",
   blocked: "var(--amber)",
+};
+
+/** Kind badge glyph + label (✨ code · 🔬 research · 📄 docs). */
+const KIND_BADGE: Record<string, { icon: string; label: string }> = {
+  code: { icon: "✨", label: "Code" },
+  research: { icon: "🔬", label: "Research" },
+  docs: { icon: "📄", label: "Docs" },
 };
 
 const REL_LABEL: Record<string, string> = {
@@ -32,19 +47,28 @@ const REL_LABEL: Record<string, string> = {
   subtask: "subtask of",
 };
 
-/** Human labels for the three lifecycle gates. */
+/** Human labels for every lifecycle gate (code + research + docs). */
 const GATE_LABEL: Record<string, string> = {
   plan: "Plan review",
   manual_test: "Manual test",
   merge: "Merge approval",
+  // Research + docs gates.
+  scope: "Scope review",
+  outline: "Outline review",
+  review: "Review",
 };
 
-/** Human labels for the four artifact kinds (drives the Artifacts panel). */
+/** Human labels for every artifact kind (drives the Artifacts panel). */
 const ARTIFACT_LABEL: Record<string, string> = {
   spec: "Spec",
   plan: "Plan",
   test_guide: "Test guide",
   review_report: "Review report",
+  // Research + docs artifact kinds.
+  finding: "Finding",
+  report: "Report",
+  outline: "Outline",
+  doc: "Document",
 };
 
 /** Icon + accent for each lifecycle comment kind on the timeline. */
@@ -206,6 +230,12 @@ export default function TaskPage() {
         <span className="d" style={{ background: STATUS_COLOR[task.status] ?? "var(--text-4)" }} />
         {task.status}
       </span>
+      {task.kind && KIND_BADGE[task.kind] && (
+        <span className="chip" data-testid="task-kind-chip" title={KIND_BADGE[task.kind].label}>
+          <span aria-hidden style={{ marginRight: 3 }}>{KIND_BADGE[task.kind].icon}</span>
+          {KIND_BADGE[task.kind].label}
+        </span>
+      )}
       <Link href="/brain" className="btn">
         <Icon name="graph" size={13} /> View in graph
       </Link>
@@ -380,40 +410,79 @@ export default function TaskPage() {
             </>
           ) : null}
 
-          {/* Artifacts panel — spec / plan / test guide / review report pinned to
-              the task; each opens a drawer that renders its markdown. */}
+          {/* Deliverables & artifacts. Docs render as a styled, sandboxed doc
+              (shareable /api/doc/{id}); research findings group under the report;
+              everything else opens a markdown drawer. */}
           {(() => {
             const arts = artifactsData?.artifacts ?? [];
-            const order = ["spec", "plan", "test_guide", "review_report"];
-            const sorted = [...arts].sort(
-              (a, b) => (order.indexOf(a.kind) + 1 || 99) - (order.indexOf(b.kind) + 1 || 99),
+            const docs = arts.filter((a) => a.kind === "doc");
+            const reports = arts.filter((a) => a.kind === "report");
+            const findings = arts.filter((a) => a.kind === "finding");
+            const order = ["spec", "plan", "test_guide", "review_report", "outline"];
+            const others = arts
+              .filter((a) => !["doc", "report", "finding"].includes(a.kind))
+              .sort((a, b) => (order.indexOf(a.kind) + 1 || 99) - (order.indexOf(b.kind) + 1 || 99));
+
+            const ArtifactRow = ({ a, nested }: { a: import("@/lib/types").Artifact; nested?: boolean }) => (
+              <button
+                type="button"
+                className="link-row"
+                key={a.id}
+                data-testid="artifact-row"
+                data-kind={a.kind}
+                onClick={() => setOpenArtifact(a)}
+                style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", font: "inherit", color: "inherit", paddingLeft: nested ? 22 : undefined }}
+              >
+                <span className="lr-icon" style={{ background: "rgba(122,162,247,.12)", color: "var(--blue)" }}>
+                  <Icon name="doc" size={14} />
+                </span>
+                <div>
+                  <div className="lr-title">{ARTIFACT_LABEL[a.kind] ?? a.kind}{a.title ? ` · ${a.title}` : ""}</div>
+                  <div className="lr-sub mono">{a.repo_path ?? "inline"}</div>
+                </div>
+              </button>
             );
+
             return (
               <>
                 <div className="section-h">Artifacts{arts.length ? <span className="count">{arts.length} pinned</span> : null}</div>
-                {sorted.length ? (
-                  <div data-testid="artifacts-panel">
-                    {sorted.map((a) => (
-                      <button
-                        type="button"
-                        className="link-row"
-                        key={a.id}
-                        data-testid="artifact-row"
-                        data-kind={a.kind}
-                        onClick={() => setOpenArtifact(a)}
-                        style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", font: "inherit", color: "inherit" }}
-                      >
-                        <span className="lr-icon" style={{ background: "rgba(122,162,247,.12)", color: "var(--blue)" }}>
-                          <Icon name="doc" size={14} />
-                        </span>
-                        <div>
-                          <div className="lr-title">{ARTIFACT_LABEL[a.kind] ?? a.kind}{a.title ? ` · ${a.title}` : ""}</div>
-                          <div className="lr-sub mono">{a.repo_path ?? "—"}</div>
-                        </div>
-                      </button>
+
+                {/* Doc deliverables — styled, sandboxed, shareable. */}
+                {docs.map((a) => (
+                  <DocDeliverable key={a.id} artifact={a} />
+                ))}
+
+                {/* Research report with its per-angle findings grouped beneath. */}
+                {reports.map((r) => (
+                  <div key={r.id} data-testid="report-group">
+                    <ArtifactRow a={r} />
+                    {findings.length > 0 && (
+                      <div data-testid="findings-group">
+                        {findings.map((f) => (
+                          <ArtifactRow key={f.id} a={f} nested />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {/* Findings with no report yet (mid fan-out) still render. */}
+                {reports.length === 0 && findings.length > 0 && (
+                  <div data-testid="findings-group">
+                    {findings.map((f) => (
+                      <ArtifactRow key={f.id} a={f} />
                     ))}
                   </div>
-                ) : (
+                )}
+
+                {others.length > 0 && (
+                  <div data-testid="artifacts-panel">
+                    {others.map((a) => (
+                      <ArtifactRow key={a.id} a={a} />
+                    ))}
+                  </div>
+                )}
+
+                {arts.length === 0 && (
                   <div className="muted" style={{ fontSize: 12.5, padding: "2px 2px 8px" }}>
                     No artifacts yet. As the lifecycle shapes, plans, and reviews this task, its documents show up here.
                   </div>
@@ -606,6 +675,66 @@ function ArtifactDrawer({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A `doc` deliverable — the styled document rendered in a LOCKED sandbox iframe
+ *  (no allow-scripts; the doc is static HTML + inline SVG, and the server sends a
+ *  restrictive CSP). "Open document" opens the shareable `/api/doc/{id}` route in
+ *  a new tab (where the browser's own Print works); "Copy share link" copies that
+ *  URL to the clipboard (the anchor's href is also the shareable link). */
+function DocDeliverable({ artifact }: { artifact: import("@/lib/types").Artifact }) {
+  const url = api.docUrl(artifact.id);
+  const label = `${ARTIFACT_LABEL[artifact.kind] ?? artifact.kind}${artifact.title ? ` · ${artifact.title}` : ""}`;
+  const [copied, setCopied] = React.useState(false);
+
+  const copyShare = React.useCallback(
+    (e: React.MouseEvent) => {
+      // The href is the shareable link; intercept the click to copy it instead of
+      // navigating in-place (falls through to the link if clipboard is blocked).
+      if (navigator.clipboard) {
+        e.preventDefault();
+        void navigator.clipboard.writeText(new URL(url, window.location.origin).href);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      }
+    },
+    [url],
+  );
+
+  return (
+    <div data-testid="doc-deliverable" data-kind="doc" style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <span style={{ display: "inline-flex", color: "var(--blue)" }}><Icon name="doc" size={16} /></span>
+        <b style={{ fontSize: 13, flex: 1 }}>{label}</b>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn"
+          data-testid="doc-open"
+          style={{ padding: "3px 10px", fontSize: 12, textDecoration: "none" }}
+        >
+          Open document ↗
+        </a>
+        <a
+          href={url}
+          data-testid="doc-share-link"
+          onClick={copyShare}
+          className="btn"
+          style={{ padding: "3px 10px", fontSize: 12, textDecoration: "none" }}
+        >
+          {copied ? "Copied ✓" : "Copy share link"}
+        </a>
+      </div>
+      <iframe
+        data-testid="doc-iframe"
+        title={label}
+        src={url}
+        sandbox=""
+        style={{ width: "100%", height: 520, border: "1px solid var(--border)", borderRadius: 10, background: "#fff" }}
+      />
     </div>
   );
 }

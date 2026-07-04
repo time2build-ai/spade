@@ -213,6 +213,38 @@ def test_reconcile_restores_lifecycle_linkage():
             server._pollers.pop("lsess", None)
 
 
+def test_reconcile_restores_fanout_linkage():
+    from tui_pilot import sessions_store, server, fanout
+
+    # A running investigator agent whose session id lives ONLY in fanout_agents
+    # (never in lifecycle_runs.agent_session_id), with a cleared in-memory _meta —
+    # exactly the state after a server restart mid-investigating.
+    rid = _bare_fanout_run("frecon")
+    fanout.mark_running(rid, "investigating", 1, "fsess-recon", "acct")
+    sessions_store.insert(id="fsess-recon", status="live", cwd="/w", name="fsess-recon")
+    try:
+        kept = server._reconcile_sessions(is_alive=lambda sid: True)
+        assert "fsess-recon" in kept
+        meta = server._meta["fsess-recon"]
+        # re-stamped so the fan-out collector / death-detector see it again
+        assert meta["lifecycle_fanout_run_id"] == rid
+        assert meta["lifecycle_fanout_idx"] == 1
+        assert meta["lifecycle_phase"] == "investigating"
+        # not pre-advanced, so a finish during downtime still releases the barrier
+        assert "lifecycle_fanout_advanced" not in meta
+        # a finish now would be picked up by the fan-out collector
+        from tui_pilot.harness import HarnessState
+        assert server._collect_lifecycle_fanout(
+            "fsess-recon", HarnessState("done", report="{}")
+        ) == (rid, "investigating", 1, "{}")
+    finally:
+        with server._registry_lock:
+            server._sessions.pop("fsess-recon", None)
+            server._locks.pop("fsess-recon", None)
+            server._meta.pop("fsess-recon", None)
+            server._pollers.pop("fsess-recon", None)
+
+
 def test_collect_lifecycle_advance_once_guard():
     from tui_pilot import server
     from tui_pilot.harness import HarnessState
@@ -243,6 +275,98 @@ def test_collect_lifecycle_advance_once_guard():
         assert server._collect_lifecycle_advance(aid, st) is None
     finally:
         server._meta.pop(aid, None)
+
+
+def _bare_fanout_run(run_id="frun"):
+    """A minimal run + fan-out rows so collector/drainer tests resolve FKs."""
+    from tui_pilot import db, fanout, projects, tasks
+    pid = f"p-{run_id}"
+    projects.create(id=pid, name="P", path="/w")
+    tid = tasks.create(project_id=pid, title="Research")["id"]
+    db.execute(
+        "INSERT INTO lifecycle_runs (id, project_id, task_id, phase, kind, active, "
+        "created_at, updated_at) VALUES (?, ?, ?, 'investigating', 'research', 1, "
+        "'t', 't')",
+        (run_id, pid, tid),
+    )
+    fanout.create_rows(run_id, "investigating", ["a", "b"])
+    return run_id
+
+
+def test_collect_lifecycle_fanout_once_guard():
+    from tui_pilot import server
+    from tui_pilot.harness import HarnessState
+    rid = _bare_fanout_run("frun1")
+    aid = "fsess1"
+    server._meta[aid] = {"id": aid, "lifecycle_fanout_run_id": rid,
+                         "lifecycle_phase": "investigating", "lifecycle_fanout_idx": 0}
+    st = HarnessState("done", report='{"k":1}')
+    try:
+        first = server._collect_lifecycle_fanout(aid, st)
+        assert first == (rid, "investigating", 0, '{"k":1}')
+        # once-guard: a second collect for the same finish yields None
+        assert server._collect_lifecycle_fanout(aid, st) is None
+    finally:
+        server._meta.pop(aid, None)
+
+
+def test_fanout_session_not_collected_by_single_agent():
+    from tui_pilot import server
+    from tui_pilot.harness import HarnessState
+    rid = _bare_fanout_run("frun2")
+    aid = "fsess2"
+    # A fan-out session carries the fan-out keys (and, defensively, even a stray
+    # single-agent key) — the single-agent collector must still refuse it.
+    server._meta[aid] = {"id": aid, "lifecycle_fanout_run_id": rid,
+                         "lifecycle_run_id": rid, "lifecycle_phase": "investigating",
+                         "lifecycle_fanout_idx": 1}
+    st = HarnessState("done", report='{}')
+    try:
+        assert server._collect_lifecycle_advance(aid, st) is None
+        # but the fan-out collector claims it
+        assert server._collect_lifecycle_fanout(aid, st) == (rid, "investigating", 1, '{}')
+    finally:
+        server._meta.pop(aid, None)
+
+
+def test_collect_lifecycle_fanout_death_blocks_row():
+    from tui_pilot import server, fanout
+    from tui_pilot.harness import HarnessState
+    rid = _bare_fanout_run("frun3")
+    aid = "fsess3"
+    server._meta[aid] = {"id": aid, "lifecycle_fanout_run_id": rid,
+                         "lifecycle_phase": "investigating", "lifecycle_fanout_idx": 0}
+    st = HarnessState("exited")
+    try:
+        fdeath = server._collect_lifecycle_fanout_death(aid, st)
+        assert fdeath == (rid, "investigating", 0)
+        # once-guard
+        assert server._collect_lifecycle_fanout_death(aid, st) is None
+        # a done finish is NOT a death
+        assert server._collect_lifecycle_fanout_death("nope", HarnessState("done")) is None
+        # the drainer path blocks the row
+        from tui_pilot import lifecycle
+        lifecycle.fanout_agent_died(*fdeath)
+        assert fanout.get_row(rid, "investigating", 0)["status"] == "blocked"
+    finally:
+        server._meta.pop(aid, None)
+
+
+def test_drain_lifecycle_fanout_calls_advance_with_session(monkeypatch):
+    from tui_pilot import server, spade_server, lifecycle
+    rid = _bare_fanout_run("frun4")
+    captured = {}
+
+    def fake_advance_fanout(run_id, phase, idx, *, report, spawn, git, session_id=None):
+        captured.update(run_id=run_id, phase=phase, idx=idx, report=report,
+                        session_id=session_id)
+
+    monkeypatch.setattr(lifecycle, "advance_fanout", fake_advance_fanout)
+    monkeypatch.setattr(spade_server, "_lifecycle_spawn", lambda run: (lambda r, p: ("s", "a")))
+    monkeypatch.setattr(spade_server, "_lifecycle_git", lambda pid: object())
+    server._drain_lifecycle_fanout(rid, "investigating", 1, '{"r":1}', "aid-9")
+    assert captured == {"run_id": rid, "phase": "investigating", "idx": 1,
+                        "report": '{"r":1}', "session_id": "aid-9"}
 
 
 def test_env_watch_tick_posts_system_note_on_git_error(monkeypatch):

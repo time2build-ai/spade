@@ -23,11 +23,14 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from tui_pilot import artifacts, db, gates, gitops, project_git, tasks
+from tui_pilot import (
+    artifacts, brain, db, fanout, gates, gitops, lifecycle_templates,
+    project_git, tasks,
+)
 
-PHASES = ["shaping", "plan_review", "building", "pr_review", "shipped", "blocked"]
-AGENT_PHASES = {"shaping", "building", "pr_review"}   # phases that spawn an agent
-GATES = {"plan", "manual_test", "merge"}
+# The phase list, agent-phase set, and gate set now live in lifecycle_templates
+# (the per-kind registry) — the engine reads them from there so there is a single
+# source of truth. Do NOT reintroduce module-level copies here.
 
 _MAX_SELF_HEAL = 3
 
@@ -49,9 +52,32 @@ def _slugify(text: str) -> str:
 
 # -- reads --------------------------------------------------------------------
 
+def _annotate(run: dict) -> dict:
+    """Add derived fields to a serialized run.
+
+    ``fanout_count`` = number of fan-out agent rows for the run's CURRENT phase,
+    but only while that phase is itself a fan-out phase (0 otherwise). Gating on
+    the current phase keeps the client's ``▶ N agents`` badge honest: once the
+    barrier releases and the run advances past the fan-out phase (e.g. research
+    into ``synthesis``), the count drops back to 0 rather than showing stale
+    agents. Never crashes on a legacy/unknown kind.
+    """
+    kind = run.get("kind") or "code"
+    phase = run.get("phase")
+    count = 0
+    try:
+        fanout_phases = lifecycle_templates.fanout_phases(kind)
+    except KeyError:
+        fanout_phases = set()
+    if phase in fanout_phases:
+        count = len(fanout.rows_for(run["id"], phase))
+    run["fanout_count"] = count
+    return run
+
+
 def get(run_id: str) -> dict | None:
     rows = db.query("SELECT * FROM lifecycle_runs WHERE id = ?", (run_id,))
-    return dict(rows[0]) if rows else None
+    return _annotate(dict(rows[0])) if rows else None
 
 
 def active_run_for_task(task_id: str) -> dict | None:
@@ -61,6 +87,19 @@ def active_run_for_task(task_id: str) -> dict | None:
         (task_id,),
     )
     return dict(rows[0]) if rows else None
+
+
+def has_run_for_task(task_id: str) -> bool:
+    """True if the task has ANY lifecycle run — active OR terminal.
+
+    Used by the kind-confirm endpoint to lock the kind once a run exists: spec §3
+    locks kind at Start and it must stay locked through shipped/delivered, so this
+    matches any row (not just the active one).
+    """
+    rows = db.query(
+        "SELECT 1 FROM lifecycle_runs WHERE task_id = ? LIMIT 1", (task_id,)
+    )
+    return bool(rows)
 
 
 def run_by_session(session_id: str) -> dict | None:
@@ -83,7 +122,7 @@ def list_for_project(project_id: str) -> list[dict]:
         "ORDER BY created_at DESC, rowid DESC",
         (project_id,),
     )
-    return [dict(r) for r in rows]
+    return [_annotate(dict(r)) for r in rows]
 
 
 # -- writes -------------------------------------------------------------------
@@ -110,7 +149,13 @@ def _spawn_phase(run: dict, phase: str, spawn, resume_comment: str | None = None
 # -- start --------------------------------------------------------------------
 
 def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
-    """Create a shaping run, prepare its workspace, spawn the shaping agent.
+    """Create a run at the kind's first phase, (optionally) prepare a workspace,
+    and spawn the first-phase agent.
+
+    The run's ``kind`` is read from the task (default ``code`` for V2 tasks with
+    no kind). ``git.prepare_workspace`` is only called for kinds whose first phase
+    needs a repo (``needs_workspace``); research/docs runs have a null workspace
+    and fall back to a per-agent scratch cwd downstream.
 
     Raises ValueError if the task already has an active run (one active run per
     task; history is retained).
@@ -119,26 +164,197 @@ def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
         raise ValueError(f"task {task_id} already has an active lifecycle run")
     cfg = project_git.get(project_id) or {}
     task = tasks.get(task_id) or {}
+    kind = task.get("kind") or "code"
+    first = lifecycle_templates.first_phase(kind)
     slug = _slugify(task.get("title", task_id))
     run_id = _new_id()
-    ws = git.prepare_workspace(cfg, task_id, slug, kind="feat")
+    ws = (git.prepare_workspace(cfg, task_id, slug, kind="feat")
+          if lifecycle_templates.needs_workspace(kind) else {})
     db.execute(
         "INSERT INTO lifecycle_runs "
-        "(id, project_id, task_id, phase, active, branch_name, worktree_path, "
-        " self_heal_attempts, created_at, updated_at) "
-        "VALUES (?, ?, ?, 'shaping', 1, ?, ?, 0, ?, ?)",
-        (run_id, project_id, task_id, ws.get("branch_name"),
+        "(id, project_id, task_id, phase, kind, active, branch_name, "
+        " worktree_path, self_heal_attempts, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0, ?, ?)",
+        (run_id, project_id, task_id, first, kind, ws.get("branch_name"),
          ws.get("worktree_path"), _now(), _now()),
     )
     run = get(run_id)
-    _spawn_phase(run, "shaping", spawn)
-    tasks.move(task_id, "shaping")
+    _spawn_phase(run, first, spawn)
+    tasks.move(task_id, first)
     tasks.add_comment(
         task_id,
-        body=f"Lifecycle started — shaping on branch {ws.get('branch_name')}.",
+        body=f"Lifecycle started — {first} on branch {ws.get('branch_name')}.",
         author="system", kind="system",
     )
     return get(run_id)
+
+
+# -- fan-out ------------------------------------------------------------------
+# A fan-out phase runs N agents in parallel (one per angle) and advances on an
+# all-done barrier. The barrier advance is an atomic compare-and-swap on the run's
+# phase (NOT read-then-act): drop/retry HTTP threads run concurrently with the
+# poll-loop drainer, so several resolvers can observe `all_done` at once — only
+# the ONE whose CAS UPDATE affected a row spawns synthesis. This is the N-resolver
+# analogue of V2's phase-guarded once-only advance.
+
+def _spawn_fanout(run: dict, phase: str, idx: int, spawn) -> None:
+    """Spawn one fan-out agent for angle ``idx`` and mark its row ``running``.
+
+    The per-idx angle is threaded via ``run['fanout_idx']`` (mirroring how
+    ``_spawn_phase`` threads ``resume_comment``) so the real spawn closure can
+    stamp the fan-out ``_meta`` keys and the prompt builder can read the angle.
+    """
+    run = dict(run)
+    run["fanout_idx"] = idx
+    session_id, account_id = spawn(run, phase)
+    fanout.mark_running(run["id"], phase, idx, session_id, account_id)
+
+
+def _cas_advance_phase(run_id: str, from_phase: str, to_phase: str) -> bool:
+    """Atomic barrier advance: move the run to ``to_phase`` iff it is still at
+    ``from_phase``. Returns True for the single resolver whose UPDATE won the
+    race (rowcount == 1); all concurrent losers see rowcount 0 and get False."""
+    with db.tx() as cx:
+        cur = cx.execute(
+            "UPDATE lifecycle_runs SET phase = ?, updated_at = ? "
+            "WHERE id = ? AND phase = ?",
+            (to_phase, _now(), run_id, from_phase),
+        )
+        return cur.rowcount == 1
+
+
+def _release_barrier(run_id: str, phase: str, spawn, git) -> None:
+    """If every angle is resolved, CAS-advance to the next phase and (only for the
+    CAS winner) move the task + spawn the synthesis agent with the findings as
+    context. Safe to call from any resolver (finish / drop / all-dropped edge)."""
+    if not fanout.all_done(run_id, phase):
+        return
+    run = get(run_id)
+    if run is None:
+        return
+    kind = run.get("kind") or "code"
+    nxt = lifecycle_templates.phase_after(kind, phase)
+    if nxt is None:
+        return
+    if not _cas_advance_phase(run_id, phase, nxt):
+        return  # another resolver already advanced the barrier
+    tid = run["task_id"]
+    tasks.move(tid, nxt)
+    n = len(fanout.rows_for(run_id, phase))
+    done = sum(1 for r in fanout.rows_for(run_id, phase) if r["status"] == "done")
+    tasks.add_comment(
+        tid,
+        body=f"Fan-out {phase} complete — {done}/{n} angle(s) delivered findings; "
+             f"advancing to {nxt}.",
+        author="system", kind="system",
+    )
+    if nxt in lifecycle_templates.agent_phases(kind):
+        _spawn_phase(get(run_id), nxt, spawn)
+
+
+def enter_fanout(run: dict, phase: str, angles: list, spawn, git) -> None:
+    """Enter a fan-out ``phase``: create N rows and spawn N agents.
+
+    Idempotent — if any ``fanout_agents`` rows already exist for ``(run_id,
+    phase)`` this is a no-op (guards a double scope-approve from double-spawning N
+    agents). Sets the run's phase to ``phase`` and moves the task there."""
+    run_id = run["id"]
+    if fanout.rows_for(run_id, phase):
+        return
+    fanout.create_rows(run_id, phase, angles)
+    _set_run(run_id, phase=phase)
+    tasks.move(run["task_id"], phase)
+    for idx in range(len(angles)):
+        _spawn_fanout(get(run_id), phase, idx, spawn)
+
+
+def advance_fanout(run_id: str, phase: str, idx: int, *, report: str | None,
+                   spawn, git, session_id: str | None = None) -> None:
+    """Consume one fan-out angle's finished handoff.
+
+    Per-row idempotency is atomic: the row is CLAIMED (unresolved → done) before
+    the finding is registered, so a late finish for an already ``dropped`` angle
+    (or a duplicate delivery of a ``done`` one) is a no-op — it neither flips the
+    row nor registers a finding after synthesis started. After a successful claim,
+    the report is stored as an inline ``finding`` artifact and the barrier is
+    (maybe) released via the once-only CAS advance.
+
+    The claim + finding-registration + report link run in a SINGLE ``db.tx()`` so
+    a concurrent ``drop_angle`` on another angle can never observe this row as
+    ``done`` (and win the barrier CAS, spawning synthesis) BEFORE its finding
+    artifact is committed — otherwise a completed angle's findings would be
+    silently dropped from the synthesis context (db.tx is re-entrant, so the
+    nested mark_done/register/set_report calls join this one outer transaction)."""
+    run = get(run_id)
+    if run is None:
+        return
+    row = fanout.get_row(run_id, phase, idx)
+    if row is None or row["status"] in ("done", "dropped"):
+        return  # fast-path: already resolved
+    with db.tx():
+        if not fanout.mark_done(run_id, phase, idx):
+            return  # lost the claim race to a concurrent drop / finish
+        art = artifacts.register(run["task_id"], run_id, "finding",
+                                 f"Finding — angle {idx}", content=report, by=phase)
+        fanout.set_report(run_id, phase, idx, art["id"])
+    _release_barrier(run_id, phase, spawn, git)
+
+
+def retry_angle(run_id: str, phase: str, idx: int, *, spawn, git) -> None:
+    """Re-spawn one fan-out angle. Only a ``blocked`` row (a dead/failed agent) is
+    re-spawnable — a ``done``/``dropped`` row is already resolved, and a
+    ``queued``/``running`` one still has a live agent (re-spawning it would leave
+    two live agents racing the same idx). Any non-``blocked`` status is a no-op
+    with a system note."""
+    run = get(run_id)
+    if run is None:
+        return
+    row = fanout.get_row(run_id, phase, idx)
+    if row is None:
+        return
+    if row["status"] != "blocked":
+        tasks.add_comment(
+            run["task_id"],
+            body=f"Retry ignored — fan-out angle [{phase} #{idx}] is "
+                 f"{row['status']}, not blocked.",
+            author="system", kind="system",
+        )
+        return
+    tasks.add_comment(run["task_id"],
+                      body=f"Retrying fan-out angle [{phase} #{idx}].",
+                      author="system", kind="system")
+    _spawn_fanout(run, phase, idx, spawn)
+
+
+def drop_angle(run_id: str, phase: str, idx: int, *, spawn, git) -> None:
+    """Give up on one fan-out angle: mark it ``dropped`` + note. If that resolves
+    the last outstanding row, run the SAME CAS barrier advance (so dropping every
+    angle spawns synthesis with zero findings)."""
+    run = get(run_id)
+    if run is None:
+        return
+    if not fanout.drop(run_id, phase, idx):
+        return  # already resolved (done/dropped) — no-op
+    tasks.add_comment(run["task_id"],
+                      body=f"Dropped fan-out angle [{phase} #{idx}].",
+                      author="system", kind="system")
+    _release_barrier(run_id, phase, spawn, git)
+
+
+def fanout_agent_died(run_id: str, phase: str, idx: int) -> None:
+    """A fan-out agent whose harness exited without a ``done`` handoff → move its
+    row to ``blocked`` and surface it, so the barrier never stalls in ``running``.
+    The blocked row holds the barrier until a ``retry_angle``/``drop_angle``."""
+    run = get(run_id)
+    if run is None:
+        return
+    if fanout.block(run_id, phase, idx):
+        tasks.add_comment(
+            run["task_id"],
+            body=f"Fan-out agent [{phase} #{idx}] exited without finishing — "
+                 f"blocked. Retry or drop it to release the barrier.",
+            author="system", kind="system",
+        )
 
 
 # -- blocking -----------------------------------------------------------------
@@ -185,7 +401,8 @@ def advance(run_id: str, *, phase: str, report: str | None, spawn, git,
         return
     if session_id is not None and session_id == run.get("last_finished_session"):
         return  # already processed this exact agent finish
-    if phase not in AGENT_PHASES:
+    kind = run.get("kind") or "code"
+    if phase not in lifecycle_templates.agent_phases(kind):
         # Never silent: a finish for a non-agent phase (plan_review/blocked/
         # shipped) is unexpected — record it rather than fall through.
         tasks.add_comment(
@@ -197,12 +414,9 @@ def advance(run_id: str, *, phase: str, report: str | None, spawn, git,
     if session_id is not None:
         _set_run(run_id, last_finished_session=session_id)
         run = get(run_id)
-    if phase == "shaping":
-        _advance_shaping(run, report, spawn, git)
-    elif phase == "building":
-        _advance_building(run, report, spawn, git)
-    elif phase == "pr_review":
-        _advance_pr_review(run, report, spawn, git)
+    handler = _ADVANCE_HANDLERS.get(kind, {}).get(phase)
+    if handler is not None:
+        handler(run, report, spawn, git)
 
 
 def retry(run_id: str, *, spawn, git) -> None:
@@ -349,6 +563,166 @@ def _advance_shaping(run: dict, report: str | None, spawn, git) -> None:
                       author="system", kind="gate")
 
 
+# -- research handlers --------------------------------------------------------
+# Research has no workspace: scoping proposes angles → scope gate; the scope-gate
+# approve fans out (via investigating's `fanout` flag in decide_gate); the barrier
+# spawns synthesis (generic _spawn_phase, NOT a research entry handler); synthesis
+# finishes → review gate; review-approve delivers (creates followups + brain nodes).
+
+def _research_angles(run: dict) -> list:
+    """The angles the scoping agent proposed, read back from the latest inline
+    ``plan`` artifact (its content is the JSON scoping handoff). Used by the
+    scope-gate approve path to seed the fan-out."""
+    plans = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "plan"]
+    if not plans:
+        return []
+    try:
+        data = json.loads(plans[-1].get("content") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return data.get("angles") or []
+
+
+def _advance_scoping(run: dict, report: str | None, spawn, git) -> None:
+    """scoping finish → register the plan (inline angles) + open the scope gate.
+
+    The run stays at ``scoping`` while the gate waits; scope-approve fans out."""
+    data = _parse_report(run, "scoping", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    angles = data.get("angles") or []
+    if not angles:
+        # Zero angles → block (recoverable via retry), never open the scope gate.
+        # An empty fan-out would move to investigating with 0 rows, and
+        # `fanout.all_done` is False when no rows exist, so the barrier would never
+        # release and there'd be no retry/drop target — an unrecoverable stall. A
+        # research task with no angles is a scoping failure the human should see.
+        _block(run, "scoping", "scoping produced no angles",
+               note="Scoping agent proposed no research angles; blocking so it can "
+                    "be retried. Raw report:\n" + (report or ""))
+        return
+    # Inline plan artifact: content is the full scoping JSON so the scope-approve
+    # path (and the human) can read the proposed angles/modes back.
+    artifacts.register(tid, run["id"], "plan", "Research plan",
+                       content=json.dumps(data), by="scoping")
+    tasks.add_comment(tid, body=data.get("summary") or f"Scoped {len(angles)} angle(s).",
+                      author="scoping", kind="progress")
+    gates.open_gate(tid, run["id"], "scope")
+    tasks.add_comment(tid, body="Angles proposed — scope gate opened.",
+                      author="system", kind="gate")
+
+
+def _advance_synthesis(run: dict, report: str | None, spawn, git) -> None:
+    """synthesis finish → register the report (inline), persist the full parsed
+    synthesis JSON (so deliver can read the followups/brain nodes), open review."""
+    data = _parse_report(run, "synthesis", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    artifacts.register(tid, run["id"], "report", "Research report",
+                       content=data.get("report") or "", by="synthesis")
+    _set_run(run["id"], synthesis_json=json.dumps(data))
+    gates.open_gate(tid, run["id"], "review")
+    tasks.add_comment(tid, body="Synthesis complete — review gate opened.",
+                      author="system", kind="gate")
+
+
+def _deliver_research(run: dict, git) -> None:
+    """review-approve → terminal ``delivered``: create every proposed followup task
+    and brain node from the persisted synthesis JSON.
+
+    Brain-node types are validated against ``brain.NODE_TYPES`` — an invalid type
+    is skipped (never a crash) and valid nodes get ``source='research:<task_id>'``.
+    """
+    tid = run["task_id"]
+    _set_run(run["id"], phase="delivered", active=0)
+    tasks.move(tid, "delivered")
+    try:
+        data = json.loads(run.get("synthesis_json") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    followups = data.get("followups") or []
+    created_tasks = 0
+    for f in followups:
+        title = f.get("title") if isinstance(f, dict) else str(f)
+        if not title:
+            continue
+        desc = f.get("description") if isinstance(f, dict) else None
+        tasks.create(project_id=run["project_id"], title=title, description=desc)
+        created_tasks += 1
+    nodes = data.get("brain_nodes") or []
+    created_nodes = skipped = 0
+    for n in nodes:
+        ntype = n.get("type") if isinstance(n, dict) else None
+        if ntype not in brain.NODE_TYPES:
+            skipped += 1     # invalid/unknown type → skip, don't crash create_node
+            continue
+        label = n.get("label") or n.get("title") or "Research finding"
+        brain.create_node(run["project_id"], type=ntype, label=label,
+                          detail=n.get("detail"), source=f"research:{tid}")
+        created_nodes += 1
+    tasks.add_comment(
+        tid,
+        body=f"Delivered — {created_tasks} followup task(s), {created_nodes} brain "
+             f"node(s) created" + (f" ({skipped} skipped)" if skipped else "") + ".",
+        author="system", kind="system",
+    )
+
+
+# -- docs handlers ------------------------------------------------------------
+# Docs has no workspace and no PR/merge: outline proposes the structure → outline
+# gate; outline-approve advances to drafting (generic phase move); drafting writes
+# the styled BODY sections → review gate; review-approve delivers (terminal). Both
+# artifacts are INLINE. The `doc` artifact stores BODY sections ONLY — the shared
+# render_shell wraps it once at the /doc/{id} render step, never here.
+
+def _advance_outline(run: dict, report: str | None, spawn, git) -> None:
+    """outline finish → register the inline ``outline`` artifact + open the outline
+    gate. The run stays at ``outline`` while the gate waits; approve → drafting."""
+    data = _parse_report(run, "outline", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    artifacts.register(tid, run["id"], "outline", "Document outline",
+                       content=data.get("outline") or "", by="outline")
+    tasks.add_comment(tid, body=data.get("summary") or "Outline ready.",
+                      author="outline", kind="progress")
+    gates.open_gate(tid, run["id"], "outline")
+    tasks.add_comment(tid, body="Outline ready — outline gate opened.",
+                      author="system", kind="gate")
+
+
+def _advance_drafting(run: dict, report: str | None, spawn, git) -> None:
+    """drafting finish → register the inline ``doc`` artifact whose content is the
+    BODY/sections ONLY (no shell — render_shell wraps it once at render time) +
+    open the review gate. The run stays at ``drafting`` while the gate waits."""
+    data = _parse_report(run, "drafting", report)
+    if data is None:
+        return
+    tid = run["task_id"]
+    # Title the doc with the TASK title so the shared /doc/{id} page (which renders
+    # the artifact title as <title>/<h1>) is not generically "Document".
+    doc_title = (tasks.get(tid) or {}).get("title") or "Document"
+    artifacts.register(tid, run["id"], "doc", doc_title,
+                       content=data.get("doc_html") or "", by="drafting")
+    tasks.add_comment(tid, body=data.get("summary") or "Draft ready.",
+                      author="drafting", kind="progress")
+    gates.open_gate(tid, run["id"], "review")
+    tasks.add_comment(tid, body="Draft complete — review gate opened.",
+                      author="system", kind="gate")
+
+
+def _deliver_docs(run: dict, git) -> None:
+    """review-approve → terminal ``delivered``: no repo/PR/merge, just mark the run
+    and task done. The `doc` artifact is already inline and shareable at /doc/{id}."""
+    tid = run["task_id"]
+    _set_run(run["id"], phase="delivered", active=0)
+    tasks.move(tid, "delivered")
+    tasks.add_comment(tid, body="Delivered — document is ready to share.",
+                      author="system", kind="system")
+
+
 # -- environment watcher ------------------------------------------------------
 
 def projects_with_pending_env() -> list[str]:
@@ -416,35 +790,41 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
         return
     tid = run["task_id"]
 
-    def _consume_gate() -> None:
-        gates.decide(g["id"], decision, comment=comment, by=by)
+    def _claim_gate() -> bool:
+        """CAS-claim the gate for THIS decision. Returns True iff we won the row; a
+        racing second decision that also passed the read-then-act guard above gets
+        False and must no-op, so an irreversible side-effect (deliver / git.merge)
+        runs exactly once. Mirrors the fan-out per-row CAS."""
+        return gates.try_decide(g["id"], decision, comment=comment, by=by)
+
+    def _note_gate() -> None:
         tasks.add_comment(
             tid,
             body=f"{gate} gate: {decision}" + (f" — {comment}" if comment else ""),
             author=by or "human", kind="gate",
         )
 
+    kind = run.get("kind") or "code"
+    adv = lifecycle_templates.gate_advances(kind).get(gate, {})
+
     if decision == "approved":
-        if gate == "plan":
-            _consume_gate()
-            _set_run(run_id, phase="building")
-            tasks.move(tid, "building")
-            _spawn_phase(get(run_id), "building", spawn)
-        elif gate in ("manual_test", "merge"):
-            # manual_test→open_pr and merge→git.merge have an irreversible git
-            # side-effect. Run it FIRST: only consume the gate once it succeeds.
-            # On GitError we _block() the run (recoverable via retry()) and RETURN
-            # with the gate still 'waiting' — never a consumed dead-end that a
-            # retried approve would no-op on. retry() resumes the producing phase
-            # (building for manual_test, pr_review for merge), which re-spawns the
-            # agent and, on success, opens a fresh gate.
+        approve = _APPROVE_HANDLERS.get(kind, {}).get(gate)
+        if approve is not None:
+            # A gate with an irreversible side-effect (code manual_test→open_pr,
+            # merge→git.merge; research/docs review→deliver). CLAIM the gate FIRST
+            # (atomic CAS): only the winner runs the side-effect, so a double-approve
+            # can't ship twice or create duplicate deliverables. On GitError we
+            # reopen() the gate to 'waiting' (restoring the retryable state) and
+            # _block() the run (recoverable via retry()) — never a consumed dead-end
+            # that a retried approve would no-op on. retry() resumes the producing
+            # phase, re-spawns the agent and, on success, opens a fresh gate.
+            if not _claim_gate():
+                return
             try:
-                if gate == "manual_test":
-                    _approve_manual_test(get(run_id), spawn, git)
-                else:
-                    _approve_merge(get(run_id), git)
+                approve(get(run_id), spawn, git)
             except gitops.GitError as e:
-                producing = "building" if gate == "manual_test" else "pr_review"
+                gates.reopen(g["id"])
+                producing = _producing_phase(kind, gate)
                 _block(
                     get(run_id), producing,
                     f"{gate} approve failed on a git operation",
@@ -452,19 +832,95 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
                          f"so it can be retried after fixing the cause.\n\n{e}",
                 )
                 return
-            _consume_gate()
+            _note_gate()
+        else:
+            # Plain phase move (code plan gate): advance to approve_next and spawn
+            # its agent (if that phase spawns one). An unregistered gate (no
+            # approve_next) is a no-op, matching V2's implicit else.
+            nxt = adv.get("approve_next")
+            if nxt is None:
+                return
+            if not _claim_gate():
+                return
+            _note_gate()
+            if nxt in lifecycle_templates.fanout_phases(kind):
+                # Fan-out phase (research scope→investigating): spawn N angle
+                # agents via the Chunk 2 barrier primitive, NOT a single agent.
+                enter_fanout(get(run_id), nxt, _research_angles(get(run_id)),
+                             spawn, git)
+            else:
+                _set_run(run_id, phase=nxt)
+                tasks.move(tid, nxt)
+                if nxt in lifecycle_templates.agent_phases(kind):
+                    _spawn_phase(get(run_id), nxt, spawn)
     elif decision == "changes_requested":
-        _consume_gate()
-        if gate == "plan":
-            _set_run(run_id, phase="shaping")
-            tasks.move(tid, "shaping", force=True)
-            _spawn_phase(get(run_id), "shaping", spawn, resume_comment=comment)
-        elif gate in ("manual_test", "merge"):
-            # Both send the run back to BUILDING for rework. For merge this is the
-            # clean recovery path: human rejects the merge → builder addresses the
-            # comment → tests → manual_test gate → pr_review → merge gate again.
-            # (Without this, a rejected merge would strand the run in pr_review
-            # with no gate and no agent, and retry() only resumes blocked runs.)
-            _set_run(run_id, phase="building")
-            tasks.move(tid, "building", force=True)
-            _spawn_phase(get(run_id), "building", spawn, resume_comment=comment)
+        # Rework: return to the gate's changes_target and re-spawn it with the
+        # reviewer's comment (code: plan→shaping, manual_test/merge→building). An
+        # unregistered gate (no changes_target) is a no-op.
+        target = adv.get("changes_target")
+        if target is None:
+            return
+        if not _claim_gate():
+            return
+        _note_gate()
+        _set_run(run_id, phase=target)
+        tasks.move(tid, target, force=True)
+        _spawn_phase(get(run_id), target, spawn, resume_comment=comment)
+
+
+# -- registry-driven dispatch -------------------------------------------------
+# The engine is generalized over a per-kind template (lifecycle_templates): the
+# code handlers below are UNCHANGED from V2 — only which handler runs for a given
+# (kind, phase)/gate is now resolved from these maps instead of hardcoded
+# if/elif branches. New kinds (research/docs) register their handlers here in
+# later chunks.
+
+def _producing_phase(kind: str, gate: str) -> str | None:
+    """The phase whose agent opens ``gate`` — the block target when the gate's
+    approve side-effect fails (code: manual_test→building, merge→pr_review)."""
+    for p in lifecycle_templates.phases(kind):
+        if p.get("gate") == gate:
+            return p["name"]
+    return None
+
+
+# advance() dispatch: (kind → phase → finished-agent handler(run, report, spawn, git)).
+_ADVANCE_HANDLERS: dict[str, dict] = {
+    "code": {
+        "shaping": _advance_shaping,
+        "building": _advance_building,
+        "pr_review": _advance_pr_review,
+    },
+    "research": {
+        "scoping": _advance_scoping,
+        # investigating is a fan-out phase — each angle's finish is consumed by
+        # advance_fanout, not advance(); no per-phase finish handler here.
+        "synthesis": _advance_synthesis,
+    },
+    "docs": {
+        "outline": _advance_outline,
+        "drafting": _advance_drafting,
+    },
+}
+
+# decide_gate() approve dispatch: (kind → gate → approve handler(run, spawn, git)).
+# Only gates with an irreversible side-effect register here; a gate with no entry
+# is a plain phase move to its gate_advances[gate]["approve_next"].
+_APPROVE_HANDLERS: dict[str, dict] = {
+    "code": {
+        "manual_test": _approve_manual_test,
+        "merge": lambda run, spawn, git: _approve_merge(run, git),
+    },
+    # review-approve delivers the research run (terminal + followups + brain
+    # nodes). No git side-effect, so it never raises GitError; registering it here
+    # (rather than the plain phase-move branch) is what runs the deliver side-effects.
+    "research": {
+        "review": lambda run, spawn, git: _deliver_research(run, git),
+    },
+    # docs review-approve delivers (terminal). No git side-effect, so it never
+    # raises GitError; registering it here runs the deliver side-effects (rather
+    # than the plain phase-move branch which would just move to `delivered`).
+    "docs": {
+        "review": lambda run, spawn, git: _deliver_docs(run, git),
+    },
+}

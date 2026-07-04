@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL,
   feature TEXT, priority INTEGER DEFAULT 2, status TEXT DEFAULT 'ready',
   origin_quote TEXT, origin_source TEXT, description TEXT, created_at TEXT,
+  kind TEXT, kind_suggested TEXT, kind_reason TEXT, doc_template TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 -- Directional/symmetric links between tasks: blocks | related | subtask.
@@ -117,6 +118,8 @@ CREATE TABLE IF NOT EXISTS lifecycle_runs (
   blocked_reason TEXT, blocked_from_phase TEXT,
   self_heal_attempts INTEGER DEFAULT 0,
   last_finished_session TEXT,
+  kind TEXT,
+  synthesis_json TEXT,
   created_at TEXT, updated_at TEXT,
   FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
@@ -129,11 +132,27 @@ CREATE TABLE IF NOT EXISTS gates (
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   FOREIGN KEY(run_id) REFERENCES lifecycle_runs(id) ON DELETE CASCADE
 );
+-- Fan-out agents: N parallel workers for a single fan-out phase of a run.
+-- The phase advances on an all-done barrier (no rows queued/running/blocked);
+-- `dropped` counts as resolved. `idx` is 0-based within a (run_id, phase).
+CREATE TABLE IF NOT EXISTS fanout_agents (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, phase TEXT NOT NULL,
+  idx INTEGER NOT NULL, angle TEXT, mode TEXT,
+  session_id TEXT, account_id TEXT,
+  status TEXT DEFAULT 'queued',          -- queued|running|done|blocked|dropped
+  report_artifact_id TEXT,
+  created_at TEXT, updated_at TEXT,
+  FOREIGN KEY(run_id) REFERENCES lifecycle_runs(id) ON DELETE CASCADE
+);
+-- One row per (run, phase, idx): a duplicate create_rows fails loudly rather
+-- than silently double-spawning N agents (belt on enter_fanout's rows_for guard).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_fanout_run_phase_idx
+  ON fanout_agents(run_id, phase, idx);
 -- Documents pinned to a task: spec | plan | test_guide | review_report.
 CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT,
   kind TEXT NOT NULL, title TEXT,
-  repo_path TEXT, branch TEXT, created_by TEXT, created_at TEXT,
+  repo_path TEXT, branch TEXT, content TEXT, created_by TEXT, created_at TEXT,
   FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 

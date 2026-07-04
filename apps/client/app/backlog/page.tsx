@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import { PageHead } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -80,6 +80,12 @@ export default function BacklogPage() {
     () => api.lifecycleList(project!.id),
     { refreshInterval: 4000 },
   );
+  // Per-kind board mapping (kind → phase → column) — threaded into <Board> so it
+  // buckets research/docs/code phases into the 5 universal columns. Static, so
+  // no refresh interval.
+  const { data: templatesData } = useSWR(["lifecycle-templates"], () =>
+    api.templates(),
+  );
 
   const gatedTaskIds = React.useMemo(
     () => new Set((gatesData?.gates ?? []).map((g) => g.task_id)),
@@ -93,6 +99,32 @@ export default function BacklogPage() {
     }
     return byTask;
   }, [runsData]);
+
+  // Board filters: by kind, and a "Waiting on you" view (gated cards only).
+  const [kindFilter, setKindFilter] = React.useState<"all" | "code" | "research" | "docs">("all");
+  const [waitingOnly, setWaitingOnly] = React.useState(false);
+  const [autoTagBusy, setAutoTagBusy] = React.useState(false);
+
+  const allTasks = tasksData?.tasks ?? [];
+  const untypedCount = allTasks.filter((t) => t.kind == null).length;
+  const filteredTasks = allTasks.filter((t) => {
+    if (kindFilter !== "all" && (t.kind ?? null) !== kindFilter) return false;
+    if (waitingOnly && !gatedTaskIds.has(t.id)) return false;
+    return true;
+  });
+
+  const autoTag = React.useCallback(async () => {
+    if (!project || autoTagBusy) return;
+    setAutoTagBusy(true);
+    try {
+      await api.routeUntyped(project.id);
+      mutate(["tasks", project.id]);
+    } catch {
+      // best-effort backfill; the next tasks poll reconciles.
+    } finally {
+      setAutoTagBusy(false);
+    }
+  }, [project, autoTagBusy]);
 
   const byId = indexNodesById(brainData?.nodes ?? []);
   const error = tasksError || brainError;
@@ -120,13 +152,75 @@ export default function BacklogPage() {
   } else {
     body = (
       <Board
-        tasks={tasksData.tasks}
+        tasks={filteredTasks}
         nodesById={byId}
+        templates={templatesData}
         gatedTaskIds={gatedTaskIds}
         runsByTask={runsByTask}
       />
     );
   }
+
+  // Filter toolbar — kind chips + a "Waiting on you" toggle + "Auto-tag untyped".
+  const KIND_CHIPS: { key: "all" | "code" | "research" | "docs"; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "code", label: "✨ Code" },
+    { key: "research", label: "🔬 Research" },
+    { key: "docs", label: "📄 Docs" },
+  ];
+  const toolbar =
+    project && tasksData ? (
+      <div
+        data-testid="board-toolbar"
+        style={{ padding: "10px 22px 0", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+      >
+        <div style={{ display: "flex", gap: 6 }}>
+          {KIND_CHIPS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              data-testid={`kind-filter-${c.key}`}
+              aria-pressed={kindFilter === c.key}
+              onClick={() => setKindFilter(c.key)}
+              className="btn"
+              style={{
+                padding: "3px 10px", fontSize: 12,
+                borderColor: kindFilter === c.key ? "var(--accent)" : "var(--border)",
+                color: kindFilter === c.key ? "var(--accent)" : "inherit",
+              }}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          data-testid="waiting-toggle"
+          aria-pressed={waitingOnly}
+          onClick={() => setWaitingOnly((v) => !v)}
+          className="btn"
+          style={{
+            padding: "3px 10px", fontSize: 12,
+            borderColor: waitingOnly ? "var(--amber)" : "var(--border)",
+            color: waitingOnly ? "var(--amber)" : "inherit",
+          }}
+        >
+          Waiting on you{gatedTaskIds.size ? ` (${gatedTaskIds.size})` : ""}
+        </button>
+        {untypedCount > 0 && (
+          <button
+            type="button"
+            data-testid="auto-tag-untyped"
+            onClick={autoTag}
+            disabled={autoTagBusy}
+            className="btn"
+            style={{ marginLeft: "auto", padding: "3px 10px", fontSize: 12 }}
+          >
+            {autoTagBusy ? "Tagging…" : `Auto-tag ${untypedCount} untyped`}
+          </button>
+        )}
+      </div>
+    ) : null;
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -143,6 +237,7 @@ export default function BacklogPage() {
       />
       {tasksData && <NextUpBanner tasks={tasksData.tasks} />}
       {tasksData && <BlockedBanner tasks={tasksData.tasks} />}
+      {toolbar}
       {body}
     </div>
   );

@@ -5,13 +5,17 @@ Mounted into server.py via app.include_router(spade_server.router).
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+import json
+
 from . import (
-    artifacts, brain, chat, feedback, gates, gitops, integrations, lifecycle,
-    lifecycle_git, meeting_samples, meetings, pipelines, project_git,
-    projects, sprints, tasks,
+    artifacts, brain, chat, doc_templates, fanout, feedback, gates, gitops,
+    integrations, lifecycle, lifecycle_git, lifecycle_templates, meeting_samples,
+    meetings, pipelines, project_git, projects, sprints, tasks,
 )
+from . import router as task_router
 
 router = APIRouter()
 
@@ -60,6 +64,11 @@ class LinkCreate(BaseModel):
     rel: str
 
 
+class KindConfirm(BaseModel):
+    kind: str
+    doc_template: str | None = None
+
+
 # ---- helpers ----------------------------------------------------------------
 
 def _task_or_404(task_id: str) -> dict:
@@ -96,7 +105,11 @@ def create_task(req: TaskCreate) -> dict:
         origin_quote=req.origin_quote,
         origin_source=req.origin_source,
     )
-    return _enrich(t)
+    # Route on creation: store the router's suggestion (advisory), NOT the
+    # authoritative kind — a human (or Start) confirms it later.
+    guess = task_router.classify(req.title, req.description or "")
+    tasks.set_suggestion(t["id"], guess["kind"], guess["reason"])
+    return _enrich(tasks.get(t["id"]))
 
 
 @router.get("/tasks/{task_id}")
@@ -164,6 +177,51 @@ def add_task_link(task_id: str, req: LinkCreate) -> dict:
         raise HTTPException(400, "a task cannot link to itself")
     tasks.add_link(task_id, req.to_task, req.rel)
     return _enrich(tasks.get(task_id))
+
+
+@router.post("/tasks/{task_id}/kind")
+def confirm_task_kind(task_id: str, req: KindConfirm) -> dict:
+    """Confirm / override a task's lifecycle ``kind``.
+
+    Rejected with 409 once ANY lifecycle run exists for the task (active OR
+    terminal) — the kind is locked at Start and stays locked through
+    shipped/delivered. The guard lives here (not in ``tasks.set_kind``) because
+    ``lifecycle`` imports ``tasks``; calling ``lifecycle`` from the setter would
+    be a circular import.
+    """
+    _task_or_404(task_id)
+    if req.kind not in tasks.KINDS:
+        raise HTTPException(400, f"invalid kind {req.kind!r}; must be one of {tasks.KINDS}")
+    if req.doc_template is not None and (
+        req.kind != "docs" or req.doc_template not in ("sow", "explainer")
+    ):
+        raise HTTPException(
+            400,
+            f"invalid doc_template {req.doc_template!r}; only valid for kind='docs' "
+            "as one of ('sow', 'explainer')",
+        )
+    if lifecycle.has_run_for_task(task_id):
+        raise HTTPException(409, f"task {task_id!r} has a lifecycle run; kind is locked")
+    if req.kind not in lifecycle_templates.LIFECYCLE_TEMPLATES:
+        raise HTTPException(400, f"kind {req.kind!r} is not yet runnable (no template registered)")
+    tasks.set_kind(task_id, req.kind, doc_template=req.doc_template)
+    return _enrich(tasks.get(task_id))
+
+
+@router.post("/projects/{project_id}/route-untyped")
+def route_untyped(project_id: str) -> dict:
+    """Backfill: classify every null-``kind`` task in the project, storing the
+    router's suggestion (leaves the authoritative kind untouched)."""
+    if projects.get(project_id) is None:
+        raise HTTPException(404, f"no project {project_id!r}")
+    routed = 0
+    for t in tasks.list_for_project(project_id):
+        if t.get("kind") is not None:
+            continue
+        guess = task_router.classify(t["title"], t.get("description") or "")
+        tasks.set_suggestion(t["id"], guess["kind"], guess["reason"])
+        routed += 1
+    return {"project_id": project_id, "routed": routed}
 
 
 @router.delete("/tasks/{task_id}/links/{link_id}")
@@ -317,7 +375,37 @@ _PHASE_JSON = {
     "building": '{"tests": "green", "test_guide_path": "...", "failing": []}',
     "pr_review": '{"findings": [{"path": "...", "line": 1, "body": "..."}], '
                  '"summary": "...", "review_report_path": "..."}',
+    # research phases (Chunk 4): without these the prompt appends `{}` and the
+    # engine's defensive JSON parse would block every research agent.
+    "scoping": '{"angles": [{"brief": "...", "mode": "repo|web"}], "summary": "..."}',
+    # the per-angle investigator (its prompt is built by _fanout_prompt)
+    "investigating": '{"summary": "...", "evidence": ["..."]}',
+    "synthesis": '{"report": "...", '
+                 '"followups": [{"title": "...", "description": "..."}], '
+                 '"brain_nodes": [{"type": "feature|decision|convention|feedback|'
+                 'bug|metric", "label": "...", "detail": "..."}]}',
+    # docs phases (Chunk 5): outline proposes the structure; drafting emits the
+    # styled BODY sections ONLY (render_shell wraps them once at render time).
+    "outline": '{"outline": "...", "summary": "..."}',
+    "drafting": '{"doc_html": "...", "summary": "..."}',
 }
+
+
+# Per-artifact cap on embedded inline content (research findings/report can be
+# large deep-research outputs; N of them concatenated is otherwise unbounded).
+_EMBED_MAX_CHARS = 6000
+
+
+def _embed_block(content: str | None) -> str:
+    """Render inline artifact ``content`` as a safely-delimited, size-capped block.
+
+    Uses a ``<<<CONTENT>>> … <<<END>>>`` delimiter rather than triple-backticks so
+    agent content that itself contains a ``` fence can't break out, and truncates
+    to ``_EMBED_MAX_CHARS`` with a marker to bound context bloat."""
+    text = content or ""
+    if len(text) > _EMBED_MAX_CHARS:
+        text = text[:_EMBED_MAX_CHARS] + "\n…[truncated]"
+    return f"<<<CONTENT\n{text}\nCONTENT>>>"
 
 
 def _phase_prompt(run: dict, phase: str) -> str:
@@ -337,8 +425,18 @@ def _phase_prompt(run: dict, phase: str) -> str:
     prior = artifacts.for_task(run["task_id"])
     if prior:
         lines += ["", "Prior artifacts pinned to this task:"]
-        lines += [f"- [{a['kind']}] {a.get('title') or ''} @ {a.get('repo_path') or '?'}"
-                  for a in prior]
+        for a in prior:
+            title = a.get("title") or ""
+            if a.get("repo_path"):
+                # repo-path pointer: a metadata line (resolved from git elsewhere).
+                lines.append(f"- [{a['kind']}] {title} @ {a['repo_path']}")
+            else:
+                # inline content (research findings/report, docs): EMBED it so the
+                # synthesis manager actually sees the findings, not a `@ None` list.
+                # Delimited + size-capped so a ``` inside content can't break out
+                # and N large findings don't blow up the context.
+                lines.append(f"- [{a['kind']}] {title}:")
+                lines.append(_embed_block(a.get("content")))
 
     resume = run.get("resume_comment")
     if resume:
@@ -363,6 +461,48 @@ def _phase_prompt(run: dict, phase: str) -> str:
             "PR review conventions) to review the open PR for this branch and "
             "collect actionable findings.",
         ]
+    elif phase == "scoping":
+        lines += [
+            "Scope this research task into a handful of independent ANGLES to "
+            "investigate in parallel. Ground each angle in what already exists — "
+            "check the project brain and codebase. For each angle give a short "
+            "`brief` and a `mode`: `repo` (investigate the codebase) or `web` "
+            "(research the open web via the deep-research skill).",
+        ]
+    elif phase == "synthesis":
+        lines += [
+            "You are the research MANAGER. The per-angle findings are embedded "
+            "above. First run a VERIFY pass — cross-check the findings against each "
+            "other and flag anything unsupported — then synthesize a single cited "
+            "`report`. Propose any concrete `followups` (new tasks) and "
+            "`brain_nodes` (durable knowledge: type one of feature/decision/"
+            "convention/feedback/bug/metric) the research warrants.",
+        ]
+    elif phase == "outline":
+        dt = (task.get("doc_template") or "explainer")
+        tpl = doc_templates.TEMPLATES.get(dt, doc_templates.TEMPLATES["explainer"])
+        lines += [
+            f"Outline a {tpl['label']} document for this task. Propose the section "
+            "structure and the key points each section will cover — the human "
+            "reviews this outline before you write the full draft. The required "
+            f"sections for this template are: {', '.join(tpl['sections'])}.",
+        ]
+    elif phase == "drafting":
+        dt = (task.get("doc_template") or "explainer")
+        tpl = doc_templates.TEMPLATES.get(dt, doc_templates.TEMPLATES["explainer"])
+        lines += [
+            f"Write the full {tpl['label']} document per the approved outline. "
+            f"Include these required sections, each as one `<section>` with an "
+            f"`<h2>` heading: {', '.join(tpl['sections'])}.",
+            "",
+            "Emit BODY sections ONLY — a sequence of `<section>` elements. Do NOT "
+            "wrap them in `<html>`, `<head>`, `<body>`, or any full-document shell "
+            "and do NOT add `<style>`/`<script>`: a shared house-style shell is "
+            "applied once at render time.",
+            "Any diagrams MUST be PRE-RENDERED to inline `<svg>` (render mermaid to "
+            "static SVG yourself and embed the SVG) — the rendered doc is served in "
+            "a locked, script-less sandbox, so no client-side mermaid/JS will run.",
+        ]
 
     lines += [
         "",
@@ -370,6 +510,62 @@ def _phase_prompt(run: dict, phase: str) -> str:
         f"(no prose around it):\n{_PHASE_JSON.get(phase, '{}')}",
     ]
     return "\n".join(lines)
+
+
+def _fanout_prompt(run: dict, phase: str, idx: int) -> str:
+    """Build the prompt for ONE fan-out angle (research investigating #idx).
+
+    ``_phase_prompt`` can't see ``idx``, so the fan-out spawn routes here. Reads
+    the angle's ``fanout_agents`` row and branches on its ``mode``: ``repo`` →
+    repo tools scoped to the brief; ``web`` → invoke the ``deep-research`` skill.
+    """
+    task = tasks.get(run["task_id"]) or {}
+    row = fanout.get_row(run["id"], phase, idx) or {}
+    try:
+        angle = json.loads(row.get("angle") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        angle = {}
+    if not isinstance(angle, dict):
+        angle = {"brief": str(angle)}
+    brief = angle.get("brief") or angle.get("angle") or row.get("angle") or ""
+    mode = angle.get("mode") or row.get("mode") or "repo"
+
+    lines = [
+        f"Task {run['task_id']}: {task.get('title', run['task_id'])}",
+        "",
+        f"You are investigating ONE research angle (#{idx}) of this task:",
+        f"  {brief}",
+        "",
+    ]
+    if mode == "web":
+        lines += [
+            "Use the `deep-research` skill to research this angle on the open web: "
+            "fan out searches, fetch and read sources, adversarially verify claims, "
+            "and synthesize a cited finding scoped to the brief above.",
+        ]
+    else:
+        lines += [
+            "Investigate this angle IN THE REPOSITORY: use grep/read to find the "
+            "relevant code, configuration, and docs, and ground your finding in "
+            "concrete file references scoped to the brief above.",
+        ]
+    lines += [
+        "",
+        "When finished, emit a `finished` signal whose report is EXACTLY this JSON "
+        f"(no prose around it):\n{_PHASE_JSON.get('investigating', '{}')}",
+    ]
+    return "\n".join(lines)
+
+
+def _spawn_prompt(run: dict, phase: str) -> str:
+    """Dispatch prompt building: a fan-out phase's per-idx investigator prompt vs
+    the generic single-agent phase prompt. The fan-out idx is threaded on the run
+    dict (``fanout_idx``) by ``lifecycle._spawn_fanout``."""
+    kind = run.get("kind") or "code"
+    if phase in lifecycle_templates.fanout_phases(kind) \
+            and run.get("fanout_idx") is not None:
+        return _fanout_prompt(run, phase, run["fanout_idx"])
+    return _phase_prompt(run, phase)
 
 
 def _lifecycle_spawn(run: dict):
@@ -387,19 +583,26 @@ def _lifecycle_spawn(run: dict):
             name=f"{phase}-{run['id']}",
             role=phase,
             project_id=run["project_id"],
-            cwd=run["worktree_path"],
-            task=_phase_prompt(run, phase),
+            cwd=run.get("worktree_path"),
+            task=_spawn_prompt(run, phase),
             mission=run["id"],
             parent=None,
         )
         sid = info["id"]
-        # Stamp phase then run_id LAST (matches the pipeline gate-key ordering):
-        # single-key dict writes are GIL-atomic, so a tick that sees the run id
-        # also sees the correct phase — closing the advance race.
+        # Stamp phase first, then the TRIGGER key LAST (single-key dict writes are
+        # GIL-atomic, so a poll tick that sees the trigger key also sees phase +
+        # idx — closing the advance race). A fan-out agent sets the DISTINCT
+        # `lifecycle_fanout_run_id` (and idx) and never the plain `lifecycle_run_id`,
+        # so the single-agent collector can never claim a fan-out finish.
         meta = server._meta.get(sid)
         if meta is not None:
             meta["lifecycle_phase"] = phase
-            meta["lifecycle_run_id"] = run["id"]  # gate key written last
+            kind = run.get("kind") or "code"
+            if phase in lifecycle_templates.fanout_phases(kind):
+                meta["lifecycle_fanout_idx"] = run.get("fanout_idx")
+                meta["lifecycle_fanout_run_id"] = run["id"]  # trigger key last
+            else:
+                meta["lifecycle_run_id"] = run["id"]  # gate key written last
         return (sid, info.get("account_id"))
 
     return spawn
@@ -690,11 +893,37 @@ def _furthest_env(run: dict) -> str | None:
 def lifecycle_start(req: LifecycleStart) -> dict:
     if projects.get(req.project_id) is None:
         raise HTTPException(404, f"no project {req.project_id!r}")
-    if tasks.get(req.task_id) is None:
+    task = tasks.get(req.task_id)
+    if task is None:
         raise HTTPException(404, f"no task {req.task_id!r}")
-    cfg = project_git.get(req.project_id)
-    if not cfg or not cfg.get("repo_ssh_url"):
-        raise HTTPException(404, f"project {req.project_id!r} has no configured repo")
+    # Resolve + LOCK the kind onto the task before start_run reads it. Precedence:
+    # confirmed kind → router suggestion → code default.
+    if task.get("kind"):
+        kind, source = task["kind"], "confirmed"
+    elif task.get("kind_suggested"):
+        kind, source = task["kind_suggested"], "router suggestion"
+    else:
+        kind, source = "code", "default"
+    if kind not in tasks.KINDS:
+        kind, source = "code", "default"
+    # Guard on REGISTERED kinds: research/docs are valid KINDS but their templates
+    # only register in Chunks 4/5. A clean 400 here beats letting template_for()
+    # raise a KeyError → HTTP 500. When those templates land, this passes.
+    if kind not in lifecycle_templates.LIFECYCLE_TEMPLATES:
+        raise HTTPException(400, f"kind {kind!r} is not yet runnable (no template registered)")
+    if not task.get("kind"):
+        tasks.set_kind(req.task_id, kind, doc_template=task.get("doc_template"))
+        tasks.add_comment(
+            req.task_id,
+            body=f"Lifecycle kind resolved to {kind!r} ({source}).",
+            author="system", kind="system",
+        )
+    # The repo hard-requirement is KIND-CONDITIONAL: only kinds whose first phase
+    # needs a workspace (code) require a configured repo; research/docs don't.
+    if lifecycle_templates.needs_workspace(kind):
+        cfg = project_git.get(req.project_id)
+        if not cfg or not cfg.get("repo_ssh_url"):
+            raise HTTPException(404, f"project {req.project_id!r} has no configured repo")
     try:
         return lifecycle.start_run(
             req.project_id, req.task_id,
@@ -710,6 +939,19 @@ def list_lifecycle(project_id: str) -> dict:
     return {"runs": lifecycle.list_for_project(project_id)}
 
 
+# Declared BEFORE `/lifecycle/{run_id}` — FastAPI matches in declaration order,
+# so a `{run_id}` route declared first would capture run_id="templates" and 404.
+@router.get("/lifecycle/templates")
+def get_lifecycle_templates() -> dict:
+    """The per-kind board mapping (kind → phase → column) + gate/artifact labels,
+    so the client buckets tasks without hardcoding a second copy of the registry."""
+    return {
+        "templates": lifecycle_templates.client_templates(),
+        "gate_labels": lifecycle_templates.GATE_LABELS,
+        "artifact_labels": lifecycle_templates.ARTIFACT_LABELS,
+    }
+
+
 @router.get("/lifecycle/{run_id}")
 def get_lifecycle(run_id: str) -> dict:
     return _lifecycle_run_or_404(run_id)
@@ -720,6 +962,27 @@ def retry_lifecycle(run_id: str) -> dict:
     run = _lifecycle_run_or_404(run_id)
     lifecycle.retry(run_id, spawn=_lifecycle_spawn(run),
                     git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run_id)
+
+
+@router.post("/lifecycle/{run_id}/fanout/{idx}/retry")
+def retry_fanout_angle(run_id: str, idx: int) -> dict:
+    """Re-spawn one fan-out angle (a blocked/dead one). The fan-out phase is the
+    run's current phase (the run sits there until the barrier releases)."""
+    run = _lifecycle_run_or_404(run_id)
+    lifecycle.retry_angle(run_id, run["phase"], idx,
+                          spawn=_lifecycle_spawn(run),
+                          git=_lifecycle_git(run["project_id"]))
+    return _lifecycle_run_or_404(run_id)
+
+
+@router.post("/lifecycle/{run_id}/fanout/{idx}/drop")
+def drop_fanout_angle(run_id: str, idx: int) -> dict:
+    """Give up on one fan-out angle; may release the barrier (→ synthesis)."""
+    run = _lifecycle_run_or_404(run_id)
+    lifecycle.drop_angle(run_id, run["phase"], idx,
+                         spawn=_lifecycle_spawn(run),
+                         git=_lifecycle_git(run["project_id"]))
     return _lifecycle_run_or_404(run_id)
 
 
@@ -753,7 +1016,11 @@ def get_artifact_content(task_id: str, artifact_id: str) -> dict:
     if art is None or art["task_id"] != task_id:
         raise HTTPException(404, f"no artifact {artifact_id!r}")
     task = _task_or_404(task_id)
-    if not art.get("repo_path") or not art.get("branch"):
+    # Inline artifacts (research findings/reports, docs) store their body in
+    # `content` with a null repo_path — return it directly (no git read).
+    if not art.get("repo_path"):
+        return {"content": art.get("content")}
+    if not art.get("branch"):
         raise HTTPException(404, "artifact has no pinned repo path/branch")
     try:
         content = _lifecycle_git(task["project_id"]).read_at_branch(
@@ -761,6 +1028,34 @@ def get_artifact_content(task_id: str, artifact_id: str) -> dict:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(404, f"could not read artifact: {e}")
     return {"content": content}
+
+
+# ---- shareable styled-doc route ---------------------------------------------
+# Distinct top-level path (`/doc/...`) so it never collides with the `/tasks`,
+# `/lifecycle`, `/brain`, etc. routes. Read-only; serves a `doc` artifact's
+# BODY-only content wrapped ONCE in the shared render_shell (no double-shell).
+
+# Belt-and-suspenders with render_shell's body sanitizer: a restrictive CSP so
+# even if malicious markup slips the regex strip, the browser runs no script and
+# fetches nothing external (render_shell is self-contained — inline styles + inline
+# SVG only). nosniff stops content-type confusion on this shareable surface.
+_DOC_HEADERS = {
+    "Content-Security-Policy":
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+@router.get("/doc/{artifact_id}", response_class=HTMLResponse)
+def get_doc(artifact_id: str) -> HTMLResponse:
+    art = artifacts.get(artifact_id)
+    if art is None or art.get("kind") != "doc":
+        raise HTTPException(404, f"no doc artifact {artifact_id!r}")
+    title = art.get("title") or "Document"
+    return HTMLResponse(
+        doc_templates.render_shell(title, art.get("content") or ""),
+        headers=_DOC_HEADERS,
+    )
 
 
 @router.get("/projects/{project_id}/git")

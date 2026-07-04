@@ -10,31 +10,23 @@ from datetime import datetime, timezone
 
 from tui_pilot import db
 
-# Lifecycle statuses. The legacy pipeline values ('in_progress'/'review') were
-# retired with the pipeline write path (Chunk 6) and remapped to
-# 'building'/'pr_review' by db._migrate.
+# Lifecycle statuses. The V2 code statuses plus the per-kind phase names added by
+# the task-type router (research: scoping/investigating/synthesis; docs: outline/
+# drafting/review) and the non-code terminal status ``delivered``. The legacy
+# pipeline values ('in_progress'/'review') were retired with the pipeline write
+# path (Chunk 6) and remapped to 'building'/'pr_review' by db._migrate.
 STATUSES = ["ready", "shaping", "plan_review", "building", "pr_review",
-            "shipped", "blocked"]
-
-# Legal forward transitions of the lifecycle state machine. "any -> blocked" and
-# "blocked -> <resume>" are handled specially in move() (so 'blocked' is NOT listed
-# in the per-phase sets below — it would be dead there). Board reads tasks.status;
-# the lifecycle engine is the sole writer during a lifecycle run. The legacy
-# 'in_progress'/'review' statuses were retired with the pipeline write path and
-# remapped to 'building'/'pr_review' by db._migrate.
-TRANSITIONS = {
-    "ready": {"shaping"},
-    "shaping": {"plan_review"},
-    "plan_review": {"building", "shaping"},
-    "building": {"pr_review", "building"},
-    "pr_review": {"shipped", "pr_review"},
-    "shipped": set(),
-    "blocked": set(STATUSES),  # a blocked task may resume into any phase
-}
+            "shipped", "blocked",
+            # router phases (research / docs)
+            "scoping", "investigating", "synthesis", "outline", "drafting",
+            "review", "delivered"]
 
 # Task→task link relationships. "blocks"/"subtask" are directional (from→to),
 # "related" is symmetric. See add_link / links for semantics.
 LINK_RELS = ["blocks", "related", "subtask"]
+
+# Lifecycle kinds the task-type router can assign (see router.classify).
+KINDS = ["code", "research", "docs"]
 
 _WRITABLE_COLS = {"title", "feature", "priority", "description", "origin_quote", "origin_source"}
 
@@ -137,19 +129,62 @@ def move(id: str, status: str, force: bool = False) -> None:
     """Move a task to a new status, enforcing the transition table.
 
     Any status may go to 'blocked'. 'blocked' may resume into any status. Other
-    jumps must appear in TRANSITIONS[current]. force=True bypasses the guard
+    jumps must be a registered pair in lifecycle_templates.transition_pairs().
+    force=True bypasses the guard
     (admin override + legacy pipeline moves); callers should log a system note
     when forcing an admin override.
     """
     if status not in STATUSES:
         raise ValueError(f"invalid status {status!r}; must be one of {STATUSES}")
+    # Lazy import to avoid any import cycle (lifecycle_templates stays free of a
+    # tasks dependency at module load; later chunks may add one).
+    from tui_pilot import lifecycle_templates
     cur = get(id)
     current = cur["status"] if cur else "ready"
-    legal = status == "blocked" or status in TRANSITIONS.get(current, set())
+    # Legal iff moving to blocked, resuming FROM blocked (into any phase), or the
+    # (current, status) pair is a registered transition across all templates.
+    legal = (
+        status == "blocked"
+        or current == "blocked"
+        or (current, status) in lifecycle_templates.transition_pairs()
+    )
     if not force and not legal:
         raise ValueError(f"illegal transition {current!r} -> {status!r}")
     with db.tx() as cx:
         cx.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, id))
+
+
+# -- Kind (task-type router) --------------------------------------------------
+
+def set_kind(task_id: str, kind: str, doc_template: str | None = None) -> None:
+    """Set a task's resolved lifecycle ``kind`` (+ optional ``doc_template``).
+
+    A **pure setter**: writes the columns; it does NOT validate ``kind`` against
+    ``KINDS`` (callers/tests may inject synthetic kinds), does NOT import
+    ``lifecycle``, and does NOT enforce the run-existence lock. Kind validation
+    and the "kind is locked once a run exists" guard both live in the endpoint
+    layer (spade_server), because ``lifecycle`` already imports ``tasks`` and
+    calling back the other way here would be a circular import.
+    """
+    with db.tx() as cx:
+        cx.execute(
+            "UPDATE tasks SET kind = ?, doc_template = ? WHERE id = ?",
+            (kind, doc_template, task_id),
+        )
+
+
+def set_suggestion(task_id: str, kind_suggested: str, kind_reason: str) -> None:
+    """Store the router's *suggestion* (not the resolved kind) on a task.
+
+    Written at create time and by the ``route-untyped`` backfill. Leaves the
+    authoritative ``kind`` column untouched — a suggestion is advisory until a
+    human (or Start) confirms it.
+    """
+    with db.tx() as cx:
+        cx.execute(
+            "UPDATE tasks SET kind_suggested = ?, kind_reason = ? WHERE id = ?",
+            (kind_suggested, kind_reason, task_id),
+        )
 
 
 # -- Grounding (task_nodes) ---------------------------------------------------

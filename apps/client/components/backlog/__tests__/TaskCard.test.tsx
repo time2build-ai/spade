@@ -109,26 +109,43 @@ describe("TaskCard", () => {
 });
 
 describe("Board", () => {
-  test("renders the lifecycle-phase columns with correct counts (blocked is not a column)", () => {
+  const TEMPLATES = {
+    templates: {
+      code: {
+        terminal_status: "shipped",
+        columns: {
+          shaping: "Planning", plan_review: "Planning", building: "In progress",
+          pr_review: "Review", shipped: "Done",
+        },
+        phases: [],
+      },
+    },
+    gate_labels: {},
+    artifact_labels: {},
+  } as import("@/lib/types").LifecycleTemplates;
+
+  test("renders the 5 universal columns with correct counts (blocked is not a column)", () => {
     const tasks = [
       makeTask({ id: "SPD-1", status: "ready" }),
       makeTask({ id: "SPD-2", status: "ready" }),
-      makeTask({ id: "SPD-3", status: "pr_review" }),
-      makeTask({ id: "SPD-4", status: "blocked" }),
+      makeTask({ id: "SPD-3", status: "pr_review", kind: "code" }),
+      makeTask({ id: "SPD-4", status: "blocked", kind: "code" }),
     ];
-    const { container } = render(<Board tasks={tasks} nodesById={{}} />);
+    const { container } = render(
+      <Board tasks={tasks} nodesById={{}} templates={TEMPLATES} />,
+    );
 
-    // 6 lifecycle phases get a column: ready, shaping, plan_review, building,
-    // pr_review, shipped. Blocked is surfaced in the banner, never a column.
+    // 5 universal columns: Ready, Planning, In progress, Review, Done. Blocked is
+    // surfaced in the banner, never a column.
     const cols = container.querySelectorAll(".col");
-    expect(cols).toHaveLength(6);
+    expect(cols).toHaveLength(5);
     expect(container.querySelector('[data-status="blocked"]')).toBeNull();
 
-    const ready = container.querySelector('[data-status="ready"] .count');
+    const ready = container.querySelector('[data-status="Ready"] .count');
     expect(ready).toHaveTextContent("2");
-    const prReview = container.querySelector('[data-status="pr_review"] .count');
-    expect(prReview).toHaveTextContent("1");
-    const shipped = container.querySelector('[data-status="shipped"] .count');
-    expect(shipped).toHaveTextContent("0");
+    const review = container.querySelector('[data-status="Review"] .count');
+    expect(review).toHaveTextContent("1");
+    const done = container.querySelector('[data-status="Done"] .count');
+    expect(done).toHaveTextContent("0");
   });
 });

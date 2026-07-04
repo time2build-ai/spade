@@ -1,6 +1,6 @@
 export const STATUSES = [
   "ready",
-  // Task Lifecycle V2 phases (brainstorm → ship state machine).
+  // Task Lifecycle V2 phases (brainstorm → ship state machine) — code kind.
   "shaping",
   "plan_review",
   "building",
@@ -9,10 +9,45 @@ export const STATUSES = [
   // pipeline write path (Chunk 6) and remapped to 'building'/'pr_review' by the
   // backend db._migrate.
   "shipped",
+  // Task-Type Router per-kind phases: research (scoping/investigating/synthesis)
+  // and docs (outline/drafting); `review` is a shared phase name; `delivered` is
+  // the terminal status for research + docs.
+  "scoping",
+  "investigating",
+  "synthesis",
+  "outline",
+  "drafting",
+  "review",
+  "delivered",
   "blocked",
 ] as const;
 
 export type Status = (typeof STATUSES)[number];
+
+/** A task's lifecycle kind — which per-kind flow (and board mapping) it runs. */
+export type Kind = "code" | "research" | "docs";
+
+/** One kind's board mapping from GET /lifecycle/templates. */
+export interface LifecycleTemplate {
+  terminal_status: string;
+  /** phase name → universal board column. */
+  columns: Record<string, string>;
+  phases: {
+    name: string;
+    column: string;
+    agent: boolean;
+    fanout: boolean;
+    gate: string | null;
+  }[];
+}
+
+/** GET /lifecycle/templates — the per-kind board mapping + human labels, so the
+ *  client buckets tasks and labels gates/artifacts without a hardcoded copy. */
+export interface LifecycleTemplates {
+  templates: Record<string, LifecycleTemplate>;
+  gate_labels: Record<string, string>;
+  artifact_labels: Record<string, string>;
+}
 
 // -- Task Lifecycle V2 ---------------------------------------------------------
 
@@ -21,8 +56,13 @@ export interface LifecycleRun {
   id: string;
   project_id: string;
   task_id: string;
+  /** Which per-kind lifecycle this run drives (code / research / docs). */
+  kind?: string | null;
   phase: string;
   active: number;
+  /** Number of fan-out agent rows for the run's fan-out phase (research
+   *  `investigating`); drives the `▶ N agents` card badge. 0 when none. */
+  fanout_count?: number;
   branch_name: string | null;
   worktree_path: string | null;
   pr_number: number | null;
@@ -68,6 +108,9 @@ export interface Artifact {
   title: string | null;
   repo_path: string | null;
   branch: string | null;
+  /** Inline body for non-repo artifacts (research findings/reports, docs). Null
+   *  for repo-pointer artifacts (spec/plan/etc. read from a branch). */
+  content?: string | null;
   created_by: string | null;
   created_at: string | null;
 }
@@ -166,6 +209,14 @@ export interface Task {
   origin_quote: string | null;
   origin_source: string | null;
   description: string | null;
+  // Task-Type Router: the authoritative kind (set at confirm/Start; null until
+  // then), the router's advisory suggestion + reason, and the docs sub-template.
+  // Optional on the client so older mocks/fixtures without them still typecheck;
+  // the real /api/tasks response always includes them.
+  kind?: Kind | null;
+  kind_suggested?: Kind | null;
+  kind_reason?: string | null;
+  doc_template?: string | null;
   created_at: string;
   // Brain-node IDs grounded to this task; resolve against the project's brain
   // node list (see resolveNodes / api.brainNodes) to get full BrainNode objects.

@@ -1,15 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOARD_COLUMNS,
+  columnFor,
   groupNodesByType,
   indexNodesById,
   projectColor,
   projectGlyph,
   projectSlug,
   resolveNodes,
+  tasksByColumn,
   tasksByStatus,
 } from "@/lib/adapters";
 import { STATUSES } from "@/lib/types";
-import type { BrainNode, BrainNodeType, Project, Task } from "@/lib/types";
+import type {
+  BrainNode,
+  BrainNodeType,
+  Kind,
+  LifecycleTemplates,
+  Project,
+  Task,
+} from "@/lib/types";
 
 const GLYPH_PALETTE = ["#c9b8ff", "#7ad19a", "#f0c674", "#9bd1f0"];
 
@@ -150,6 +160,93 @@ describe("tasksByStatus", () => {
     for (const s of STATUSES) {
       expect(buckets[s]).toEqual([]);
     }
+  });
+});
+
+const TEMPLATES: LifecycleTemplates = {
+  templates: {
+    code: {
+      terminal_status: "shipped",
+      columns: {
+        shaping: "Planning",
+        plan_review: "Planning",
+        building: "In progress",
+        pr_review: "Review",
+        shipped: "Done",
+      },
+      phases: [],
+    },
+    research: {
+      terminal_status: "delivered",
+      columns: {
+        scoping: "Planning",
+        investigating: "In progress",
+        synthesis: "Review",
+        delivered: "Done",
+      },
+      phases: [],
+    },
+    docs: {
+      terminal_status: "delivered",
+      columns: { outline: "Planning", drafting: "Review", delivered: "Done" },
+      phases: [],
+    },
+  },
+  gate_labels: {},
+  artifact_labels: {},
+};
+
+function kindedTask(id: string, status: string, kind: Kind | null): Task {
+  return { ...makeTask(id, status), kind };
+}
+
+describe("columnFor", () => {
+  it("maps code phases to universal columns via templates", () => {
+    expect(columnFor(kindedTask("c", "building", "code"), TEMPLATES)).toBe("In progress");
+    expect(columnFor(kindedTask("c", "pr_review", "code"), TEMPLATES)).toBe("Review");
+    expect(columnFor(kindedTask("c", "shipped", "code"), TEMPLATES)).toBe("Done");
+  });
+
+  it("maps research + docs phases to universal columns", () => {
+    expect(columnFor(kindedTask("r", "investigating", "research"), TEMPLATES)).toBe("In progress");
+    expect(columnFor(kindedTask("r", "synthesis", "research"), TEMPLATES)).toBe("Review");
+    expect(columnFor(kindedTask("d", "drafting", "docs"), TEMPLATES)).toBe("Review");
+    expect(columnFor(kindedTask("d", "delivered", "docs"), TEMPLATES)).toBe("Done");
+  });
+
+  it("puts untyped (kind null) and ready tasks in Ready", () => {
+    expect(columnFor(kindedTask("u", "ready", null), TEMPLATES)).toBe("Ready");
+    // a null-kind task with a non-ready status still lands in Ready
+    expect(columnFor(kindedTask("u", "building", null), TEMPLATES)).toBe("Ready");
+    expect(columnFor(kindedTask("r", "ready", "research"), TEMPLATES)).toBe("Ready");
+  });
+
+  it("excludes blocked tasks from any column (banner instead)", () => {
+    expect(columnFor(kindedTask("b", "blocked", "code"), TEMPLATES)).toBeNull();
+  });
+
+  it("falls back to Ready when templates are absent or the phase is unknown", () => {
+    expect(columnFor(kindedTask("c", "building", "code"))).toBe("Ready");
+    expect(columnFor(kindedTask("c", "mystery", "code"), TEMPLATES)).toBe("Ready");
+  });
+});
+
+describe("tasksByColumn", () => {
+  it("buckets tasks into all 5 columns, excluding blocked", () => {
+    const tasks = [
+      kindedTask("a", "ready", null),
+      kindedTask("b", "building", "code"),
+      kindedTask("c", "investigating", "research"),
+      kindedTask("d", "shipped", "code"),
+      kindedTask("e", "blocked", "code"),
+    ];
+    const buckets = tasksByColumn(tasks, TEMPLATES);
+    for (const c of BOARD_COLUMNS) expect(buckets).toHaveProperty(c);
+    expect(buckets.Ready.map((t) => t.id)).toEqual(["a"]);
+    expect(buckets["In progress"].map((t) => t.id)).toEqual(["b", "c"]);
+    expect(buckets.Done.map((t) => t.id)).toEqual(["d"]);
+    // blocked excluded from every column
+    expect(Object.values(buckets).flat().map((t) => t.id)).not.toContain("e");
   });
 });
 

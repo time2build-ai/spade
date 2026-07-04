@@ -481,3 +481,23 @@ def test_projects_with_pending_env():
     assert lifecycle.projects_with_pending_env() == []
     _shipped_run(tid)
     assert lifecycle.projects_with_pending_env() == ["acme"]
+
+
+def test_start_run_stamps_kind_code_by_default():
+    tid = _setup()
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    assert run["kind"] == "code"
+    assert run["phase"] == "shaping"
+
+
+# -- Task 3.2: has_run_for_task (any row, active OR terminal) ------------------
+
+def test_has_run_for_task_matches_any_row():
+    tid = _setup()
+    assert lifecycle.has_run_for_task(tid) is False
+    run = lifecycle.start_run("acme", tid, spawn=_spawn, git=FakeGit())
+    assert lifecycle.has_run_for_task(tid) is True
+    # still true after the run goes inactive (terminal) — kind stays locked.
+    lifecycle._set_run(run["id"], active=0)
+    assert lifecycle.active_run_for_task(tid) is None
+    assert lifecycle.has_run_for_task(tid) is True

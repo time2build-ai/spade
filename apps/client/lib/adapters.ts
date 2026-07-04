@@ -2,6 +2,7 @@ import { STATUSES } from "./types";
 import type {
   BrainNode,
   BrainNodeType,
+  LifecycleTemplates,
   PipelineRun,
   Project,
   Session,
@@ -82,13 +83,65 @@ export function projectSlug(p: Project): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Bucket tasks into the 5 statuses. All keys present; unknown statuses ignored. */
+/** Bucket tasks into their statuses. All keys present; unknown statuses ignored. */
 export function tasksByStatus(tasks: Task[]): Record<Status, Task[]> {
   const buckets = {} as Record<Status, Task[]>;
   for (const s of STATUSES) buckets[s] = [];
   for (const task of tasks) {
     const bucket = buckets[task.status];
     if (bucket) bucket.push(task);
+  }
+  return buckets;
+}
+
+// -- universal board columns (Task-Type Router) -------------------------------
+
+/** The 5 universal board columns, in display order. Every kind's phases map into
+ *  one of these via the `/lifecycle/templates` mapping. `blocked` is NOT a
+ *  column — blocked tasks surface in the amber banner. */
+export const BOARD_COLUMNS = [
+  "Ready",
+  "Planning",
+  "In progress",
+  "Review",
+  "Done",
+] as const;
+export type BoardColumn = (typeof BOARD_COLUMNS)[number];
+
+/**
+ * Map a task to its universal board column using the per-kind template mapping.
+ * Edge handling:
+ *  - `blocked`     → null (excluded from columns; surfaced in the blocked banner);
+ *  - `kind == null`→ Ready (untyped tasks live in Ready until routed/started);
+ *  - `status ready`→ Ready (regardless of kind);
+ *  - otherwise the template's phase→column mapping, falling back to Ready for an
+ *    unknown kind/phase (e.g. templates not yet loaded).
+ */
+export function columnFor(
+  task: Task,
+  templates?: LifecycleTemplates,
+): BoardColumn | null {
+  if (task.status === "blocked") return null;
+  if (task.status === "ready") return "Ready";
+  if (!task.kind) return "Ready";
+  const col = templates?.templates?.[task.kind]?.columns?.[task.status];
+  if (col && (BOARD_COLUMNS as readonly string[]).includes(col)) {
+    return col as BoardColumn;
+  }
+  return "Ready";
+}
+
+/** Bucket tasks into the 5 universal columns via `columnFor`. All keys present;
+ *  blocked tasks (columnFor → null) are excluded. */
+export function tasksByColumn(
+  tasks: Task[],
+  templates?: LifecycleTemplates,
+): Record<BoardColumn, Task[]> {
+  const buckets = {} as Record<BoardColumn, Task[]>;
+  for (const c of BOARD_COLUMNS) buckets[c] = [];
+  for (const task of tasks) {
+    const col = columnFor(task, templates);
+    if (col) buckets[col].push(task);
   }
   return buckets;
 }
