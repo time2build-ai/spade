@@ -304,14 +304,22 @@ def test_run_serialization_includes_fanout_count():
 
     run = lifecycle.start_run("acme", tid, spawn=lambda run, phase: ("s", "a"),
                               git=_Git())
+    rid = run["id"]
     c = TestClient(app)
     # no fan-out rows yet → 0
-    assert c.get(f"/lifecycle/{run['id']}").json()["fanout_count"] == 0
-    # create 3 fan-out rows on the investigating phase → count reflects them
-    fanout.create_rows(run["id"], "investigating",
+    assert c.get(f"/lifecycle/{rid}").json()["fanout_count"] == 0
+    # create 3 fan-out rows on the investigating phase
+    fanout.create_rows(rid, "investigating",
                        [{"brief": "a", "mode": "web"},
                         {"brief": "b", "mode": "web"},
                         {"brief": "c", "mode": "repo"}])
-    assert c.get(f"/lifecycle/{run['id']}").json()["fanout_count"] == 3
+    # while the run sits at scoping (NOT the fan-out phase) the count stays 0
+    assert c.get(f"/lifecycle/{rid}").json()["fanout_count"] == 0
+    # once the run is AT the investigating fan-out phase → count reflects the rows
+    lifecycle._set_run(rid, phase="investigating")
+    assert c.get(f"/lifecycle/{rid}").json()["fanout_count"] == 3
     listed = c.get("/lifecycle?project_id=acme").json()["runs"]
     assert listed[0]["fanout_count"] == 3
+    # advancing past the fan-out phase drops the count back to 0 (no stale agents)
+    lifecycle._set_run(rid, phase="synthesis")
+    assert c.get(f"/lifecycle/{rid}").json()["fanout_count"] == 0

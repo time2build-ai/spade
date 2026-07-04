@@ -55,19 +55,22 @@ def _slugify(text: str) -> str:
 def _annotate(run: dict) -> dict:
     """Add derived fields to a serialized run.
 
-    ``fanout_count`` = number of fan-out agent rows for the run's fan-out phase
-    (0 for kinds/phases with no fan-out). The client's ``▶ N agents`` badge reads
-    this instead of a hardcoded/absent value.
+    ``fanout_count`` = number of fan-out agent rows for the run's CURRENT phase,
+    but only while that phase is itself a fan-out phase (0 otherwise). Gating on
+    the current phase keeps the client's ``▶ N agents`` badge honest: once the
+    barrier releases and the run advances past the fan-out phase (e.g. research
+    into ``synthesis``), the count drops back to 0 rather than showing stale
+    agents. Never crashes on a legacy/unknown kind.
     """
     kind = run.get("kind") or "code"
+    phase = run.get("phase")
     count = 0
-    # Never let serialization crash on a legacy/unknown kind — count 0 fan-out.
     try:
         fanout_phases = lifecycle_templates.fanout_phases(kind)
     except KeyError:
         fanout_phases = set()
-    for ph in fanout_phases:
-        count += len(fanout.rows_for(run["id"], ph))
+    if phase in fanout_phases:
+        count = len(fanout.rows_for(run["id"], phase))
     run["fanout_count"] = count
     return run
 

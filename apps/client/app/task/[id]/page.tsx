@@ -681,11 +681,28 @@ function ArtifactDrawer({
 
 /** A `doc` deliverable — the styled document rendered in a LOCKED sandbox iframe
  *  (no allow-scripts; the doc is static HTML + inline SVG, and the server sends a
- *  restrictive CSP). Points at the shareable `/api/doc/{id}` route with an
- *  Open-in-new-tab + Share-link affordance. */
+ *  restrictive CSP). "Open document" opens the shareable `/api/doc/{id}` route in
+ *  a new tab (where the browser's own Print works); "Copy share link" copies that
+ *  URL to the clipboard (the anchor's href is also the shareable link). */
 function DocDeliverable({ artifact }: { artifact: import("@/lib/types").Artifact }) {
   const url = api.docUrl(artifact.id);
   const label = `${ARTIFACT_LABEL[artifact.kind] ?? artifact.kind}${artifact.title ? ` · ${artifact.title}` : ""}`;
+  const [copied, setCopied] = React.useState(false);
+
+  const copyShare = React.useCallback(
+    (e: React.MouseEvent) => {
+      // The href is the shareable link; intercept the click to copy it instead of
+      // navigating in-place (falls through to the link if clipboard is blocked).
+      if (navigator.clipboard) {
+        e.preventDefault();
+        void navigator.clipboard.writeText(new URL(url, window.location.origin).href);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      }
+    },
+    [url],
+  );
+
   return (
     <div data-testid="doc-deliverable" data-kind="doc" style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -699,15 +716,16 @@ function DocDeliverable({ artifact }: { artifact: import("@/lib/types").Artifact
           data-testid="doc-open"
           style={{ padding: "3px 10px", fontSize: 12, textDecoration: "none" }}
         >
-          Open / Print ↗
+          Open document ↗
         </a>
         <a
           href={url}
           data-testid="doc-share-link"
+          onClick={copyShare}
           className="btn"
           style={{ padding: "3px 10px", fontSize: 12, textDecoration: "none" }}
         >
-          Share link
+          {copied ? "Copied ✓" : "Copy share link"}
         </a>
       </div>
       <iframe
