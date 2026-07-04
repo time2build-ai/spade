@@ -1,11 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 
 /**
- * Backlog — Task Lifecycle V2.
- * Six columns (ready · shaping · plan_review · building · pr_review · shipped;
- * blocked routed to an amber banner, not a column), the blocked banner, the
- * "Run sprint" head action, and the amber "waiting on you" gate cards driven by
- * the lifecycle gate list. Mocks the API.
+ * Backlog — Task-Type Router universal board.
+ * Five universal columns (Ready · Planning · In progress · Review · Done; blocked
+ * routed to an amber banner, not a column), the blocked banner, the "Run sprint"
+ * head action, and the amber "waiting on you" gate cards driven by the lifecycle
+ * gate list. Every code task's phase maps into one of the 5 columns via the
+ * /lifecycle/templates mapping. Mocks the API.
  */
 
 const TASKS = [
@@ -21,6 +22,11 @@ const TASKS = [
   feature: "Checkout",
   priority: 1,
   status,
+  // All code-kind tasks so their phases bucket via the code template mapping.
+  kind: "code",
+  kind_suggested: null,
+  kind_reason: null,
+  doc_template: null,
   origin_quote: null,
   origin_source: null,
   description: null,
@@ -28,6 +34,35 @@ const TASKS = [
   nodes: id === "T-1" ? ["bn-f", "bn-b", "bn-d"] : [],
   links: [],
 }));
+
+// The per-kind board mapping the page fetches from GET /lifecycle/templates.
+const TEMPLATES = {
+  templates: {
+    code: {
+      terminal_status: "shipped",
+      columns: {
+        shaping: "Planning", plan_review: "Planning", building: "In progress",
+        pr_review: "Review", shipped: "Done",
+      },
+      phases: [],
+    },
+    research: {
+      terminal_status: "delivered",
+      columns: {
+        scoping: "Planning", investigating: "In progress", synthesis: "Review",
+        delivered: "Done",
+      },
+      phases: [],
+    },
+    docs: {
+      terminal_status: "delivered",
+      columns: { outline: "Planning", drafting: "Review", delivered: "Done" },
+      phases: [],
+    },
+  },
+  gate_labels: {},
+  artifact_labels: {},
+};
 
 const BRAIN_NODES = [
   { id: "bn-f", project_id: "p1", type: "feedback", label: "slow checkout", detail: null, x: null, y: null, created_at: null },
@@ -59,6 +94,9 @@ async function mockBacklog(page: Page) {
   await page.route("**/api/brain/nodes**", (r) => r.fulfill({ json: { nodes: BRAIN_NODES } }));
   await page.route("**/api/projects/*/gates", (r) => r.fulfill({ json: { gates: GATES } }));
   await page.route("**/api/lifecycle**", (r) => r.fulfill({ json: { runs: RUNS } }));
+  // Registered LAST so it wins over the generic /api/lifecycle** handler above
+  // (Playwright tries the most-recently-added matching route first).
+  await page.route("**/api/lifecycle/templates", (r) => r.fulfill({ json: TEMPLATES }));
 }
 
 test.describe("backlog", () => {
@@ -68,9 +106,9 @@ test.describe("backlog", () => {
     await expect(page.locator(".backlog-grid")).toBeVisible();
   });
 
-  test("renders exactly 6 lifecycle columns, no Blocked column", async ({ page }) => {
-    await expect(page.locator(".backlog-grid .col")).toHaveCount(6);
-    for (const label of ["Ready", "Shaping", "Plan review", "Building", "PR review", "Shipped"]) {
+  test("renders exactly 5 universal columns, no Blocked column", async ({ page }) => {
+    await expect(page.locator(".backlog-grid .col")).toHaveCount(5);
+    for (const label of ["Ready", "Planning", "In progress", "Review", "Done"]) {
       await expect(page.locator(".col-head", { hasText: label })).toHaveCount(1);
     }
     await expect(page.locator(".col-head", { hasText: "Blocked" })).toHaveCount(0);
@@ -92,7 +130,7 @@ test.describe("backlog", () => {
   });
 
   test("populated columns show their task count", async ({ page }) => {
-    for (const label of ["Ready", "Building", "PR review", "Shipped"]) {
+    for (const label of ["Ready", "In progress", "Review", "Done"]) {
       const head = page.locator(".col-head", { hasText: label });
       await expect(head.locator(".count")).toHaveText("1");
     }
