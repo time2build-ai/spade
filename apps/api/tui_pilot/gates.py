@@ -49,6 +49,33 @@ def decide(gate_id: str, status: str, comment: str | None = None,
     return get(gate_id)
 
 
+def try_decide(gate_id: str, status: str, comment: str | None = None,
+               by: str | None = None) -> bool:
+    """CONDITIONAL decide: record the decision ONLY if the gate is still
+    ``waiting``. Returns True iff THIS call won the row (rowcount == 1); a racing
+    second decision gets False and must run no side-effects. This is the gate
+    analogue of the fan-out per-row CAS, letting ``decide_gate`` deliver exactly
+    once even when two approvals both pass the read-then-act guard."""
+    with db.tx() as cx:
+        cur = cx.execute(
+            "UPDATE gates SET status = ?, comment = ?, decided_by = ?, decided_at = ? "
+            "WHERE id = ? AND status = 'waiting'",
+            (status, comment, by, _now(), gate_id),
+        )
+        return cur.rowcount == 1
+
+
+def reopen(gate_id: str) -> None:
+    """Revert a gate to ``waiting`` (clearing the recorded decision). Used when an
+    approved gate's irreversible side-effect fails: the run is blocked and the gate
+    must stay re-decidable after a retry, exactly as before the CAS-claim."""
+    db.execute(
+        "UPDATE gates SET status = 'waiting', comment = NULL, decided_by = NULL, "
+        "decided_at = NULL WHERE id = ?",
+        (gate_id,),
+    )
+
+
 def gate_for(run_id: str, gate: str) -> dict | None:
     """Return the most recent gate of a kind for a run, or None."""
     rows = db.query(

@@ -790,8 +790,14 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
         return
     tid = run["task_id"]
 
-    def _consume_gate() -> None:
-        gates.decide(g["id"], decision, comment=comment, by=by)
+    def _claim_gate() -> bool:
+        """CAS-claim the gate for THIS decision. Returns True iff we won the row; a
+        racing second decision that also passed the read-then-act guard above gets
+        False and must no-op, so an irreversible side-effect (deliver / git.merge)
+        runs exactly once. Mirrors the fan-out per-row CAS."""
+        return gates.try_decide(g["id"], decision, comment=comment, by=by)
+
+    def _note_gate() -> None:
         tasks.add_comment(
             tid,
             body=f"{gate} gate: {decision}" + (f" — {comment}" if comment else ""),
@@ -804,16 +810,20 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
     if decision == "approved":
         approve = _APPROVE_HANDLERS.get(kind, {}).get(gate)
         if approve is not None:
-            # A gate with an irreversible git side-effect (code manual_test→open_pr,
-            # merge→git.merge). Run the side-effect FIRST: only consume the gate
-            # once it succeeds. On GitError we _block() the run (recoverable via
-            # retry()) and RETURN with the gate still 'waiting' — never a consumed
-            # dead-end that a retried approve would no-op on. retry() resumes the
-            # producing phase (the phase whose agent opened this gate), which
-            # re-spawns the agent and, on success, opens a fresh gate.
+            # A gate with an irreversible side-effect (code manual_test→open_pr,
+            # merge→git.merge; research/docs review→deliver). CLAIM the gate FIRST
+            # (atomic CAS): only the winner runs the side-effect, so a double-approve
+            # can't ship twice or create duplicate deliverables. On GitError we
+            # reopen() the gate to 'waiting' (restoring the retryable state) and
+            # _block() the run (recoverable via retry()) — never a consumed dead-end
+            # that a retried approve would no-op on. retry() resumes the producing
+            # phase, re-spawns the agent and, on success, opens a fresh gate.
+            if not _claim_gate():
+                return
             try:
                 approve(get(run_id), spawn, git)
             except gitops.GitError as e:
+                gates.reopen(g["id"])
                 producing = _producing_phase(kind, gate)
                 _block(
                     get(run_id), producing,
@@ -822,7 +832,7 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
                          f"so it can be retried after fixing the cause.\n\n{e}",
                 )
                 return
-            _consume_gate()
+            _note_gate()
         else:
             # Plain phase move (code plan gate): advance to approve_next and spawn
             # its agent (if that phase spawns one). An unregistered gate (no
@@ -830,7 +840,9 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
             nxt = adv.get("approve_next")
             if nxt is None:
                 return
-            _consume_gate()
+            if not _claim_gate():
+                return
+            _note_gate()
             if nxt in lifecycle_templates.fanout_phases(kind):
                 # Fan-out phase (research scope→investigating): spawn N angle
                 # agents via the Chunk 2 barrier primitive, NOT a single agent.
@@ -848,7 +860,9 @@ def decide_gate(run_id: str, gate: str, decision: str, *, comment: str | None = 
         target = adv.get("changes_target")
         if target is None:
             return
-        _consume_gate()
+        if not _claim_gate():
+            return
+        _note_gate()
         _set_run(run_id, phase=target)
         tasks.move(tid, target, force=True)
         _spawn_phase(get(run_id), target, spawn, resume_comment=comment)

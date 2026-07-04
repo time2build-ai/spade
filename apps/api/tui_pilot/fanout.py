@@ -74,6 +74,23 @@ def get_row(run_id: str, phase: str, idx: int) -> dict | None:
     return _row_to_dict(rows[0]) if rows else None
 
 
+def row_by_session(session_id: str) -> dict | None:
+    """The still-``running`` fan-out row whose ``session_id`` matches (or None).
+
+    Makes ``session_id`` a read column — the fan-out analogue of
+    ``lifecycle.run_by_session``. On server restart the reconcile step uses this to
+    re-stamp a reattached investigator agent's ``_meta`` (fan-out run_id/idx/phase),
+    since a fan-out session id lives ONLY here and never in
+    ``lifecycle_runs.agent_session_id``. Without it a finding that completes during
+    downtime is invisible to both the fan-out collector and the death detector."""
+    rows = db.query(
+        "SELECT * FROM fanout_agents WHERE session_id = ? AND status = 'running' "
+        "ORDER BY updated_at DESC, rowid DESC",
+        (session_id,),
+    )
+    return _row_to_dict(rows[0]) if rows else None
+
+
 def pending(run_id: str, phase: str) -> list[dict]:
     """Unresolved rows (queued/running/blocked) — those still holding the barrier."""
     rows = db.query(

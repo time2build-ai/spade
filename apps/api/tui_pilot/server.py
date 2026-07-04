@@ -982,6 +982,24 @@ def _reconcile_sessions(is_alive=None) -> list[str]:
                     if lrun is not None:
                         _meta[sid]["lifecycle_phase"] = lrun["phase"]
                         _meta[sid]["lifecycle_run_id"] = lrun["id"]
+                    else:
+                        # Not a single-agent lifecycle session — it may be a fan-out
+                        # (investigator) agent whose session id lives ONLY in
+                        # fanout_agents (never in lifecycle_runs.agent_session_id).
+                        # Re-stamp it the same way so the fan-out collector +
+                        # death-detector see it after restart; otherwise a finding
+                        # completing during downtime is silently dropped and the
+                        # barrier can only be released by manually dropping angles.
+                        # Stamp phase + idx then the fan-out TRIGGER key LAST (matches
+                        # the spawn write-order in the _lifecycle_spawn closure). Do
+                        # NOT set lifecycle_fanout_advanced, so a finish during
+                        # downtime can still release the barrier after reattach.
+                        from tui_pilot import fanout
+                        frow = fanout.row_by_session(sid)
+                        if frow is not None:
+                            _meta[sid]["lifecycle_phase"] = frow["phase"]
+                            _meta[sid]["lifecycle_fanout_idx"] = frow["idx"]
+                            _meta[sid]["lifecycle_fanout_run_id"] = frow["run_id"]
                 except Exception:  # noqa: BLE001 - best-effort linkage restore
                     logger.warning(
                         "failed to restore lifecycle linkage for %s", sid,

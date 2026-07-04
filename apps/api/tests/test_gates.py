@@ -34,6 +34,33 @@ def test_decide_sets_status_and_decided_at():
     assert decided["decided_at"]
 
 
+def test_try_decide_is_a_conditional_cas():
+    tid, run_id = _setup()
+    g = gates.open_gate(tid, run_id, "plan")
+    # first claim wins the waiting row
+    assert gates.try_decide(g["id"], "approved", by="a") is True
+    assert gates.get(g["id"])["status"] == "approved"
+    assert gates.get(g["id"])["decided_by"] == "a"
+    # a racing second decision loses (row no longer 'waiting') and changes nothing
+    assert gates.try_decide(g["id"], "changes_requested", by="b") is False
+    assert gates.get(g["id"])["status"] == "approved"
+    assert gates.get(g["id"])["decided_by"] == "a"
+
+
+def test_reopen_restores_waiting_and_clears_decision():
+    tid, run_id = _setup()
+    g = gates.open_gate(tid, run_id, "plan")
+    gates.try_decide(g["id"], "approved", comment="c", by="a")
+    gates.reopen(g["id"])
+    reopened = gates.get(g["id"])
+    assert reopened["status"] == "waiting"
+    assert reopened["comment"] is None
+    assert reopened["decided_by"] is None
+    assert reopened["decided_at"] is None
+    # a fresh claim can win again after reopen
+    assert gates.try_decide(g["id"], "approved") is True
+
+
 def test_gate_for_returns_the_row():
     tid, run_id = _setup()
     gates.open_gate(tid, run_id, "plan")

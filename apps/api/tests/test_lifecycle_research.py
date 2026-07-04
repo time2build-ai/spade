@@ -342,6 +342,28 @@ def test_review_approve_delivers_with_followups_and_brain_nodes():
         assert n["source"] == f"research:{tid}"
 
 
+def test_double_review_approve_delivers_once(monkeypatch):
+    rec = Rec()
+    run = _to_synthesis(rec)
+    rid = run["id"]
+    lifecycle.advance(rid, phase="synthesis", report=json.dumps(_SYNTH_REPORT),
+                      spawn=rec, git=FakeGit())
+    # Force BOTH approvals past the read-then-act guard (simulating two callers that
+    # each saw the gate 'waiting' before either wrote) so the atomic CAS in
+    # gates.try_decide is the ONLY thing preventing a duplicate deliver.
+    waiting_snapshot = dict(gates.gate_for(rid, "review"))
+    monkeypatch.setattr(gates, "gate_for",
+                        lambda run_id, gate: dict(waiting_snapshot))
+    tasks_before = len(tasks.list_for_project("acme"))
+    nodes_before = len(brain.list_nodes("acme"))
+    lifecycle.decide_gate(rid, "review", "approved", spawn=rec, git=FakeGit())
+    # racing second approve on the now-claimed gate must no-op
+    lifecycle.decide_gate(rid, "review", "approved", spawn=rec, git=FakeGit())
+    # deliver ran EXACTLY once: followups + brain nodes created once, not twice
+    assert len(tasks.list_for_project("acme")) == tasks_before + 2
+    assert len(brain.list_nodes("acme")) == nodes_before + 2
+
+
 def test_review_changes_requested_reworks_synthesis():
     rec = Rec()
     run = _to_synthesis(rec)

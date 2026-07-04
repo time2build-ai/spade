@@ -213,6 +213,38 @@ def test_reconcile_restores_lifecycle_linkage():
             server._pollers.pop("lsess", None)
 
 
+def test_reconcile_restores_fanout_linkage():
+    from tui_pilot import sessions_store, server, fanout
+
+    # A running investigator agent whose session id lives ONLY in fanout_agents
+    # (never in lifecycle_runs.agent_session_id), with a cleared in-memory _meta —
+    # exactly the state after a server restart mid-investigating.
+    rid = _bare_fanout_run("frecon")
+    fanout.mark_running(rid, "investigating", 1, "fsess-recon", "acct")
+    sessions_store.insert(id="fsess-recon", status="live", cwd="/w", name="fsess-recon")
+    try:
+        kept = server._reconcile_sessions(is_alive=lambda sid: True)
+        assert "fsess-recon" in kept
+        meta = server._meta["fsess-recon"]
+        # re-stamped so the fan-out collector / death-detector see it again
+        assert meta["lifecycle_fanout_run_id"] == rid
+        assert meta["lifecycle_fanout_idx"] == 1
+        assert meta["lifecycle_phase"] == "investigating"
+        # not pre-advanced, so a finish during downtime still releases the barrier
+        assert "lifecycle_fanout_advanced" not in meta
+        # a finish now would be picked up by the fan-out collector
+        from tui_pilot.harness import HarnessState
+        assert server._collect_lifecycle_fanout(
+            "fsess-recon", HarnessState("done", report="{}")
+        ) == (rid, "investigating", 1, "{}")
+    finally:
+        with server._registry_lock:
+            server._sessions.pop("fsess-recon", None)
+            server._locks.pop("fsess-recon", None)
+            server._meta.pop("fsess-recon", None)
+            server._pollers.pop("fsess-recon", None)
+
+
 def test_collect_lifecycle_advance_once_guard():
     from tui_pilot import server
     from tui_pilot.harness import HarnessState
