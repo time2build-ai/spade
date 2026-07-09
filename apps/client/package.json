@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack -p ${UI_PORT:-8766}",
     "build": "next build",
-    "dev:turbo": "next dev",
-    "start": "next start",
+    "dev:turbo": "next dev -p ${UI_PORT:-8766}",
+    "start": "next start -p ${UI_PORT:-8766}",
     "lint": "eslint",
     "test": "vitest run",
     "e2e": "playwright test",
