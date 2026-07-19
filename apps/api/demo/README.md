@@ -20,7 +20,7 @@ to do it live in front of an audience.
 
 Writes to the live DB (`$TUI_PILOT_HOME`, default `~/.spade`), so the running app
 shows it on refresh. Pipelines are advanced with a fake spawn — **no live agents,
-no tokens**. Then open `localhost:3000`, switch to the project, and explore.
+no tokens**. Then open `localhost:8766`, switch to the project, and explore.
 
 **Apps:** `link-shortener` · `recipe-box` · `habit-tracker`.
 

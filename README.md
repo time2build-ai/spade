@@ -32,7 +32,7 @@ Monorepo con dos aplicaciones:
 | App | Tecnología | Rol |
 |-----|------------|-----|
 | **`apps/api`** | Python · FastAPI · SQLite | *Backend* y fuente de verdad. Expone la API HTTP en `:8765` y orquesta los agentes mediante **tmux** + el CLI `claude`. |
-| **`apps/client`** | Next.js · React · TypeScript · Tailwind | Interfaz web en `:3000` (hace *proxy* de `/api/*` hacia el *backend*). |
+| **`apps/client`** | Next.js · React · TypeScript · Tailwind | Interfaz web en `:8766` (hace *proxy* de `/api/*` hacia el *backend*). |
 
 Los datos (la base SQLite y los directorios de cuentas) se almacenan por defecto
 en `~/spade-qa`.
@@ -82,9 +82,9 @@ Levanta **ambos** servidores con recarga en caliente y los detiene juntos con
 `Ctrl-C`:
 
 - API (FastAPI) en `http://127.0.0.1:8765`
-- Interfaz web (Next.js) en **http://127.0.0.1:3000**
+- Interfaz web (Next.js) en **http://127.0.0.1:8766**
 
-Abrir **http://127.0.0.1:3000** en el navegador.
+Abrir **http://127.0.0.1:8766** en el navegador.
 
 > Para usar otra carpeta de datos o puerto:
 > `make dev DATA_HOME=~/otra-carpeta PORT=9000`.

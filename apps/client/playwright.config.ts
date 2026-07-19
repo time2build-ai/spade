@@ -6,10 +6,12 @@ import { defineConfig, devices } from "@playwright/test";
  * The UI-parity work (docs/ui-parity/PR-PLAN.md) ships one spec per screen.
  * Specs target the running Next.js dev server; Playwright boots it for us via
  * `webServer` and reuses an already-running instance locally. Set E2E_BASE_URL
- * to target a server on another port (e.g. when :3000 is already taken by a
+ * to target a server on another port (e.g. when :8766 is already taken by a
  * separate checkout's dev server).
  */
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+const BASE_URL =
+  process.env.E2E_BASE_URL ??
+  `http://localhost:${process.env.UI_PORT ?? "8766"}`;
 
 export default defineConfig({
   testDir: "./e2e",

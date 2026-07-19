@@ -4,12 +4,12 @@
 
 ```bash
 make setup     # one-time: venv (uv) + Python deps + client npm install
-make dev       # start API + new UI with hot-reload → http://127.0.0.1:3000
+make dev       # start API + new UI with hot-reload → http://127.0.0.1:8766
 make stop      # stop both servers
 ```
 
 `make dev` starts **both** servers together (Ctrl-C tears down both): the
-FastAPI API on `:8765` and the Next.js UI on **http://127.0.0.1:3000** (the Next
+FastAPI API on `:8765` and the Next.js UI on **http://127.0.0.1:8766** (the Next
 app proxies `/api/*` to the API). Python and TypeScript changes both hot-reload —
 no manual restart. Data (the SQLite DB + managed account dirs) lives in
 `~/spade-qa` by default; override with `make dev DATA_HOME=~/other PORT=9000`.
@@ -24,7 +24,7 @@ This repo is a monorepo with two apps:
 - **`apps/api`** — the Python/FastAPI backend (the source of truth). Runs
   `uvicorn tui_pilot.server:app` on `:8765`.
 - **`apps/client`** — the new Next.js UI (App Router + TypeScript + Tailwind v4).
-  Dev server on `:3000`, proxies `/api/*` to the API.
+  Dev server on `:8766`, proxies `/api/*` to the API.
 
 **Legacy UI:** the original vanilla-JS UI is still served by FastAPI at
 **http://127.0.0.1:8765/ui/** as a fallback during the migration, until the Next
