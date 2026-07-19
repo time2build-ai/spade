@@ -70,6 +70,12 @@ test: $(VENV)
 stop:
 	@pkill -f "uvicorn tui_pilot.server:app" 2>/dev/null && echo "• stopped api" || true
 	@pkill -f "next dev" 2>/dev/null && echo "• stopped client" || true
+	@# Backstop: free the ports themselves in case the pattern match missed a
+	@# stale/orphaned/duplicate process holding $(PORT)/$(UI_PORT) (avoids [Errno 48]).
+	@for p in $(PORT) $(UI_PORT); do \
+	  pids=$$(lsof -ti tcp:$$p -sTCP:LISTEN 2>/dev/null); \
+	  [ -n "$$pids" ] && kill $$pids 2>/dev/null && echo "• freed port $$p" || true; \
+	done
 
 # Full shutdown: servers (via stop) plus every agent tmux session the harness
 # spawned. Agent sessions are always named <slug>__<8-char token> (identity.py),
