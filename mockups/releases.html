@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Releases — variations</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1220px;margin:0 auto 26px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:820px}
+  .stack{max-width:1220px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:16px 18px 20px}
+  .variant.ref{border-style:dashed;opacity:.92}
+  .vhead{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .ref .vtag{color:var(--text-3);background:var(--bg-2);border-color:var(--line)}
+  .vname{font-size:15.5px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12.5px;margin:3px 0 16px;max-width:900px}
+  .ic{flex:none;vertical-align:middle}
+  .mono{font-family:var(--mono)}
+
+  /* dot / env colors */
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .env-dev{--c:var(--blue)} .env-stg{--c:var(--amber)} .env-prd{--c:var(--green)}
+
+  /* generic card */
+  .card{background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+  .card:hover{border-color:var(--line-2)}
+  .card .cid{font:11px var(--mono);color:var(--text-3)}
+  .card .ctitle{font-size:12.5px;color:var(--text-2);margin-top:2px}
+  .sha{font:10.5px var(--mono);color:var(--text-4);margin-left:auto}
+  .row{display:flex;align-items:center;gap:7px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:12.5px;padding:8px 13px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);color:var(--text-2);cursor:pointer;font-weight:500}
+  .btn:hover{border-color:var(--line-strong)}
+  .btn.primary{background:linear-gradient(180deg,rgba(201,184,255,.18),rgba(201,184,255,.06));border-color:rgba(201,184,255,.4);color:#e7ddff}
+  .btn.ghost{background:none}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  /* ================= REFERENCE (current) ================= */
+  .ref-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .ref-col{display:flex;flex-direction:column;min-height:230px}
+  .ref-ch{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:0 2px 10px}
+  .ref-ch .count{margin-left:auto;font:11px var(--mono);color:var(--text-4)}
+  .ref-body{flex:1;display:flex;flex-direction:column;gap:8px}
+  .ref-foot{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+  .ref-note{font-size:11.5px;color:var(--text-4);margin-top:8px;line-height:1.6}
+  .ref-note .nh{font-weight:500;color:var(--text-3)}
+  .ref-dash{font-size:12px;color:var(--text-4);padding:8px}
+
+  /* ================= VARIANT A — pipeline rail ================= */
+  .pipe{display:grid;grid-template-columns:1fr 44px 1fr 44px 1fr;align-items:stretch;gap:0}
+  .lane{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:0;display:flex;flex-direction:column;overflow:hidden}
+  .lane-head{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .lane-head .lname{font-size:13.5px;font-weight:600}
+  .lane-head .lsub{font:11px var(--mono);color:var(--text-4)}
+  .lane-head .live{margin-left:auto;font-size:10.5px;font-weight:600;letter-spacing:.04em;color:var(--green);background:rgba(122,209,154,.12);border:1px solid rgba(122,209,154,.3);border-radius:20px;padding:2px 9px;display:inline-flex;align-items:center;gap:5px}
+  .lane-head .cnt{margin-left:auto;font:11px var(--mono);color:var(--text-4)}
+  .lane-body{padding:11px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .lane-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px 10px;color:var(--text-4)}
+  .lane-empty svg{opacity:.5;margin-bottom:8px}
+  .lane-empty .t{font-size:12px;color:var(--text-3)}
+  .gate{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;position:relative}
+  .gate .arrow{color:var(--line-strong)}
+  .gate .promote{width:34px;height:34px;border-radius:50%;border:1px solid rgba(201,184,255,.4);background:linear-gradient(180deg,rgba(201,184,255,.2),rgba(201,184,255,.05));color:#e7ddff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .gate .promote:hover{border-color:var(--accent)}
+  .gate .gnum{font:10px var(--mono);color:var(--accent)}
+  .gate.off .promote{opacity:.3;pointer-events:none}
+  .gate.off .gnum{color:var(--text-4)}
+
+  /* ================= VARIANT B — stacked deploy rows ================= */
+  .stackrows{display:flex;flex-direction:column;gap:0}
+  .erow{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;display:flex;align-items:stretch}
+  .erow .ebar{width:5px;border-radius:12px 0 0 12px;background:var(--c)}
+  .erow .emain{flex:1;padding:14px 16px;min-width:0}
+  .erow .etop{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .erow .ename{font-size:14px;font-weight:600}
+  .erow .emeta{font:11px var(--mono);color:var(--text-4)}
+  .erow .elive{margin-left:auto;font-size:10.5px;font-weight:600;color:var(--green);background:rgba(122,209,154,.12);border:1px solid rgba(122,209,154,.3);border-radius:20px;padding:2px 9px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .tchip{display:inline-flex;align-items:center;gap:7px;background:var(--bg-1);border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--text-2)}
+  .tchip .cid{font:10.5px var(--mono);color:var(--text-4)}
+  .erow-empty{color:var(--text-4);font-size:12px;padding:2px 0}
+  /* connector between rows */
+  .conn{display:flex;align-items:center;gap:12px;padding:9px 0 9px 22px}
+  .conn .cline{width:2px;height:16px;background:var(--line-2);margin-left:9px}
+  .conn .cbody{display:flex;align-items:center;gap:12px;flex:1;background:linear-gradient(90deg,rgba(201,184,255,.06),transparent);border:1px solid var(--line);border-left:2px solid rgba(201,184,255,.4);border-radius:9px;padding:9px 13px;margin-left:6px}
+  .conn .cbody .ctext{font-size:12px;color:var(--text-3)}
+  .conn .cbody .ctext b{color:var(--text-2);font-weight:600}
+  .conn .cbody .btn{margin-left:auto}
+  .conn.empty .cbody{border-left-color:var(--line);background:none}
+
+  /* ================= VARIANT C — ship-next hero ================= */
+  .hero{background:linear-gradient(135deg,rgba(201,184,255,.1),var(--bg-2));border:1px solid rgba(201,184,255,.3);border-radius:13px;padding:18px 20px;display:flex;gap:20px;align-items:flex-start;margin-bottom:16px}
+  .hero .hicon{width:42px;height:42px;border-radius:11px;background:rgba(201,184,255,.14);border:1px solid rgba(201,184,255,.3);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none}
+  .hero .hmain{flex:1;min-width:0}
+  .hero .hkick{font:11px var(--mono);color:var(--accent);letter-spacing:.04em;text-transform:uppercase}
+  .hero .htitle{font-size:16px;font-weight:600;margin:3px 0 10px}
+  .hero .hlist{display:flex;flex-direction:column;gap:5px;max-width:640px}
+  .hero .hitem{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-2)}
+  .hero .hitem .cid{font:10.5px var(--mono);color:var(--text-4);flex:none}
+  .hero .hbtn{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+  .hero .hbtn .btn{padding:10px 16px;font-size:13px}
+  .hero .hnote{font:11px var(--mono);color:var(--text-4)}
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .scard{background:var(--bg-2);border:1px solid var(--line);border-radius:11px;padding:13px 15px}
+  .scard .stop{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .scard .sname{font-size:13px;font-weight:600}
+  .scard .snum{margin-left:auto;font:18px var(--mono);color:var(--text-2)}
+  .scard .slist{display:flex;flex-direction:column;gap:4px}
+  .scard .sitem{font:11px var(--mono);color:var(--text-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .scard .slive{margin-left:auto;font-size:10px;font-weight:600;color:var(--green)}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Releases — promotion pipeline redesign</h1>
+  <p class="sub">The current page renders three equal kanban columns with a promote button buried at the bottom of each — it reads like a board, not a directional <b>dev → staging → production</b> pipeline. Three takes below. All keep the real data (tasks per env, merge SHAs, the promote-opens-a-PR action, the auto-generated release note).</p>
+</div>
+
+<div class="stack">
+
+  <!-- ============ REFERENCE ============ -->
+  <div class="variant ref">
+    <div class="vhead"><span class="vtag">now</span><span class="vname">Current</span></div>
+    <div class="vwhy">Three identical columns; promote CTA + release note stuck under a divider at the bottom of each column; empty lane shows a bare “—”. Nothing conveys flow or which env is live.</div>
+    <div class="ref-grid">
+      <div class="ref-col">
+        <div class="ref-ch"><span class="dot" style="background:var(--blue)"></span>Development<span class="count">2</span></div>
+        <div class="ref-body">
+          <div class="card"><div class="row"><span class="cid">SPD-041</span><span class="sha">a1b2c3d</span></div><div class="ctitle">Plant care reminders</div></div>
+          <div class="card"><div class="row"><span class="cid">SPD-039</span><span class="sha">9f8e7d6</span></div><div class="ctitle">Seasonal catalog banner</div></div>
+        </div>
+        <div class="ref-foot">
+          <button class="btn primary" style="width:100%"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>Promote to Staging →</button>
+          <div class="ref-note"><div class="nh">Release note · 2 task(s)</div><div class="mono">- SPD-041: Plant care reminders</div><div class="mono">- SPD-039: Seasonal catalog banner</div></div>
+        </div>
+      </div>
+      <div class="ref-col">
+        <div class="ref-ch"><span class="dot" style="background:var(--amber)"></span>Staging<span class="count">1</span></div>
+        <div class="ref-body">
+          <div class="card"><div class="row"><span class="cid">SPD-037</span><span class="sha">4c5d6e7</span></div><div class="ctitle">Checkout address validation</div></div>
+        </div>
+        <div class="ref-foot">
+          <button class="btn primary" style="width:100%"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>Promote to Production →</button>
+          <div class="ref-note"><div class="nh">Release note · 1 task(s)</div><div class="mono">- SPD-037: Checkout address validation</div></div>
+        </div>
+      </div>
+      <div class="ref-col">
+        <div class="ref-ch"><span class="dot" style="background:var(--green)"></span>Production<span class="count">0</span></div>
+        <div class="ref-body"><div class="ref-dash">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VARIANT A — pipeline rail ============ -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">A</span><span class="vname">Pipeline rail — promote lives on the gate between lanes</span></div>
+    <div class="vwhy">Same 3 lanes, but connected left→right by a circular promote “gate” that shows how many tasks it will carry. The flow is unmistakable; the CTA sits exactly where the eye reads the hand-off. Production is tagged <b>live</b>. Empty lanes get a real illustration + copy.</div>
+    <div class="pipe">
+      <!-- DEV -->
+      <div class="lane env-dev">
+        <div class="lane-head"><span class="dot" style="background:var(--c)"></span><span class="lname">Development</span><span class="cnt">2</span></div>
+        <div class="lane-body">
+          <div class="card"><div class="row"><span class="cid">SPD-041</span><span class="sha">a1b2c3d</span></div><div class="ctitle">Plant care reminders</div></div>
+          <div class="card"><div class="row"><span class="cid">SPD-039</span><span class="sha">9f8e7d6</span></div><div class="ctitle">Seasonal catalog banner</div></div>
+        </div>
+      </div>
+      <!-- gate dev->stg -->
+      <div class="gate">
+        <svg class="arrow ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <button class="promote" title="Promote 2 tasks to Staging"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></button>
+        <span class="gnum">+2</span>
+      </div>
+      <!-- STG -->
+      <div class="lane env-stg">
+        <div class="lane-head"><span class="dot" style="background:var(--c)"></span><span class="lname">Staging</span><span class="cnt">1</span></div>
+        <div class="lane-body">
+          <div class="card"><div class="row"><span class="cid">SPD-037</span><span class="sha">4c5d6e7</span></div><div class="ctitle">Checkout address validation</div></div>
+        </div>
+      </div>
+      <!-- gate stg->prd -->
+      <div class="gate">
+        <svg class="arrow ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <button class="promote" title="Promote 1 task to Production"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></button>
+        <span class="gnum">+1</span>
+      </div>
+      <!-- PRD -->
+      <div class="lane env-prd">
+        <div class="lane-head"><span class="dot" style="background:var(--c)"></span><span class="lname">Production</span><span class="live"><span class="dot" style="background:var(--green)"></span>LIVE</span></div>
+        <div class="lane-empty">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+          <div class="t">Nothing shipped yet</div>
+          <div class="t" style="color:var(--text-4);font-size:11px">Promoted tasks land here when they go live.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VARIANT B — stacked deploy rows ============ -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">B</span><span class="vname">Deploy timeline — full-width env rows, promote bar between</span></div>
+    <div class="vwhy">Each environment is a full-width row (Vercel/Netlify deploy-dashboard feel), stacked top→bottom. Between rows, a connector bar states exactly what promoting will carry and holds the CTA. Best for scanning contents at a glance and reading the release note in place.</div>
+    <div class="stackrows">
+      <!-- DEV -->
+      <div class="erow env-dev">
+        <div class="ebar"></div>
+        <div class="emain">
+          <div class="etop"><span class="dot" style="background:var(--c)"></span><span class="ename">Development</span><span class="emeta">2 tasks · updated 4m ago</span></div>
+          <div class="chips">
+            <span class="tchip"><span class="cid">SPD-041</span>Plant care reminders</span>
+            <span class="tchip"><span class="cid">SPD-039</span>Seasonal catalog banner</span>
+          </div>
+        </div>
+      </div>
+      <!-- connector dev->stg -->
+      <div class="conn">
+        <div class="cline"></div>
+        <div class="cbody">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <span class="ctext">Promote <b>2 tasks</b> from Development → Staging</span>
+          <button class="btn primary">Promote to Staging</button>
+        </div>
+      </div>
+      <!-- STG -->
+      <div class="erow env-stg">
+        <div class="ebar"></div>
+        <div class="emain">
+          <div class="etop"><span class="dot" style="background:var(--c)"></span><span class="ename">Staging</span><span class="emeta">1 task · updated 1h ago</span></div>
+          <div class="chips">
+            <span class="tchip"><span class="cid">SPD-037</span>Checkout address validation</span>
+          </div>
+        </div>
+      </div>
+      <!-- connector stg->prd -->
+      <div class="conn">
+        <div class="cline"></div>
+        <div class="cbody">
+          <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <span class="ctext">Promote <b>1 task</b> from Staging → Production</span>
+          <button class="btn primary">Promote to Production</button>
+        </div>
+      </div>
+      <!-- PRD -->
+      <div class="erow env-prd">
+        <div class="ebar"></div>
+        <div class="emain">
+          <div class="etop"><span class="dot" style="background:var(--c)"></span><span class="ename">Production</span><span class="emeta">0 tasks</span><span class="elive">● LIVE</span></div>
+          <div class="erow-empty">Nothing shipped to production yet — promoted tasks appear here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VARIANT C — ship-next hero ============ -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">C</span><span class="vname">Ship next — action hero + compact lane summary</span></div>
+    <div class="vwhy">Leads with the one decision that matters: what’s ready to promote next, with the release note inline and a single prominent button. Below, a compact 3-lane summary strip for context. Most action-focused; smallest footprint.</div>
+    <div class="hero">
+      <div class="hicon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></div>
+      <div class="hmain">
+        <div class="hkick">Ready to promote</div>
+        <div class="htitle">2 tasks in Development are ready for Staging</div>
+        <div class="hlist">
+          <div class="hitem"><span class="cid">SPD-041</span>Plant care reminders</div>
+          <div class="hitem"><span class="cid">SPD-039</span>Seasonal catalog banner</div>
+        </div>
+      </div>
+      <div class="hbtn">
+        <button class="btn primary">Promote to Staging →</button>
+        <span class="hnote">opens a PR: dev → staging</span>
+      </div>
+    </div>
+    <div class="summary">
+      <div class="scard env-dev">
+        <div class="stop"><span class="dot" style="background:var(--c)"></span><span class="sname">Development</span><span class="snum">2</span></div>
+        <div class="slist"><span class="sitem">SPD-041 · Plant care reminders</span><span class="sitem">SPD-039 · Seasonal catalog banner</span></div>
+      </div>
+      <div class="scard env-stg">
+        <div class="stop"><span class="dot" style="background:var(--c)"></span><span class="sname">Staging</span><span class="snum">1</span></div>
+        <div class="slist"><span class="sitem">SPD-037 · Checkout address validation</span></div>
+      </div>
+      <div class="scard env-prd">
+        <div class="stop"><span class="dot" style="background:var(--c)"></span><span class="sname">Production</span><span class="slive">● LIVE</span><span class="snum">0</span></div>
+        <div class="slist"><span class="sitem" style="color:var(--text-4)">Nothing shipped yet</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

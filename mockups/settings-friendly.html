@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Friendlier project settings — variations</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1300px;margin:0 auto 22px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:820px}
+  .grid{max-width:1300px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:22px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:18px 18px 22px;min-width:0}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12.5px;margin:2px 0 16px}
+
+  /* settings atoms */
+  .stitle{font-size:19px;letter-spacing:-.01em;margin-bottom:5px}
+  .intro{color:var(--text-2);font-size:13px;line-height:1.6;margin-bottom:18px}
+  .intro b{color:var(--text)}
+  .card{background:var(--bg-2);border:1px solid var(--line);border-radius:11px;padding:15px 16px;margin-bottom:12px}
+  .card.essential{border-color:rgba(201,184,255,.28);background:linear-gradient(180deg,rgba(201,184,255,.05),var(--bg-2))}
+  .clabel{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+  .cdesc{color:var(--text-3);font-size:12.5px;line-height:1.55;margin-top:5px;max-width:92%}
+  .pill{font:10px var(--mono);text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:20px;border:1px solid}
+  .pill.live{color:var(--green);border-color:rgba(122,209,154,.4);background:rgba(122,209,154,.1)}
+  .pill.rec{color:var(--accent);border-color:rgba(201,184,255,.4)}
+  .row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+  .field{width:100%;background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:8px 11px;margin-top:8px;font:12.5px var(--mono);color:var(--text-3)}
+
+  /* toggle */
+  .tog{width:38px;height:22px;border-radius:20px;background:var(--bg-3);border:1px solid var(--line-strong);position:relative;flex:none;cursor:pointer;transition:background .15s}
+  .tog::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text-3);transition:transform .15s,background .15s}
+  .tog.on{background:rgba(201,184,255,.3);border-color:var(--accent)}
+  .tog.on::after{transform:translateX(16px);background:var(--accent)}
+
+  /* section header + accordion */
+  .grp{border:1px solid var(--line);border-radius:11px;margin-bottom:10px;overflow:hidden;background:var(--bg-2)}
+  .grp-h{display:flex;align-items:center;gap:10px;padding:13px 15px;cursor:pointer;user-select:none}
+  .grp-h:hover{background:var(--bg-3)}
+  .grp-h .gt{font-size:14px;font-weight:600}
+  .grp-h .gs{color:var(--text-4);font-size:12px;margin-left:2px}
+  .grp-h .chev{margin-left:auto;color:var(--text-4);transition:transform .15s}
+  .grp.open .chev{transform:rotate(180deg)}
+  .grp-body{display:none;padding:2px 15px 12px;border-top:1px solid var(--line)}
+  .grp.open .grp-body{display:block}
+  .minirow{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:11px 0}
+  .minirow + .minirow{border-top:1px solid var(--line)}
+  .minirow .ml{font-size:13px;font-weight:500}
+  .minirow .md{color:var(--text-4);font-size:12px;margin-top:3px}
+
+  .sech{font:11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:20px 0 10px}
+  .hint{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--amber);background:rgba(230,184,106,.08);border:1px solid rgba(230,184,106,.3);border-radius:8px;padding:7px 11px;margin-bottom:16px}
+  .steps{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+  .step{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:10px;background:var(--bg-2);border:1px solid var(--line)}
+  .step .n{width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .step.done .n{background:var(--green);color:#04150d} .step.done .st-t{color:var(--text-3);text-decoration:line-through}
+  .step.todo .n{background:none;border:1.5px solid var(--accent);color:var(--accent)}
+  .step .st-t{font-size:13px;font-weight:500} .step .st-d{color:var(--text-4);font-size:12px}
+  .step .go{margin-left:auto;font-size:12px;color:var(--accent)}
+  footer{max-width:1300px;margin:26px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Friendlier project settings — variations</h1>
+  <p class="sub">The current page drops ~14 toggles on you at once (most are placeholders — only <b>Autopilot</b> and <b>Repository</b> are wired). Three friendlier takes: lead with what matters, explain in plain words, and tuck the rest away until it's wanted.</p>
+</div>
+
+<div class="grid">
+
+  <!-- A -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">A</span><span class="vname">Essentials first · advanced hidden ★</span></div>
+    <div class="vwhy">A short intro, the two things that actually matter up top (repo + autopilot) with real explanations, everything else collapsed under labelled groups you open only if you care.</div>
+
+    <div class="stitle">Verde settings</div>
+    <p class="intro">This is where you tune how Spade runs <b>Verde</b>. The defaults are already sensible — to start shipping code, the one thing you need is to <b>connect a repository</b> below. Everything else is optional.</p>
+
+    <div class="sech">Get started</div>
+    <div class="card essential">
+      <div class="clabel">📦 Repository</div>
+      <div class="cdesc">Spade clones this repo into its own worktree for each task and opens a pull request against your branches — nothing touches your working copy.</div>
+      <input class="field" value="git@github.com:org/repo.git">
+      <input class="field" value="development  ·  staging  ·  main">
+    </div>
+    <div class="card essential">
+      <div class="row"><div><div class="clabel">✨ Autopilot <span class="pill rec">optional</span></div>
+        <div class="cdesc">When on, the orchestrator picks up ready tasks and ships them without asking. Leave it off while you're getting comfortable — you can flip it on any time.</div></div>
+        <div class="tog"></div></div>
+    </div>
+
+    <div class="sech">Advanced</div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Automation</span><span class="gs">· auto-spawn, auto-ship, ADR gating</span><span class="chev">▾</span></div>
+      <div class="grp-body">
+        <div class="minirow"><div><div class="ml">Auto-spawn orchestrator</div><div class="md">Start an orchestrator when a sprint runs</div></div><div class="tog on"></div></div>
+        <div class="minirow"><div><div class="ml">Auto-ship on green</div><div class="md">Merge when all gates pass and tests are green</div></div><div class="tog"></div></div>
+        <div class="minirow"><div><div class="ml">Gate on ADR conflict</div><div class="md">Pause when a change conflicts with a decision</div></div><div class="tog on"></div></div>
+      </div>
+    </div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Accounts</span><span class="gs">· dispatch &amp; fallback</span><span class="chev">▾</span></div><div class="grp-body"><div class="minirow"><div><div class="ml">Round-robin dispatch</div><div class="md">Spread work across the account pool</div></div><div class="tog on"></div></div></div></div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Brain</span><span class="gs">· clustering, linking, MCP</span><span class="chev">▾</span></div><div class="grp-body"><div class="minirow"><div><div class="ml">Auto-cluster feedback</div><div class="md">Group incoming feedback into themes</div></div><div class="tog on"></div></div></div></div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Notifications</span><span class="gs">· pings &amp; digest</span><span class="chev">▾</span></div><div class="grp-body"><div class="minirow"><div><div class="ml">Notify on gate</div><div class="md">Ping when a task needs your call</div></div><div class="tog on"></div></div></div></div>
+  </div>
+
+  <!-- B -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">B</span><span class="vname">Guided setup checklist</span></div>
+    <div class="vwhy">For a fresh project, a small "finish setup" checklist leads the way and disappears once done. Settings sit below, calmer, with section intros.</div>
+
+    <div class="stitle">Verde settings</div>
+    <div class="steps" style="margin-top:14px">
+      <div class="step done"><span class="n">✓</span><div><div class="st-t">Connect an account</div><div class="st-d">.claude-t2b is in the pool</div></div></div>
+      <div class="step todo"><span class="n">2</span><div><div class="st-t">Connect a repository</div><div class="st-d">Needed for code tasks — research &amp; docs work without one</div></div><span class="go">Set up →</span></div>
+    </div>
+
+    <div class="sech">Automation</div>
+    <p class="intro" style="margin-bottom:12px">How much Spade does on its own. Start conservative — turn on Autopilot when you trust the flow.</p>
+    <div class="card"><div class="row"><div><div class="clabel">✨ Autopilot <span class="pill live">off</span></div><div class="cdesc">Pick up and ship ready tasks without prompting.</div></div><div class="tog"></div></div></div>
+    <div class="card"><div class="row"><div><div class="clabel">Gate on ADR conflict</div><div class="cdesc">Pause a change that conflicts with an active decision.</div></div><div class="tog on"></div></div></div>
+
+    <div class="sech">Notifications</div>
+    <p class="intro" style="margin-bottom:12px">When Spade should ping you.</p>
+    <div class="card"><div class="row"><div><div class="clabel">Notify on gate</div><div class="cdesc">When a task needs a human call.</div></div><div class="tog on"></div></div></div>
+  </div>
+
+  <!-- C -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">C</span><span class="vname">Accordion — everything collapsed</span></div>
+    <div class="vwhy">Zero toggles visible at first — just a friendly intro and five labelled rows with a plain-English summary each. Open only the one you want. Least overwhelming, most compact.</div>
+
+    <div class="stitle">Verde settings</div>
+    <p class="intro">Sensible defaults are already applied. Open a section to change how Spade automates work, dispatches accounts, organises the brain, notifies you, or connects your repo.</p>
+
+    <div class="grp open"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Repository</span><span class="gs">· connect to ship code</span><span class="chev">▾</span></div>
+      <div class="grp-body"><div class="cdesc" style="margin:10px 0 0">Spade clones this into a worktree per task and opens PRs against your branches.</div><input class="field" value="git@github.com:org/repo.git"></div></div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Automation</span><span class="gs">· 1 on of 4</span><span class="chev">▾</span></div><div class="grp-body"><div class="minirow"><div><div class="ml">Autopilot</div></div><div class="tog"></div></div></div></div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Accounts</span><span class="gs">· 2 on of 2</span><span class="chev">▾</span></div><div class="grp-body"></div></div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Brain</span><span class="gs">· 2 on of 3</span><span class="chev">▾</span></div><div class="grp-body"></div></div>
+    <div class="grp"><div class="grp-h" onclick="this.parentElement.classList.toggle('open')"><span class="gt">Notifications</span><span class="gs">· 2 on of 3</span><span class="chev">▾</span></div><div class="grp-body"></div></div>
+  </div>
+
+</div>
+<footer>My pick: <b>A</b> — leads with the one thing a new user must do (connect a repo), explains Autopilot honestly, and hides the rest without removing it. Say the letter and I'll rebuild <code>app/settings/page.tsx</code>. (I'd also cut or clearly mark the placeholder toggles that aren't wired yet.)</footer>
+</body>
+</html>

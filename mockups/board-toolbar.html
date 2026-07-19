@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board toolbar — search + filter</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1180px;margin:0 auto 22px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:760px}
+  .stack{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:16px 16px 18px}
+  .variant.ref{border-style:dashed}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .ref .vtag{color:var(--text-3);background:var(--bg-2);border-color:var(--line)}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12.5px;margin:2px 0 14px}
+
+  .bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:relative}
+  .ic{width:14px;height:14px;flex:none}
+
+  /* search input */
+  .search{display:flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;min-width:0}
+  .search:focus-within{border-color:var(--accent)}
+  .search input{background:none;border:none;outline:none;color:var(--text);font-size:13px;min-width:0;width:100%}
+  .search input::placeholder{color:var(--text-4)}
+  .search .kbd{font:10px var(--mono);color:var(--text-4);border:1px solid var(--line);border-radius:4px;padding:1px 5px;flex:none}
+
+  /* old badge chips (reference) */
+  .chip{font-size:12px;padding:4px 11px;border-radius:7px;border:1px solid var(--line);background:var(--bg-2);color:var(--text-3);display:inline-flex;align-items:center;gap:5px}
+  .chip.on{border-color:var(--accent);color:var(--accent)}
+
+  /* segmented control */
+  .seg{display:inline-flex;background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:2px}
+  .seg button{border:none;background:none;color:var(--text-3);font:12.5px/1 inherit;padding:6px 11px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .seg button.on{background:var(--bg-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .seg button.on svg{color:var(--accent)}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:7px 11px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);color:var(--text-2);cursor:pointer}
+  .btn:hover{border-color:var(--line-strong)}
+  .btn.on{border-color:var(--amber);color:var(--amber);background:rgba(230,184,106,.08)}
+  .btn.primary-ghost{margin-left:auto}
+  .grow{flex:1;min-width:120px}
+
+  /* icon toggle group */
+  .itog{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .itog button{width:34px;height:32px;border:none;background:var(--bg-2);color:var(--text-4);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border-right:1px solid var(--line)}
+  .itog button:last-child{border-right:none}
+  .itog button.on[data-k=code]{color:var(--blue);background:rgba(122,182,230,.12)}
+  .itog button.on[data-k=research]{color:var(--accent);background:rgba(201,184,255,.12)}
+  .itog button.on[data-k=docs]{color:var(--green);background:rgba(122,209,154,.12)}
+
+  /* filter dropdown menu */
+  .menu{position:absolute;top:44px;left:0;z-index:5;background:var(--bg-2);border:1px solid var(--line-strong);border-radius:10px;padding:8px;min-width:220px;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+  .menu-h{font:10px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text-4);margin:4px 6px 6px}
+  .menu-row{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--text-2)}
+  .menu-row:hover{background:var(--bg-3)}
+  .menu-row .box{width:15px;height:15px;border-radius:4px;border:1px solid var(--line-strong);flex:none;display:inline-flex;align-items:center;justify-content:center}
+  .menu-row.on .box{background:var(--accent);border-color:var(--accent);color:#17121f}
+  .menu-div{height:1px;background:var(--line);margin:6px 0}
+
+  /* token search (linear-style) */
+  .tokens{display:flex;align-items:center;gap:6px;background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;flex-wrap:wrap}
+  .token{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:rgba(201,184,255,.12);border:1px solid rgba(201,184,255,.3);color:var(--accent);border-radius:6px;padding:2px 7px}
+  .token .x{opacity:.6;cursor:pointer}
+  .tokens input{flex:1;min-width:80px;background:none;border:none;outline:none;color:var(--text);font-size:13px}
+
+  /* mini board hint */
+  .cols{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:14px}
+  .col{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;height:52px;display:flex;align-items:flex-start;padding:8px}
+  .col span{font:11px var(--mono);color:var(--text-4)}
+  footer{max-width:1180px;margin:26px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Board toolbar — search + filter</h1>
+  <p class="sub">Replacing the badge-chip filters, and adding a search input. Four toolbars over a hint of the columns. The kind filter (Code/Research/Docs), the “Waiting on you” filter, and “Auto-tag untyped” all still need a home.</p>
+</div>
+
+<div class="stack">
+
+  <!-- CURRENT -->
+  <div class="variant ref">
+    <div class="vhead"><span class="vtag">now</span><span class="vname">Current — badge chips, no search</span></div>
+    <div class="vwhy">Five look-alike chips up top and nowhere to search. The kind chips read as badges, not controls.</div>
+    <div class="bar">
+      <span class="chip on">All</span>
+      <span class="chip">✨ Code</span>
+      <span class="chip">🔍 Research</span>
+      <span class="chip">📄 Docs</span>
+      <span class="chip">Waiting on you</span>
+      <span class="btn primary-ghost">Auto-tag 3 untyped</span>
+    </div>
+    <div class="cols"><div class="col"><span>Ready</span></div><div class="col"><span>Planning</span></div><div class="col"><span>In progress</span></div><div class="col"><span>Review</span></div><div class="col"><span>Done</span></div></div>
+  </div>
+
+  <!-- A -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">A</span><span class="vname">Search + segmented control ★</span></div>
+    <div class="vwhy">A real search box on the left; the kind filter becomes one connected segmented control (not four badges). “Waiting on you” stays a clear toggle. Familiar and tidy.</div>
+    <div class="bar">
+      <div class="search" style="width:300px"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="var(--text-4)" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/></svg><input placeholder="Search tasks…"><span class="kbd">/</span></div>
+      <div class="seg">
+        <button class="on">All</button>
+        <button>Code</button>
+        <button>Research</button>
+        <button>Docs</button>
+      </div>
+      <span class="btn"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="6.5" width="10" height="7" rx="1.5"/><path d="M5 6.5V5a3 3 0 0 1 6 0v1.5"/></svg>Waiting on you <span style="color:var(--text-4)">1</span></span>
+      <span class="btn primary-ghost">Auto-tag 3</span>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">B</span><span class="vname">Search-first + Filter menu</span></div>
+    <div class="vwhy">A wide search bar owns the row; everything else collapses into one “Filter” button that opens a menu (kinds + waiting-on-you). Cleanest top bar; one extra click to filter.</div>
+    <div class="bar">
+      <div class="search grow"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="var(--text-4)" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/></svg><input placeholder="Search tasks by title, id, or feature…"><span class="kbd">/</span></div>
+      <span class="btn"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h12M4 8h8M6 12h4"/></svg>Filter <span style="color:var(--accent)">·2</span> ▾</span>
+      <span class="btn">Auto-tag 3</span>
+      <div class="menu">
+        <div class="menu-h">Kind</div>
+        <div class="menu-row on"><span class="box">✓</span>✨ Code</div>
+        <div class="menu-row on"><span class="box">✓</span>🔍 Research</div>
+        <div class="menu-row"><span class="box"></span>📄 Docs</div>
+        <div class="menu-div"></div>
+        <div class="menu-row"><span class="box"></span>🔒 Waiting on you</div>
+      </div>
+    </div>
+    <div style="height:120px"></div>
+  </div>
+
+  <!-- C -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">C</span><span class="vname">Search + icon toggles</span></div>
+    <div class="vwhy">Compact: a search box, then three colour-coded icon toggles for kind (spark/search/doc), and a waiting toggle. Densest — good if the row gets crowded.</div>
+    <div class="bar">
+      <div class="search grow"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="var(--text-4)" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/></svg><input placeholder="Search tasks…"><span class="kbd">/</span></div>
+      <div class="itog">
+        <button data-k=code class="on" title="Code"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2"/></svg></button>
+        <button data-k=research title="Research"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/></svg></button>
+        <button data-k=docs title="Docs"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 2.5h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"/></svg></button>
+      </div>
+      <span class="btn on"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="6.5" width="10" height="7" rx="1.5"/><path d="M5 6.5V5a3 3 0 0 1 6 0v1.5"/></svg>Waiting</span>
+      <span class="btn primary-ghost">Auto-tag 3</span>
+    </div>
+  </div>
+
+  <!-- D -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">D</span><span class="vname">One search field with filter tokens</span></div>
+    <div class="vwhy">Linear/GitHub style: one field holds both the query and filter chips as tokens (kind:code). Powerful and unified, but least discoverable for new users.</div>
+    <div class="bar">
+      <div class="tokens grow">
+        <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="var(--text-4)" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/></svg>
+        <span class="token">kind: Research <span class="x">✕</span></span>
+        <span class="token">waiting <span class="x">✕</span></span>
+        <input placeholder="Filter…">
+      </div>
+      <span class="btn">＋ Filter</span>
+      <span class="btn primary-ghost">Auto-tag 3</span>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+
+</div>
+<footer>My pick: <b>A</b> — a plain search box + a segmented control reads as controls (not badges), keeps everything one click away, and matches the app’s style. Say the letter (or a mix) and I’ll wire it into <code>app/backlog/page.tsx</code> (search filters cards by title / id / feature, live).</footer>
+</body>
+</html>

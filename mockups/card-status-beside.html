@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status beside the title — dot-free options</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1280px;margin:0 auto 22px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:800px}
+  .grid{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:14px 13px 16px}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin:2px 3px 3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12px;margin:2px 3px 13px;min-height:44px}
+  .col{display:flex;flex-direction:column;gap:9px}
+
+  .task-card{position:relative;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:10px 11px;cursor:default}
+  .tc-head{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-4);margin-bottom:6px;font-family:var(--mono);flex-wrap:nowrap}
+  .pri{width:6px;height:6px;border-radius:50%;background:var(--red);flex:none}
+  .tc-id{white-space:nowrap;flex:none}
+  .tc-feat{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)}
+  .kind-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:1px 7px 1px 6px;border-radius:20px;border:1px solid;line-height:1.4;white-space:nowrap}
+  .kind-pill[data-kind="code"]{color:var(--blue);background:rgba(122,182,230,.12);border-color:rgba(122,182,230,.4)}
+  .kind-pill[data-kind="research"]{color:var(--accent);background:rgba(201,184,255,.12);border-color:rgba(201,184,255,.4)}
+  .kind-pill[data-kind="docs"]{color:var(--green);background:rgba(122,209,154,.12);border-color:rgba(122,209,154,.4)}
+
+  /* the title + status row — status aligns to the FIRST line (flex-start) */
+  .titlerow{display:flex;gap:9px;align-items:flex-start}
+  .tc-title{flex:1;min-width:0;font-size:13px;font-weight:500;color:var(--text);letter-spacing:-.005em;line-height:1.35}
+  .st{flex:none;line-height:1.35;white-space:nowrap}
+
+  .ic{display:inline-block;vertical-align:-2px}
+  .spin{animation:spin 1.1s linear infinite;transform-origin:center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* dot-free status styles */
+  .s-label{font-size:11.5px;font-weight:600}
+  .s-icon{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600}
+  .s-pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:6px;border:1px solid}
+  .s-code{font:10px var(--mono);font-weight:600;text-transform:uppercase;letter-spacing:.09em}
+  .s-under{font-size:11.5px;font-weight:600;padding-bottom:2px;border-bottom:2px solid currentColor}
+  .ext{color:var(--text-4);font-weight:400}
+  footer{max-width:1280px;margin:26px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Status beside the title — dot-free</h1>
+  <p class="sub">Layout <b>E</b>, five ways, no dots (the old red status dot clashed with the red priority dot). <b>Blocked is fixed</b>: it now shows its blocker count, sits aligned to the first title line, and reads as an attention state. Running (Scoping) shows a spinning marker where the style allows.</p>
+</div>
+<div class="grid" id="grid"></div>
+<footer>Pick a style. Colours from the shared <code>statusMeta()</code>; the same treatment can carry to the task header / fleet.</footer>
+
+<script>
+const KI={code:'<path d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2"/>',research:'<circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/>',docs:'<path d="M3.5 2.5h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"/><path d="M9.5 2.5v3h3"/><path d="M5.5 8h5M5.5 10.5h5M5.5 13H8"/>'};
+const kindSvg=(n)=>`<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${KI[n]}</svg>`;
+const KLAB={code:"Code",research:"Research",docs:"Docs"};
+
+// status icons (no dots): play=ready, spinner-arc=running, alert-triangle=blocked, check=done
+const FI={
+  play:(c)=>`<svg class="ic" viewBox="0 0 16 16" width="12" height="12" fill="${c}" stroke="none"><path d="M5 3.5v9l7-4.5z"/></svg>`,
+  spin:(c)=>`<svg class="ic spin" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round"><path d="M8 2a6 6 0 1 1-4.2 1.7"/></svg>`,
+  alert:(c)=>`<svg class="ic" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="${c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.2v.1"/></svg>`,
+  check:(c)=>`<svg class="ic" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>`,
+};
+
+const CARDS=[
+  {id:"SPD-041",kind:"code",feat:"Settings",title:"Add a dark-mode toggle",st:{label:"Ready",color:"var(--green)",icon:"play"}},
+  {id:"SPD-035",kind:"research",feat:"Plant Identification",title:"Research plant-ID approach",st:{label:"Scoping",color:"var(--amber)",icon:"spin",live:true}},
+  {id:"SPD-036",kind:"docs",feat:"Project Scoping",title:"Draft Statement of Work (SOW)",st:{label:"Blocked",color:"var(--red)",icon:"alert",extra:"2"}},
+];
+
+const STYLES={
+  A:{name:"Plain label",why:"Just the label in its status colour — no marker at all. Quietest; colour + word carry it. Blocked shows its count.",
+     st:(s)=>`<span class="s-label" style="color:${s.color}">${s.label}${s.extra?` <span class="ext">· ${s.extra}</span>`:''}</span>`},
+  B:{name:"Icon + label",why:"A meaning-bearing icon (▶ ready · spinner running · ⚠ blocked) then the label. Running actually spins.",
+     st:(s)=>`<span class="s-icon" style="color:${s.color}">${FI[s.icon](s.color)}${s.label}${s.extra?` <span class="ext">· ${s.extra}</span>`:''}</span>`},
+  C:{name:"Solid mini-pill",why:"A compact uppercase pill tinted in the status colour. Reads as a firm tag; blocked stands out as an alert.",
+     st:(s)=>`<span class="s-pill" style="color:${s.color};background:color-mix(in srgb,${s.color} 14%,transparent);border-color:color-mix(in srgb,${s.color} 38%,transparent)">${s.label}${s.extra?` ${s.extra}`:''}</span>`},
+  D:{name:"Icon only",why:"Icon alone, label on hover — the leanest. Colour + shape convey state; great once the icons are learned.",
+     st:(s)=>`<span title="${s.label}${s.extra?' · '+s.extra:''}" style="color:${s.color};display:inline-flex;align-items:center;gap:3px">${FI[s.icon](s.color)}${s.extra?`<span class="ext" style="font-size:10px">${s.extra}</span>`:''}</span>`},
+  E:{name:"Mono code",why:"Bracketed uppercase mono — matches the SPD-id typography; feels like telemetry.",
+     st:(s)=>`<span class="s-code" style="color:${s.color}"><span style="color:var(--text-4)">[</span>${s.label.toUpperCase()}${s.extra?'·'+s.extra:''}<span style="color:var(--text-4)">]</span></span>`},
+};
+
+function card(c,stf){
+  return `<div class="task-card">
+    <div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>
+      <span class="kind-pill" data-kind="${c.kind}">${kindSvg(c.kind)}${KLAB[c.kind]}</span>
+      <span class="tc-feat">${c.feat}</span></div>
+    <div class="titlerow"><div class="tc-title">${c.title}</div><span class="st">${stf(c.st)}</span></div>
+  </div>`;
+}
+document.getElementById('grid').innerHTML=Object.entries(STYLES).map(([tag,v])=>`
+  <div class="variant">
+    <div class="vhead"><span class="vtag">${tag}</span><span class="vname">${v.name}</span></div>
+    <div class="vwhy">${v.why}</div>
+    <div class="col">${CARDS.map(c=>card(c,v.st)).join('')}</div>
+  </div>`).join('');
+</script>
+</body>
+</html>

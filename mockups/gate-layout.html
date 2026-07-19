@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate approval layout — variations</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 100px}
+  .head{max-width:1160px;margin:0 auto 24px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:720px}
+  .grid{max-width:1160px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:22px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:16px 16px 20px}
+  .variant.ref{border-style:dashed}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .ref .vtag{color:var(--text-3);background:var(--bg-2);border-color:var(--line)}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12.5px;margin:2px 0 15px;min-height:34px}
+
+  /* shared gate atoms */
+  .lock{display:inline-flex;color:var(--amber)}
+  .ghead{display:flex;align-items:center;gap:8px}
+  .gtitle{font-size:13px;font-weight:650}
+  .gwait{color:var(--text-3);font-size:12px}
+  .revlabel{font:10px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--amber)}
+  .subtle{font:10px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text-4)}
+  .angles{font-size:12.5px;line-height:1.6;color:var(--text-2)}
+  button{font:inherit;cursor:pointer}
+  .btn{border:1px solid var(--line-strong);background:var(--bg-2);color:var(--text);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+  .btn.primary{background:var(--accent);color:#17121f;border:none;font-weight:600}
+  .btn.ghost{background:none;border-color:var(--line)}
+  .btn.danger{color:var(--red);border-color:rgba(232,125,125,.4);background:rgba(232,125,125,.07)}
+  .ic{width:13px;height:13px;display:inline-block;vertical-align:-2px}
+  .field{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font:12.5px/1.5 inherit;color:var(--text-2);resize:vertical}
+  .field::placeholder{color:var(--text-4)}
+  .hide{display:none}
+
+  /* ============ CURRENT (reference) — boxes in boxes ============ */
+  .cur{border:1px solid rgba(230,184,106,.4);border-radius:10px;padding:12px 14px;background:linear-gradient(180deg,rgba(230,184,106,.10),var(--bg-1))}
+  .cur .revbox{border:1px solid rgba(230,184,106,.28);border-radius:8px;background:rgba(0,0,0,.18);padding:9px 12px;margin:10px 0}
+  .cur .revbox .inner{background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:8px 11px;margin-top:5px}
+  .cur textarea{margin:8px 0}
+  .cur .row{display:flex;gap:8px}
+
+  /* ============ A — flat sections, one surface ============ */
+  .flat{border:1px solid rgba(230,184,106,.4);border-left:3px solid var(--amber);border-radius:10px;padding:14px 16px;background:linear-gradient(180deg,rgba(230,184,106,.07),var(--bg-1))}
+  .flat .sec{padding:12px 0;border-top:1px solid rgba(230,184,106,.16)}
+  .flat .sec:first-of-type{border-top:none}
+  .flat .cinput{width:100%;background:none;border:none;border-bottom:1px solid var(--line-2);padding:6px 2px;color:var(--text-2);font:12.5px inherit;outline:none}
+  .flat .cinput:focus{border-color:var(--accent)}
+  .flat .row{display:flex;gap:8px;margin-top:12px;align-items:center}
+
+  /* ============ B — context first, pinned action bar ============ */
+  .ctx{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .ctx .body{padding:14px 16px}
+  .ctx .body .revlabel{margin-bottom:7px;display:block}
+  .ctx .bar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:rgba(230,184,106,.10);border-top:1px solid rgba(230,184,106,.35)}
+  .ctx .bar .lock{margin-right:-2px}
+  .ctx .bar input{flex:1;min-width:0;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:6px 10px;color:var(--text-2);font:12px inherit;outline:none}
+  .ctx .bar input:focus{border-color:var(--accent)}
+
+  /* ============ C — progressive (comment on demand) ============ */
+  .prog{border:1px solid rgba(230,184,106,.4);border-radius:10px;padding:14px 16px;background:linear-gradient(180deg,rgba(230,184,106,.08),var(--bg-1))}
+  .prog .ctxblock{margin:11px 0 14px;padding-left:11px;border-left:2px solid rgba(230,184,106,.4)}
+  .prog .row{display:flex;gap:8px;align-items:center}
+  .prog .reveal{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .prog .reveal .row{margin-top:9px;justify-content:flex-end}
+
+  /* ============ D — review panel, decision aside ============ */
+  .panel{border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:1fr;overflow:hidden}
+  .panel .top{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);background:rgba(230,184,106,.07)}
+  .panel .grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:0}
+  .panel .rev{padding:13px 15px}
+  .panel .decide{padding:13px 15px;border-left:1px solid var(--line);background:var(--bg-2);display:flex;flex-direction:column;gap:9px}
+  .panel .decide .field{background:var(--bg-1)}
+  .panel .decide .stack{display:flex;flex-direction:column;gap:7px}
+  @media(max-width:520px){.panel .grid2{grid-template-columns:1fr}.panel .decide{border-left:none;border-top:1px solid var(--line)}}
+
+  footer{max-width:1160px;margin:28px auto 0;color:var(--text-4);font-size:12.5px}
+  .angles.clip{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Gate approval — layout variations</h1>
+  <p class="sub">The real <b>Scope review gate</b>, drawn five ways. Goal: kill the boxes-inside-boxes look and make “what am I approving?” + the decision read as one clean unit. Same tokens as the app.</p>
+</div>
+
+<div class="grid">
+
+  <!-- CURRENT -->
+  <div class="variant ref">
+    <div class="vhead"><span class="vtag">now</span><span class="vname">Current</span></div>
+    <div class="vwhy">Amber card → a bordered “Reviewing” box → a bordered inner box → a bordered textarea → buttons. Four nested frames; the comment box is always taking space.</div>
+    <div class="cur">
+      <div class="ghead"><span class="lock">🔒</span><span class="gtitle">Scope review gate</span><span class="gwait">· waiting on your call</span></div>
+      <div class="revbox">
+        <div class="revlabel">Reviewing</div>
+        <div class="inner angles clip">Workspace is greenfield — all four angles are open-web research. Angles cleanly partition the three solution families (managed APIs, on-device models, custom-trained) plus a synthesis/decision angle folding in accuracy, cost, latency, offline, licensing.</div>
+      </div>
+      <textarea class="field" rows="2" placeholder="Add a comment (required to request changes)…"></textarea>
+      <div class="row"><button class="btn primary">✓ Approve</button><button class="btn">Request changes</button></div>
+    </div>
+  </div>
+
+  <!-- A -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">A</span><span class="vname">Flat sections</span></div>
+    <div class="vwhy">One surface, an amber left-rail, thin dividers instead of nested boxes. Comment is a borderless underline that lights up on focus. Nothing is framed twice.</div>
+    <div class="flat">
+      <div class="ghead"><span class="lock">🔒</span><span class="gtitle">Scope review gate</span><span class="gwait">· waiting on your call</span></div>
+      <div class="sec">
+        <div class="revlabel" style="margin-bottom:6px">Reviewing · proposed angles</div>
+        <div class="angles clip">Workspace is greenfield — all four angles are open-web research. Angles cleanly partition the three solution families (managed APIs, on-device models, custom-trained) plus a synthesis/decision angle folding in accuracy, cost, latency, offline, licensing.</div>
+      </div>
+      <div class="sec">
+        <input class="cinput" placeholder="Add a note (required to request changes)…">
+        <div class="row"><button class="btn primary">✓ Approve</button><button class="btn ghost">Request changes</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">B</span><span class="vname">Context + action bar</span></div>
+    <div class="vwhy">The context is plain content on a neutral card; the decision is one amber action bar pinned at the bottom — comment inline with the buttons, no big textarea.</div>
+    <div class="ctx">
+      <div class="body">
+        <span class="revlabel">Scope review · proposed angles</span>
+        <div class="angles clip">Workspace is greenfield — all four angles are open-web research. Angles cleanly partition the three solution families (managed APIs, on-device models, custom-trained) plus a synthesis/decision angle folding in accuracy, cost, latency, offline, licensing.</div>
+      </div>
+      <div class="bar">
+        <span class="lock">🔒</span>
+        <input placeholder="Comment (for changes)…">
+        <button class="btn primary">✓ Approve</button>
+        <button class="btn">Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">C</span><span class="vname">Comment on demand ★</span></div>
+    <div class="vwhy">No textarea by default — the comment is only required to request changes, so it appears only then. Approve is one click; “Request changes” reveals the field. Least clutter.</div>
+    <div class="prog">
+      <div class="ghead"><span class="lock">🔒</span><span class="gtitle">Scope review gate</span><span class="gwait">· waiting on your call</span></div>
+      <div class="ctxblock">
+        <div class="revlabel" style="margin-bottom:6px">Proposed angles</div>
+        <div class="angles clip">Workspace is greenfield — all four angles are open-web research. Angles cleanly partition the three solution families (managed APIs, on-device models, custom-trained) plus a synthesis/decision angle folding in accuracy, cost, latency, offline, licensing.</div>
+      </div>
+      <div class="row">
+        <button class="btn primary">✓ Approve</button>
+        <button class="btn danger" onclick="this.closest('.prog').querySelector('.reveal').classList.toggle('hide')">Request changes ▾</button>
+      </div>
+      <div class="reveal hide">
+        <textarea class="field" rows="2" placeholder="What should change? (required)"></textarea>
+        <div class="row"><button class="btn danger">Send back to agent</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D -->
+  <div class="variant">
+    <div class="vhead"><span class="vtag">D</span><span class="vname">Review panel</span></div>
+    <div class="vwhy">Two columns: the context to read on the left, the decision docked on the right. Clear “read this → decide that” separation, still one outer frame.</div>
+    <div class="panel">
+      <div class="top"><span class="lock">🔒</span><span class="gtitle">Scope review gate</span><span class="gwait">· waiting on your call</span></div>
+      <div class="grid2">
+        <div class="rev">
+          <div class="revlabel" style="margin-bottom:6px">Proposed angles</div>
+          <div class="angles clip">Workspace is greenfield — all four angles are open-web research. Angles partition the three solution families (managed APIs, on-device, custom) plus a synthesis/decision angle folding in accuracy, cost, latency, offline, licensing.</div>
+        </div>
+        <div class="decide">
+          <span class="subtle">Your call</span>
+          <div class="stack">
+            <button class="btn primary" style="justify-content:center">✓ Approve</button>
+            <button class="btn" style="justify-content:center">Request changes</button>
+          </div>
+          <textarea class="field" rows="2" placeholder="Comment (for changes)…"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Pick a letter (C is my pick — it also matches the rule that a comment is only required for “Request changes”). I’ll wire it into the real gate bar in <code>task/[id]/page.tsx</code> + <code>globals.css</code>. Emoji lock is a placeholder — the real one uses the <code>gate</code> SVG icon.</footer>
+</body>
+</html>
