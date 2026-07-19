@@ -168,3 +168,26 @@ def test_deleting_a_project_kills_its_sessions():
         assert "orch-y" in server._sessions
     finally:
         _cleanup_registry("orch-x", "dev-x", "orch-y")
+
+
+def test_reaps_finished_lifecycle_agent_immediately(monkeypatch):
+    # Reload-robust: an idle agent whose run has advanced past its phase (matched
+    # via the persisted mission=run id + role=phase) is done — reaped on the next
+    # sweep, not after the 2h idle TTL. A session tied to no run is kept.
+    from tui_pilot import lifecycle
+    done = _register("scoping-done", state=State.IDLE)
+    server._meta["scoping-done"].update({"mission": "run-1", "role": "scoping"})
+    keep = _register("solo-idle", state=State.IDLE)  # no mission → not tied to a run
+    monkeypatch.setattr(
+        lifecycle, "get",
+        lambda rid: {"id": rid, "phase": "synthesis", "agent_session_id": "synth-x"} if rid == "run-1" else None,
+    )
+    try:
+        reaped = server.reap_sessions(
+            ttl_s=3600, is_alive=lambda sid: True, tmux_names=lambda: [],
+        )
+        assert reaped["done"] == ["scoping-done"]         # scoping != synthesis → stale
+        assert done.killed and "scoping-done" not in server._sessions
+        assert not keep.killed and "solo-idle" in server._sessions
+    finally:
+        _cleanup_registry("scoping-done", "solo-idle")

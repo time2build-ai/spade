@@ -376,3 +376,36 @@ def test_review_changes_requested_reworks_synthesis():
     assert lifecycle.get(rid)["phase"] == "synthesis"
     assert rec.count("synthesis") == before + 1        # synthesis re-spawned
     assert lifecycle.get(rid)["active"] == 1           # not delivered
+
+
+def test_synthesis_markdown_report_is_accepted_not_blocked():
+    # REGRESSION: a synthesis agent that returns a markdown recommendation
+    # instead of the {report, followups, brain_nodes} JSON must be delivered as
+    # the report body, not block the whole research task.
+    rec = Rec()
+    run = _to_synthesis(rec)
+    rid = run["id"]
+    md = "# Recommendation\n\n## TL;DR\nUse a cloud API for the MVP."
+    lifecycle.advance(rid, phase="synthesis", report=md, spawn=rec, git=FakeGit())
+    r = lifecycle.get(rid)
+    assert r["phase"] == "synthesis" and r["blocked_reason"] is None  # not blocked
+    reports = [a for a in artifacts.for_task(run["task_id"]) if a["kind"] == "report"]
+    assert len(reports) == 1 and "TL;DR" in reports[0]["content"]
+    assert gates.gate_for(rid, "review")["status"] == "waiting"
+
+
+def test_synthesis_json_in_code_fence_is_parsed():
+    rec = Rec()
+    run = _to_synthesis(rec)
+    rid = run["id"]
+    fenced = "Here is the synthesis:\n```json\n" + json.dumps(_SYNTH_REPORT) + "\n```"
+    lifecycle.advance(rid, phase="synthesis", report=fenced, spawn=rec, git=FakeGit())
+    assert json.loads(lifecycle.get(rid)["synthesis_json"])["followups"][0]["title"] == "Adopt PKCE"
+
+
+def test_extract_json_recovers_fenced_and_embedded():
+    from tui_pilot.lifecycle import _extract_json
+    assert _extract_json('{"a": 1}') == {"a": 1}
+    assert _extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert _extract_json('here you go {"a": 1} thanks') == {"a": 1}
+    assert _extract_json("just prose, no json here") is None

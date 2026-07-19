@@ -1,6 +1,7 @@
 """Harness: signal model + poller + finish/handoff orchestration."""
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,6 +9,10 @@ from typing import Callable
 
 ACTIONS = {"ask_question", "need_context", "need_help", "progress", "finished"}
 BLOCKING = {"ask_question", "need_context", "need_help"}
+
+# Keys that mark an outbox payload as a substantive report — used to salvage a
+# finish whose envelope was malformed (see _salvage_finish).
+_REPORT_HINTS = ("report", "summary", "evidence", "angles", "findings", "recommendation", "conclusion")
 
 @dataclass
 class Signal:
@@ -27,6 +32,38 @@ class Signal:
     @property
     def is_terminal(self) -> bool:
         return self.action == "finished"
+
+def _salvage_finish(data: dict) -> Signal | None:
+    """Best-effort recovery of a finish whose signal lacks the strict
+    ``{"action": "finished", "report": ...}`` envelope — e.g. an agent that
+    emitted just its report JSON (a real failure mode: the deep-research
+    investigator whose auto-synthesis crashed wrote a bare
+    ``{"summary": ..., "evidence": ...}``). Without this, ``parse_signal``
+    rejects it, the poller quarantines it, and the report is silently lost —
+    stalling that agent's lifecycle (or a fan-out barrier) forever.
+
+    Only a payload that clearly looks like a substantive report is salvaged;
+    anything else returns None and is quarantined as before.
+    """
+    if not isinstance(data, dict) or data.get("action") in ACTIONS:
+        return None
+    if not any(k in data for k in _REPORT_HINTS):
+        return None
+    rep = data.get("report")
+    if not isinstance(rep, str):
+        # Use an explicit report object if present, else the whole payload
+        # (minus envelope keys) as the report body.
+        payload = rep if isinstance(rep, (dict, list)) else {
+            k: v for k, v in data.items() if k not in ("id", "ts", "action")
+        }
+        try:
+            rep = json.dumps(payload)
+        except (TypeError, ValueError):
+            return None
+    if not rep.strip():
+        return None
+    return Signal(id=data.get("id", ""), action="finished", report=rep, ts=data.get("ts", ""))
+
 
 def parse_signal(data: dict) -> Signal:
     action = data.get("action")
@@ -77,8 +114,13 @@ class HarnessPoller:
             try:
                 sig = parse_signal(data)
             except ValueError:
-                self.hub.mark_processed(self.agent_id, data.get("id", ""))
-                continue
+                # Not a valid signal — try to salvage a report-shaped payload as
+                # a finish (so a malformed finish isn't silently dropped, which
+                # would hang the lifecycle/fan-out barrier); else quarantine it.
+                sig = _salvage_finish(data)
+                if sig is None:
+                    self.hub.mark_processed(self.agent_id, data.get("id", ""))
+                    continue
             self._handle(sig)
         if self.done_report:
             return HarnessState("done", report=self.done_report)

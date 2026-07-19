@@ -564,16 +564,29 @@ def _prime(aid: str) -> None:
         # wait for the REPL to finish booting.
         ctrl.wait_for_settle(timeout=40)
 
-        # A fresh working directory triggers Claude's "Quick safety check / trust
-        # this folder?" prompt at boot, which blocks before the launch prompt runs.
-        # The default selection (❯) is "Yes, I trust this folder", so a bare Enter
-        # accepts it; Claude then proceeds with the launch prompt. We provision the
-        # cwd ourselves, so this is expected.
-        boot_screen = ctrl.session.capture().lower()
-        if "trust this folder" in boot_screen or "quick safety check" in boot_screen:
-            with lock:
-                ctrl.session.send_key("Enter")
-            ctrl.wait_for_settle(timeout=20)
+        # A fresh working directory triggers Claude's one-time "Quick safety check
+        # / trust this folder?" prompt at boot, which blocks before the launch
+        # prompt runs. The default selection (❯) is "Yes, I trust this folder", so
+        # a bare Enter accepts it; we provision the cwd ourselves, so this is safe.
+        def _has_trust_prompt(screen: str | None = None) -> bool:
+            s = (screen if screen is not None else ctrl.session.capture()).lower()
+            return "trust this folder" in s or "quick safety check" in s
+
+        def _accept_trust() -> None:
+            # Enter accepts the default. The Enter can race the menu's paint and
+            # get swallowed, so re-send until the prompt has actually cleared —
+            # otherwise the agent reports "ready" but sits on the prompt forever.
+            for _ in range(6):
+                with lock:
+                    ctrl.session.send_key("Enter")
+                if not _has_trust_prompt(ctrl.wait_for_settle(timeout=20)):
+                    return
+
+        # Common case: the prompt is already in the settled boot screen. Late
+        # paint: a second settle (cheap — ~1s when nothing changes) catches a
+        # prompt that appears just after the first settle returned.
+        if _has_trust_prompt() or _has_trust_prompt(ctrl.wait_for_settle(timeout=20)):
+            _accept_trust()
 
         m["prep"] = "ready"
         m["prep_detail"] = None
@@ -666,6 +679,32 @@ def _api_base() -> str:
     skill). Defaults to the README port; override with TUI_PILOT_API_BASE when
     running on a different host/port."""
     return os.environ.get("TUI_PILOT_API_BASE", "http://127.0.0.1:8765")
+
+
+# tmux `new-session` rejects an over-long command ("command too long") well
+# below the OS ARG_MAX, so a big launch prompt can't ride the claude command
+# line. Above this size the prompt is written to a file and the launch arg
+# becomes a short pointer to it.
+_MAX_INLINE_PROMPT = 6000
+
+
+def _launch_arg(first_msg: str, cwd: str) -> str:
+    """Return the string to pass as Claude's launch prompt. A large first message
+    (e.g. research synthesis carrying several big findings) would blow tmux's
+    command-length limit, so write it to ``TASK.md`` in the agent's cwd and return
+    a short pointer instead; small messages pass through inline."""
+    if len(first_msg) <= _MAX_INLINE_PROMPT:
+        return first_msg
+    try:
+        (Path(cwd) / "TASK.md").write_text(first_msg)
+    except OSError:
+        # Can't stage the file — fall back to inline and let the spawn surface any
+        # tmux error rather than silently launching a task-less agent.
+        return first_msg
+    return (
+        "Your full task and instructions are in TASK.md in your current working "
+        "directory. Read that file now, in full, then begin the task."
+    )
 
 
 def _build_first_message(aid: str, instructions: str | None, task: str | None) -> str:
@@ -796,7 +835,7 @@ def _spawn_agent(
     # sits unsubmitted in the composer (the agent looked "frozen" on start).
     first_msg = _build_first_message(aid, eff_instructions, eff_task)
     if first_msg:
-        eff_cmd = f"{eff_cmd} {shlex.quote(first_msg)}"
+        eff_cmd = f"{eff_cmd} {shlex.quote(_launch_arg(first_msg, eff_cwd))}"
 
     sess = TmuxSession(aid, eff_cmd, cols=cols, rows=rows, cwd=eff_cwd, env=env)
     try:
@@ -1307,6 +1346,63 @@ def _is_idle_reapable(aid: str) -> bool:
         return False  # capture failed → dead; the dead branch handles it
 
 
+# States that mean "actively working or waiting on the user" — never reaped.
+_BUSY_STATES = {
+    State.BOOTING.value, State.THINKING.value, State.STREAMING.value,
+    State.AWAITING_PERMISSION.value, State.AWAITING_INPUT.value,
+}
+
+
+def _is_lifecycle_reapable_state(aid: str) -> bool:
+    """Reapable for a DONE/obsolete lifecycle phase: not mid-boot/prime/work, not
+    THINKING/STREAMING, not awaiting the user, and no pending menu. Unlike
+    ``_is_idle_reapable`` this also reaps a stuck ERROR agent whose phase is over
+    (its work is discarded anyway) — but never one that's actively running."""
+    ctrl = _sessions.get(aid)
+    if ctrl is None:
+        return False
+    if _meta.get(aid, {}).get("prep") in ("booting", "priming", "working"):
+        return False
+    if _safe_state(ctrl) in _BUSY_STATES:
+        return False
+    try:
+        return parse_menu(ctrl.session.capture()) is None
+    except SessionError:
+        return False
+
+
+def _is_lifecycle_done(aid: str) -> bool:
+    """True if a lifecycle / fan-out agent's work is finished, so it can be reaped
+    now instead of lingering for the 2h idle TTL — otherwise the fleet keeps
+    showing phantom 'live' agents for a ticket whose phase (or whole run) is over.
+
+    Only IDLE agents qualify (never tears down an in-flight one). Done means
+    either (a) the finish was collected this process (an ``advanced`` flag), or
+    (b) — reload-robust, since those flags reset on restart — the run has moved
+    to a DIFFERENT phase than this session's, i.e. the run advanced past it."""
+    m = _meta.get(aid)
+    if not m or not _is_lifecycle_reapable_state(aid):
+        return False
+    # `mission`/`role` are restored on reattach (unlike the lifecycle_* scratch
+    # keys), so use them as fallbacks — makes reaping survive a `--reload`.
+    run_id = m.get("lifecycle_run_id") or m.get("lifecycle_fanout_run_id") or m.get("mission")
+    if not run_id:
+        return False
+    from . import lifecycle
+    run = lifecycle.get(run_id)
+    if run is None:
+        return False  # not tied to a real lifecycle run (e.g. the orchestrator) → keep
+    if (m.get("lifecycle_advanced") or m.get("lifecycle_fanout_advanced")
+            or m.get("lifecycle_fanout_death_handled")):
+        return True  # (a) finish collected this process
+    phase = m.get("lifecycle_phase") or m.get("role")
+    if phase and run.get("phase") != phase:
+        return True  # (b) the run advanced past this session's phase
+    if run.get("agent_session_id") not in (None, aid):
+        return True  # (c) a newer agent replaced this one for the same phase
+    return False
+
+
 def reap_sessions(*, ttl_s: float | None = None, force_idle: bool = False,
                   is_alive=None, tmux_names=None) -> dict:
     """Reap stale agent sessions; return the reaped ids grouped by reason.
@@ -1329,7 +1425,7 @@ def reap_sessions(*, ttl_s: float | None = None, force_idle: bool = False,
                 return sess.is_alive()
             except Exception:  # noqa: BLE001
                 return False
-    reaped: dict[str, list[str]] = {"dead": [], "idle": [], "orphan": []}
+    reaped: dict[str, list[str]] = {"dead": [], "done": [], "idle": [], "orphan": []}
 
     with _registry_lock:
         ids = list(_sessions.keys())
@@ -1340,6 +1436,10 @@ def reap_sessions(*, ttl_s: float | None = None, force_idle: bool = False,
             if not is_alive(aid):
                 _drop_session(aid, kill=False)
                 reaped["dead"].append(aid)
+            elif _is_lifecycle_done(aid):
+                # Finished lifecycle/fan-out agent — its phase is over. Reap now.
+                _drop_session(aid, kill=True)
+                reaped["done"].append(aid)
             elif (force_idle or ttl_s) and _is_idle_reapable(aid):
                 age = _age_seconds((sessions_store.get(aid) or {}).get("created_at"))
                 if force_idle or (age is not None and age >= ttl_s):

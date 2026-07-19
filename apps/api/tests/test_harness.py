@@ -124,3 +124,33 @@ def test_answer_returns_true_when_it_lands_false_when_stale(tmp_path):
     poller.poll()
     assert poller.answer("s1", "Postgres") is True    # matched the open signal
     assert poller.answer("s1", "again") is False      # already answered → no-op
+
+def test_salvage_bare_report_is_collected_as_finish(tmp_path):
+    # REGRESSION: an agent that emits its report WITHOUT the
+    # {"action":"finished","report":...} envelope (a real failure mode — a
+    # deep-research investigator whose auto-synthesis crashed wrote a bare
+    # {"summary":..,"evidence":..}) must still be collected, not silently
+    # quarantined — otherwise its fan-out barrier hangs forever.
+    hub = Hub(tmp_path); aid = "inv-3-a"; sess = _FakeSession()
+    poller = HarnessPoller(aid, sess, hub, cwd=str(tmp_path))
+    _emit(hub, aid, {"id": "done", "summary": "decision framework...",
+                     "evidence": [{"claim": "x"}]})
+    st = poller.poll()
+    assert st.kind == "done"
+    assert "decision framework" in st.report
+    # marked processed → no re-salvage loop next tick
+    assert not list((hub.agent_dir(aid) / "outbox").glob("*.json"))
+
+def test_salvage_prefers_explicit_report_field():
+    from tui_pilot.harness import _salvage_finish
+    sig = _salvage_finish({"id": "d", "summary": "s", "report": "# My report"})
+    assert sig is not None and sig.action == "finished" and sig.report == "# My report"
+
+def test_non_report_junk_is_still_quarantined(tmp_path):
+    # A malformed payload that ISN'T report-shaped stays quarantined (unchanged).
+    hub = Hub(tmp_path); aid = "dev-9-a"; sess = _FakeSession()
+    poller = HarnessPoller(aid, sess, hub)
+    _emit(hub, aid, {"id": "oops", "note": "not a signal"})
+    st = poller.poll()
+    assert st.kind == "idle"
+    assert not list((hub.agent_dir(aid) / "outbox").glob("*.json"))

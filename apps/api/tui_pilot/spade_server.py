@@ -21,7 +21,9 @@ router = APIRouter()
 
 # Per-project git facade the lifecycle engine calls (persistent clone + gh).
 # Tests monkeypatch this module attribute with a fake so no real git/gh runs.
-_lifecycle_git = lifecycle_git.for_project
+# Lazy: research/docs runs never touch git, so building this for any kind must
+# not require a repo. It resolves config only on first real git op (code phases).
+_lifecycle_git = lifecycle_git.lazy_for_project
 
 
 # ---- request models -------------------------------------------------------
@@ -1010,6 +1012,24 @@ def list_task_artifacts(task_id: str) -> dict:
     return {"artifacts": artifacts.for_task(task_id)}
 
 
+def _read_worktree_file(worktree: str | None, repo_path: str | None) -> str | None:
+    """Read a file straight from a run's worktree (committed OR not), or None if
+    it's missing / resolves outside the worktree (path-traversal guard). Covers
+    files an agent wrote but didn't commit — e.g. the pr_review review report."""
+    import os
+    if not worktree or not repo_path:
+        return None
+    base = os.path.realpath(worktree)
+    p = os.path.realpath(os.path.join(base, repo_path))
+    if not (p == base or p.startswith(base + os.sep)) or not os.path.isfile(p):
+        return None
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
 @router.get("/tasks/{task_id}/artifacts/{artifact_id}/content")
 def get_artifact_content(task_id: str, artifact_id: str) -> dict:
     art = artifacts.get(artifact_id)
@@ -1020,6 +1040,14 @@ def get_artifact_content(task_id: str, artifact_id: str) -> dict:
     # `content` with a null repo_path — return it directly (no git read).
     if not art.get("repo_path"):
         return {"content": art.get("content")}
+    # Working-tree first: read the file from the run's worktree so an artifact the
+    # agent wrote but hasn't committed (the review report) still loads. Fall back
+    # to the committed content on the branch (e.g. after the worktree is gone).
+    from . import lifecycle
+    run = lifecycle.get(art["run_id"]) if art.get("run_id") else None
+    wt_content = _read_worktree_file(run.get("worktree_path") if run else None, art["repo_path"])
+    if wt_content is not None:
+        return {"content": wt_content}
     if not art.get("branch"):
         raise HTTPException(404, "artifact has no pinned repo path/branch")
     try:
@@ -1071,6 +1099,45 @@ def put_project_git(project_id: str, req: ProjectGitPut) -> dict:
         raise HTTPException(404, f"no project {project_id!r}")
     fields = {k: v for k, v in req.model_dump().items() if v is not None}
     return project_git.upsert(project_id, **fields)
+
+
+class ScanBranchesReq(BaseModel):
+    repo_ssh_url: str
+
+
+@router.post("/projects/{project_id}/git/branches")
+def scan_git_branches(project_id: str, req: ScanBranchesReq) -> dict:
+    """List the remote's branches (via `git ls-remote`, no clone) so the settings
+    UI can offer a dev/staging/prod picklist. 400 with the git error on failure
+    (bad URL / no access) so the UI can fall back to free-text entry."""
+    if projects.get(project_id) is None:
+        raise HTTPException(404, f"no project {project_id!r}")
+    from . import gitops
+    try:
+        branches = gitops.list_remote_branches(req.repo_ssh_url)
+    except gitops.GitError as e:
+        raise HTTPException(400, f"couldn't list branches: {str(e).strip()[:300]}")
+    return {"branches": branches}
+
+
+class CreateBranchesReq(BaseModel):
+    repo_ssh_url: str
+    branches: list[str]
+
+
+@router.post("/projects/{project_id}/git/create-branches")
+def create_git_branches(project_id: str, req: CreateBranchesReq) -> dict:
+    """Create the given branches on an empty remote (fresh repo) so the user can
+    get dev/staging/prod without leaving Spade. Pushes to their remote. 400 with
+    the git error on failure."""
+    if projects.get(project_id) is None:
+        raise HTTPException(404, f"no project {project_id!r}")
+    from . import gitops
+    try:
+        created = gitops.create_remote_branches(req.repo_ssh_url, req.branches)
+    except gitops.GitError as e:
+        raise HTTPException(400, f"couldn't create branches: {str(e).strip()[:300]}")
+    return {"branches": created}
 
 
 @router.get("/projects/{project_id}/gates")
@@ -1126,11 +1193,26 @@ def promote_env(project_id: str, req: PromoteRequest) -> dict:
         pr = _lifecycle_git(project_id).promote(from_branch, to_branch, title, body)
     except gitops.GitError as e:
         raise HTTPException(409, f"promote failed: {e}")
+    merged = bool(pr.get("merged"))
     for run in grouped:
-        tasks.add_comment(
-            run["task_id"],
-            body=f"Promotion PR opened {req.from_env} → {req.to_env}: "
-                 f"#{pr.get('pr_number')} {pr.get('pr_url')}",
-            author="system", kind="system",
-        )
+        if merged:
+            # The promotion PR merged, so these runs have reached to_env now —
+            # stamp them directly (immediate lane move) instead of waiting for the
+            # periodic ancestry watcher.
+            lifecycle.stamp_env(run["id"], req.to_env)
+            tasks.add_comment(
+                run["task_id"],
+                body=f"Promoted {req.from_env} → {req.to_env} (PR "
+                     f"#{pr.get('pr_number')} merged).",
+                author="system", kind="system",
+            )
+        else:
+            tasks.add_comment(
+                run["task_id"],
+                body=f"Promotion PR opened {req.from_env} → {req.to_env}: "
+                     f"#{pr.get('pr_number')} {pr.get('pr_url')} — merge it to finish"
+                     + (f" (auto-merge failed: {pr.get('merge_error')})"
+                        if pr.get("merge_error") else "") + ".",
+                author="system", kind="system",
+            )
     return pr

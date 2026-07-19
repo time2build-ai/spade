@@ -41,7 +41,8 @@ class FakeGit:
 
     def promote(self, from_branch, to_branch, title, body):
         self.calls.append(("promote", from_branch, to_branch))
-        return {"pr_number": 99, "pr_url": "https://gh/pr/99"}
+        return {"pr_number": 99, "pr_url": "https://gh/pr/99",
+                "merged": True, "merge_commit": "mergesha"}
 
 
 def _fake_spawn(run):
@@ -261,7 +262,12 @@ def test_gates_and_releases_and_promote(monkeypatch):
     assert any(r["run_id"] == run["id"] for r in lanes["dev"])
     pr = c.post("/projects/acme/promote", json={"from_env": "dev", "to_env": "staging"})
     assert pr.status_code == 200 and pr.json()["pr_number"] == 99
+    assert pr.json()["merged"] is True
     assert ("promote", "development", "staging") in git.calls
+    # auto-merge stamped the run as reached staging → it now sits in the staging lane
+    lanes2 = c.get("/projects/acme/releases").json()["releases"]
+    assert any(r["run_id"] == run["id"] for r in lanes2["staging"])
+    assert not any(r["run_id"] == run["id"] for r in lanes2["dev"])
 
 
 def test_promote_git_error_returns_409(monkeypatch):
@@ -450,6 +456,40 @@ def test_start_code_kind_still_requires_repo(monkeypatch):
     tid = c.post("/tasks", json={"project_id": "acme", "title": "Add a toggle"}).json()["id"]
     r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
     assert r.status_code == 404
+
+
+def test_start_research_no_repo_with_real_lazy_git(monkeypatch):
+    # REGRESSION: research/docs starts must NOT resolve git config. The other
+    # no-workspace test stubs `_lifecycle_git`, so it can't catch an eager
+    # `for_project` call. Here we keep the REAL (lazy) git facade and stub only
+    # the agent spawn — with no repo configured, this 409'd before the facade
+    # was made lazy. Research never touches git, so it must reach `scoping`.
+    from tui_pilot import lifecycle_templates
+    monkeypatch.setattr(spade_server, "_lifecycle_spawn", _fake_spawn)  # real _lifecycle_git
+    projects.create(id="acme", name="Acme", path="/w")  # NO repo configured
+    from tui_pilot.server import app
+    c = TestClient(app)
+    tid = c.post("/tasks", json={"project_id": "acme", "title": "Look into caching"}).json()["id"]
+    _real_research = lifecycle_templates.LIFECYCLE_TEMPLATES.get("research")
+    lifecycle_templates.LIFECYCLE_TEMPLATES["research"] = {
+        "terminal_status": "delivered",
+        "needs_workspace": False,
+        "phases": [{"name": "scoping", "agent": True, "fanout": False,
+                    "gate": None, "column": "Planning"}],
+        "gate_advances": {},
+    }
+    lifecycle_templates.transition_pairs.cache_clear()
+    try:
+        c.post(f"/tasks/{tid}/kind", json={"kind": "research"})
+        r = c.post("/lifecycle/start", json={"project_id": "acme", "task_id": tid})
+        assert r.status_code == 200, r.text
+        assert r.json()["phase"] == "scoping"
+    finally:
+        if _real_research is not None:
+            lifecycle_templates.LIFECYCLE_TEMPLATES["research"] = _real_research
+        else:
+            lifecycle_templates.LIFECYCLE_TEMPLATES.pop("research", None)
+        lifecycle_templates.transition_pairs.cache_clear()
 
 
 def test_start_writes_resolved_kind_default_code(monkeypatch):

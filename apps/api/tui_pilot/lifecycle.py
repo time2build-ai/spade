@@ -181,9 +181,11 @@ def start_run(project_id: str, task_id: str, *, spawn, git) -> dict:
     run = get(run_id)
     _spawn_phase(run, first, spawn)
     tasks.move(task_id, first)
+    branch = ws.get("branch_name")
     tasks.add_comment(
         task_id,
-        body=f"Lifecycle started — {first} on branch {ws.get('branch_name')}.",
+        body=(f"Lifecycle started — {first} on branch {branch}." if branch
+              else f"Lifecycle started — {first}."),
         author="system", kind="system",
     )
     return get(run_id)
@@ -368,19 +370,51 @@ def _block(run: dict, from_phase: str, reason: str, *, note: str | None = None) 
     tasks.move(run["task_id"], "blocked", force=True)
 
 
-def _parse_report(run: dict, phase: str, report: str | None):
-    """Parse an agent handoff report as JSON. On failure, block the run+task and
-    return None (never silently swallow — spec §5)."""
-    try:
-        return json.loads(report or "")
-    except (json.JSONDecodeError, TypeError):
-        _block(
-            run, phase,
-            "agent report was not valid JSON",
-            note=f"{phase} agent returned an unparseable report; blocking.\n\n"
-                 f"Raw report:\n{report!r}",
-        )
-        return None
+_JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+
+
+def _extract_json(raw: str) -> dict | None:
+    """Best-effort JSON object out of an agent report: raw, inside a ```json
+    fence, or the outermost ``{...}`` block embedded in prose. Agents routinely
+    wrap their JSON in a code fence or add a sentence around it, which strict
+    ``json.loads`` rejects — this recovers those instead of blocking the run."""
+    candidates = [raw]
+    m = _JSON_FENCE.search(raw)
+    if m:
+        candidates.append(m.group(1))
+    start, end = raw.find("{"), raw.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(raw[start:end + 1])
+    for c in candidates:
+        try:
+            v = json.loads(c)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(v, dict):
+            return v
+    return None
+
+
+def _parse_report(run: dict, phase: str, report: str | None, *, fallback_key: str | None = None):
+    """Parse an agent handoff report as a JSON object. Tolerates a code-fenced or
+    prose-wrapped payload. For report-style phases a ``fallback_key`` may be given:
+    a report that still isn't JSON is accepted as prose (``{fallback_key: report}``)
+    rather than blocking — e.g. synthesis returning a markdown recommendation is
+    delivered as the report body instead of stalling the whole research task. When
+    there's no fallback (phases that truly need structure, e.g. scoping's angles),
+    a non-JSON report still blocks (never silently swallow — spec §5)."""
+    data = _extract_json(report or "")
+    if data is not None:
+        return data
+    if fallback_key and (report or "").strip():
+        return {fallback_key: report}
+    _block(
+        run, phase,
+        "agent report was not valid JSON",
+        note=f"{phase} agent returned an unparseable report; blocking.\n\n"
+             f"Raw report:\n\n{report or '(empty)'}",
+    )
+    return None
 
 
 # -- advance ------------------------------------------------------------------
@@ -530,7 +564,7 @@ def _approve_merge(run: dict, git) -> None:
     sha = git.merge(cfg, run.get("worktree_path"), run.get("branch_name"),
                     run.get("pr_number"))
     _set_run(run["id"], merge_commit=sha, env_dev_at=_now(), phase="shipped",
-             active=0)
+             active=0, blocked_reason=None, blocked_from_phase=None)
     artifacts.repoint_to_branch(tid, dev_branch)
     tasks.move(tid, "shipped")
     tasks.add_comment(
@@ -615,8 +649,13 @@ def _advance_scoping(run: dict, report: str | None, spawn, git) -> None:
 
 def _advance_synthesis(run: dict, report: str | None, spawn, git) -> None:
     """synthesis finish → register the report (inline), persist the full parsed
-    synthesis JSON (so deliver can read the followups/brain nodes), open review."""
-    data = _parse_report(run, "synthesis", report)
+    synthesis JSON (so deliver can read the followups/brain nodes), open review.
+
+    A synthesis agent that returns a markdown recommendation instead of the
+    ``{report, followups, brain_nodes}`` JSON is accepted (prose fallback) and
+    delivered as the report body — it just yields no auto followups/brain nodes,
+    which is far better than blocking the whole research task."""
+    data = _parse_report(run, "synthesis", report, fallback_key="report")
     if data is None:
         return
     tid = run["task_id"]
@@ -724,6 +763,27 @@ def _deliver_docs(run: dict, git) -> None:
 
 
 # -- environment watcher ------------------------------------------------------
+
+_ENV_COLUMN = {"dev": "env_dev_at", "staging": "env_staging_at", "prod": "env_prod_at"}
+
+
+def stamp_env(run_id: str, env: str) -> str | None:
+    """Record that `run_id` has reached deployment env `env` (idempotent).
+
+    Used by the promote endpoint after it auto-merges the env-promotion PR: since
+    we just merged it, the run has demonstrably reached the target env — stamp it
+    directly instead of waiting for the periodic ancestry watcher to notice.
+    Returns the timestamp written, or None if it was already stamped."""
+    col = _ENV_COLUMN.get(env)
+    if not col:
+        raise ValueError(f"unknown env {env!r}")
+    row = db.query("SELECT * FROM lifecycle_runs WHERE id = ?", (run_id,))
+    if row and dict(row[0]).get(col):
+        return None  # already stamped — don't overwrite the original time
+    ts = _now()
+    _set_run(run_id, **{col: ts})
+    return ts
+
 
 def projects_with_pending_env() -> list[str]:
     """Distinct project_ids that have merged runs not yet observed in prod.

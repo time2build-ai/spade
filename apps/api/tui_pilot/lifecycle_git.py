@@ -131,3 +131,37 @@ def for_project(project_id: str, *, gh=None) -> _ProjectGit:
     if cfg is None:
         raise ValueError(f"no project_git config for {project_id!r}")
     return _ProjectGit(cfg, gh=gh)
+
+
+class _LazyProjectGit:
+    """A git facade that defers config resolution until a git op is actually
+    performed. Research/docs runs never touch git (only code phases call
+    ``prepare_workspace`` / ``open_pr`` / ``merge`` / …), so wrapping the facade
+    lazily lets those runs start and clear their gates in a project with NO repo
+    configured. Code runs still raise the same ``ValueError`` the moment they
+    reach their first real git operation.
+    """
+
+    def __init__(self, project_id: str, *, gh=None):
+        object.__setattr__(self, "_project_id", project_id)
+        object.__setattr__(self, "_gh", gh)
+        object.__setattr__(self, "_real", None)
+
+    def _resolve(self) -> _ProjectGit:
+        real = object.__getattribute__(self, "_real")
+        if real is None:
+            real = for_project(
+                object.__getattribute__(self, "_project_id"),
+                gh=object.__getattribute__(self, "_gh"),
+            )
+            object.__setattr__(self, "_real", real)
+        return real
+
+    def __getattr__(self, name):  # only called for attrs not on the instance
+        return getattr(self._resolve(), name)
+
+
+def lazy_for_project(project_id: str, *, gh=None) -> "_LazyProjectGit":
+    """Like :func:`for_project` but resolves the repo config lazily — safe to
+    build for any kind, only fails (for code) on first actual git use."""
+    return _LazyProjectGit(project_id, gh=gh)
