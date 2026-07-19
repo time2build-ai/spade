@@ -124,6 +124,7 @@ test.describe("board-kinds", () => {
   });
 
   test("the kind filter narrows the board to a single kind", async ({ page }) => {
+    await page.getByTestId("filter-menu-btn").click(); // filters live in a dropdown now
     await page.getByTestId("kind-filter-research").click();
     await expect(page.locator('[data-testid="task-card"]', { hasText: "Research card" })).toBeVisible();
     await expect(page.locator('[data-testid="task-card"]', { hasText: "Code card" })).toHaveCount(0);
@@ -136,8 +137,8 @@ test.describe("board-kinds", () => {
     await expect(untyped.getByTestId("kind-confirm")).toBeVisible();
   });
 
-  test("the gated card surfaces the amber 'waiting on you' banner", async ({ page }) => {
+  test("the gated card surfaces the 'Waiting on you' status", async ({ page }) => {
     const gated = page.locator('[data-testid="task-card"]', { hasText: "Gated card" });
-    await expect(gated).toContainText("waiting on you");
+    await expect(gated).toContainText("Waiting on you");
   });
 });

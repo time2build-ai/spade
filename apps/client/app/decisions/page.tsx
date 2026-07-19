@@ -3,6 +3,7 @@
 import * as React from "react";
 import useSWR, { mutate } from "swr";
 import { PageHead } from "@/components/ui";
+import { PageEmpty } from "@/components/PageEmpty";
 import { DecisionCard } from "@/components/decisions/DecisionCard";
 import { DecisionDetail } from "@/components/decisions/DecisionDetail";
 import { useProject } from "@/lib/useProject";
@@ -95,7 +96,13 @@ export default function DecisionsPage() {
   } else if (isLoading || !data) {
     body = <StateMessage>Loading…</StateMessage>;
   } else if (decisions.length === 0) {
-    body = <StateMessage>No decisions recorded yet.</StateMessage>;
+    body = (
+      <PageEmpty
+        icon="doc" tone="var(--accent)" testid="decisions-empty"
+        title="No decisions yet"
+        sub="Architecture decisions (ADRs) recorded here keep tasks aligned — and Spade flags changes that conflict with an active decision."
+      />
+    );
   } else {
     body = (
       <>

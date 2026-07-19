@@ -32,7 +32,7 @@ test.describe("feedback (real)", () => {
     await page.route("**/api/projects", (r) => r.fulfill({ json: { projects: [PROJECT] } }));
     await page.route("**/api/feedback**", (r) => r.fulfill({ json: { clusters: [] } }));
     await page.goto("/feedback");
-    await expect(page.getByText("No feedback clusters yet.")).toBeVisible();
+    await expect(page.getByText("No feedback yet")).toBeVisible();
     await expect(page.getByTestId("feedback")).toHaveCount(0);
   });
 });

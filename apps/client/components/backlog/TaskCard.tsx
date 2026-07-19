@@ -2,8 +2,10 @@ import * as React from "react";
 import Link from "next/link";
 import { mutate } from "swr";
 import { Priority } from "@/components/ui";
+import { Icon, type IconName } from "@/components/Icon";
 import { groupNodesByType, type TaskExecState } from "@/lib/adapters";
 import { api } from "@/lib/api";
+import { statusMeta } from "@/lib/status";
 import type { BrainNode, Kind, LifecycleRun, Task } from "@/lib/types";
 
 export interface TaskCardProps {
@@ -18,11 +20,13 @@ export interface TaskCardProps {
   run?: LifecycleRun;
 }
 
-/** Kind badge glyph + label (✨ code · 🔬 research · 📄 docs). */
-const KIND_META: Record<Kind, { icon: string; label: string }> = {
-  code: { icon: "✨", label: "Code" },
-  research: { icon: "🔬", label: "Research" },
-  docs: { icon: "📄", label: "Docs" },
+/** Kind badge icon + label (spark = code · search = research · doc = docs).
+ *  Colour is driven by CSS via `.kind-pill[data-kind=…]` (code blue · research
+ *  lavender · docs green) — see globals.css. */
+const KIND_META: Record<Kind, { icon: IconName; label: string }> = {
+  code: { icon: "spark", label: "Code" },
+  research: { icon: "search", label: "Research" },
+  docs: { icon: "doc", label: "Docs" },
 };
 
 const KIND_ORDER: Kind[] = ["code", "research", "docs"];
@@ -38,6 +42,8 @@ const TERMINAL = new Set(["shipped", "delivered"]);
  */
 export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
   const [kindBusy, setKindBusy] = React.useState(false);
+  // "change" reveals the override pills so the default suggestion row stays calm.
+  const [changing, setChanging] = React.useState(false);
 
   const resolved: BrainNode[] = [];
   for (const id of task.nodes) {
@@ -108,6 +114,47 @@ export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
     e.stopPropagation();
   };
 
+  // The single status shown beside the title (icon + label). Precedence:
+  // waiting gate → blocked → an agent working (phase, spins) → terminal →
+  // ready → dependency-blocked → epic → raw status.
+  const status: {
+    icon: IconName | null;
+    label: string;
+    color: string;
+    extra?: React.ReactNode;
+    testid?: string;
+    title?: string;
+  } = gated
+    ? { icon: "gate", label: "Waiting on you", color: "var(--amber)", testid: "card-gate-review", title: "A gate is waiting on your review" }
+    : task.status === "blocked"
+      ? { icon: "alert", label: "Blocked", color: "var(--red)", title: "The lifecycle is blocked" }
+      : inFlight
+        ? {
+            ...statusMeta(task.status),
+            testid: "tc-phase",
+            title: "An agent is working on this",
+            extra:
+              fanoutCount > 0 ? (
+                <span data-testid="fanout-count" className="tc-status-extra" style={{ color: "var(--blue)" }}>
+                  ▶ {fanoutCount} agents
+                </span>
+              ) : undefined,
+          }
+        : delivered
+          ? statusMeta("delivered")
+          : task.status === "shipped"
+            ? statusMeta("shipped")
+            : exec?.startable
+              ? { ...statusMeta("ready"), testid: "tc-startable", title: "No open blockers — ready to start now" }
+              : task.status === "ready" && exec?.blockedByOpen
+                ? {
+                    icon: "alert", label: "Blocked", color: "var(--red)", testid: "tc-blocked", title: "Waiting on upstream tasks",
+                    extra: <span className="tc-status-extra">· {exec.blockedByOpen}</span>,
+                  }
+                : exec?.isEpic
+                  ? { icon: null, label: "Epic", color: "var(--text-3)", testid: "tc-epic" }
+                  : statusMeta(task.status);
+
   return (
     <Link
       href={`/task/${task.id}`}
@@ -118,23 +165,29 @@ export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
     >
       <div className="tc-head">
         <Priority level={task.priority} />
-        <span>{task.id}</span>
+        <span className="tc-id">{task.id}</span>
         {kindMeta && (
           <span
             data-testid="kind-badge"
             data-kind={kind}
             title={kindMeta.label}
-            className="chip"
-            style={{ fontSize: 10, padding: "1px 6px" }}
+            className="kind-pill sm"
           >
-            <span aria-hidden style={{ marginRight: 3 }}>{kindMeta.icon}</span>
+            <Icon name={kindMeta.icon} size={11} />
             {kindMeta.label}
           </span>
         )}
-        {task.feature ? <span style={{ marginLeft: "auto" }}>{task.feature}</span> : null}
+        {task.feature ? <span className="tc-feat" title={task.feature}>{task.feature}</span> : null}
       </div>
 
-      <h4>{task.title}</h4>
+      <div className="titlerow">
+        <h4>{task.title}</h4>
+        <span className="tc-status" data-testid={status.testid} title={status.title} style={{ color: status.color }}>
+          {status.icon && <Icon name={status.icon} size={12} />}
+          {status.label}
+          {status.extra}
+        </span>
+      </div>
 
       {total > 0 && (
         <div className="intel-bar" title={`${total} linked intelligence items`}>
@@ -152,67 +205,54 @@ export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
       </div>
 
       {/* Router suggestion — untyped task with an advisory kind. Confirm applies
-          it (api.setKind); the three glyphs override to another kind. */}
+          it (api.setKind); "change" reveals the override pills for another kind. */}
       {suggestion && (
-        <div
-          data-testid="router-suggestion"
-          style={{
-            marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-            padding: "6px 8px", borderRadius: 8,
-            border: "1px solid rgba(201,184,255,.3)",
-            background: "rgba(201,184,255,.06)", fontSize: 11.5,
-          }}
-        >
-          <span style={{ color: "var(--accent)" }}>
-            suggests {KIND_META[suggestion].icon} {KIND_META[suggestion].label}
-          </span>
-          <button
-            type="button"
-            data-testid="kind-confirm"
-            disabled={kindBusy}
-            onClick={(e) => { swallow(e); void setKind(suggestion); }}
-            className="btn"
-            style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 11 }}
-          >
-            ✓ Confirm
-          </button>
-          <span style={{ display: "flex", gap: 4 }} title="Override the suggested kind">
-            {KIND_ORDER.map((k) => (
-              <button
-                key={k}
-                type="button"
-                data-testid={`kind-set-${k}`}
-                title={`Set kind: ${KIND_META[k].label}`}
-                disabled={kindBusy}
-                onClick={(e) => { swallow(e); void setKind(k); }}
-                style={{
-                  padding: "1px 5px", fontSize: 12, borderRadius: 6, cursor: "pointer",
-                  border: "1px solid var(--border)", background: "var(--bg-2)", color: "inherit",
-                }}
-              >
-                {KIND_META[k].icon}
-              </button>
-            ))}
-          </span>
-        </div>
-      )}
-
-      {/* Waiting on a human gate — amber banner + inline Review link. */}
-      {gated && (
-        <div
-          className="tc-gate"
-          style={{
-            marginTop: 8, display: "flex", alignItems: "center", gap: 8,
-            padding: "6px 8px", borderRadius: 8,
-            border: "1px solid rgba(230,184,106,.35)",
-            background: "rgba(230,184,106,.08)", color: "var(--amber)", fontSize: 11.5,
-          }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--amber)" }} />
-          <span style={{ fontWeight: 500 }}>waiting on you</span>
-          <span data-testid="card-gate-review" style={{ marginLeft: "auto", fontWeight: 500 }}>
-            Review →
-          </span>
+        <div data-testid="router-suggestion">
+          <div className="router-sugg">
+            <span className="lead">router</span>
+            <span className="kind-pill" data-kind={suggestion}>
+              <Icon name={KIND_META[suggestion].icon} size={12} />
+              {KIND_META[suggestion].label}
+            </span>
+            <button
+              type="button"
+              data-testid="kind-confirm"
+              disabled={kindBusy}
+              onClick={(e) => { swallow(e); void setKind(suggestion); }}
+              className="confirm"
+            >
+              <Icon name="check" size={12} />
+              Confirm
+            </button>
+            <button
+              type="button"
+              className="change"
+              aria-expanded={changing}
+              onClick={(e) => { swallow(e); setChanging((v) => !v); }}
+            >
+              change
+              <Icon name="chev" size={11} />
+            </button>
+          </div>
+          {changing && (
+            <div className="router-override" title="Override the suggested kind">
+              {KIND_ORDER.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  data-testid={`kind-set-${k}`}
+                  title={`Set kind: ${KIND_META[k].label}`}
+                  disabled={kindBusy}
+                  onClick={(e) => { swallow(e); void setKind(k); }}
+                  className="kind-pill"
+                  data-kind={k}
+                >
+                  <Icon name={KIND_META[k].icon} size={12} />
+                  {KIND_META[k].label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -233,48 +273,6 @@ export function TaskCard({ task, nodesById, exec, gated, run }: TaskCardProps) {
         </div>
       )}
 
-      {/* Delivered badge — research/docs terminal (no env lanes, no PR). */}
-      {delivered && (
-        <div style={{ marginTop: 8 }}>
-          <span
-            data-testid="delivered-badge"
-            className="chip"
-            style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--green)" }}
-          >
-            <span className="d" style={{ background: "var(--green)" }} />
-            delivered ✓
-          </span>
-        </div>
-      )}
-
-      <div className="tc-foot">
-        <div className="left">
-          {inFlight ? (
-            <span className="agent-running" data-testid="tc-phase">
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
-              {task.status}
-              {fanoutCount > 0 && (
-                <span data-testid="fanout-count" style={{ marginLeft: 8, color: "var(--blue)" }}>
-                  ▶ {fanoutCount} agents
-                </span>
-              )}
-            </span>
-          ) : exec?.startable ? (
-            <span className="tc-ready" data-testid="tc-startable" title="No open blockers — ready to start now">
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)" }} />
-              ready to start
-            </span>
-          ) : task.status === "ready" && exec?.blockedByOpen ? (
-            <span className="tc-blocked" data-testid="tc-blocked" title="Waiting on upstream tasks">
-              blocked by {exec.blockedByOpen}
-            </span>
-          ) : exec?.isEpic ? (
-            <span className="muted mono" style={{ fontSize: 10.5 }} data-testid="tc-epic">epic</span>
-          ) : (
-            <span className="muted mono" style={{ fontSize: 10.5 }}>{task.status}</span>
-          )}
-        </div>
-      </div>
     </Link>
   );
 }

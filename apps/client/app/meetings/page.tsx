@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { PageEmpty } from "@/components/PageEmpty";
 import { Icon } from "@/components/Icon";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
@@ -183,11 +184,11 @@ export default function MeetingsPage() {
       {!project ? (
         <Empty>Select a project to see its meetings.</Empty>
       ) : !m ? (
-        <Empty>
-          No meetings captured yet.
-          <br />
-          Use <b>Ingest a meeting</b> to pull one in and watch it become backlog.
-        </Empty>
+        <PageEmpty
+          icon="mic" tone="var(--blue)" testid="meetings-empty"
+          title="No meetings yet"
+          sub="Ingest a meeting transcript and Spade turns each action item into a grounded backlog task — with the exact quote it came from."
+        />
       ) : (
         <div className="mtg-wrap" data-testid="meetings">
           {/* List */}

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { PageHead, Priority, Chip } from "@/components/ui";
-import { Icon } from "@/components/Icon";
+import { Icon, type IconName } from "@/components/Icon";
+import { statusMeta } from "@/lib/status";
 import { MetaRow } from "@/components/task/MetaRow";
 import { Markdown } from "@/components/ask/Markdown";
 import { api } from "@/lib/api";
@@ -14,30 +15,12 @@ import type { BrainNode } from "@/lib/types";
 const PRIORITY_LABEL = ["critical", "high", "medium", "low"] as const;
 
 /** Status → dot color, matching the backlog column colors. */
-const STATUS_COLOR: Record<string, string> = {
-  ready: "var(--text-4)",
-  // Task Lifecycle V2 phases (code).
-  shaping: "var(--pink)",
-  plan_review: "var(--amber)",
-  building: "var(--blue)",
-  pr_review: "var(--accent)",
-  shipped: "var(--green)",
-  // Task-Type Router per-kind phases (research + docs).
-  scoping: "var(--amber)",
-  investigating: "var(--blue)",
-  synthesis: "var(--accent)",
-  outline: "var(--amber)",
-  drafting: "var(--blue)",
-  review: "var(--accent)",
-  delivered: "var(--green)",
-  blocked: "var(--amber)",
-};
-
-/** Kind badge glyph + label (✨ code · 🔬 research · 📄 docs). */
-const KIND_BADGE: Record<string, { icon: string; label: string }> = {
-  code: { icon: "✨", label: "Code" },
-  research: { icon: "🔬", label: "Research" },
-  docs: { icon: "📄", label: "Docs" },
+/** Kind badge icon + label (spark = code · search = research · doc = docs).
+ *  Colour driven by `.kind-pill[data-kind=…]` in globals.css. */
+const KIND_BADGE: Record<string, { icon: IconName; label: string }> = {
+  code: { icon: "spark", label: "Code" },
+  research: { icon: "search", label: "Research" },
+  docs: { icon: "doc", label: "Docs" },
 };
 
 const REL_LABEL: Record<string, string> = {
@@ -57,6 +40,54 @@ const GATE_LABEL: Record<string, string> = {
   outline: "Outline review",
   review: "Review",
 };
+
+/** What each gate is deciding ON — the artifact kinds worth showing inline in
+ *  the gate card so the human sees what they're approving without scrolling. */
+const GATE_ARTIFACT_KINDS: Record<string, string[]> = {
+  plan: ["plan", "spec"],
+  manual_test: ["test_guide"],
+  merge: ["review_report"],
+  scope: ["plan"], // research "plan" artifact holds the proposed angles as JSON
+  outline: ["outline"],
+  review: ["report", "doc"],
+};
+
+/** Comment kinds that carry the producing agent's substantive output — used as
+ *  the gate's fallback context when no artifact is attached. */
+const GATE_NOTE_KINDS = new Set(["progress", "review", "test_report"]);
+
+/** A research-plan artifact's content is JSON: `{summary, angles:[{brief,mode}]}`.
+ *  Parse it so the scope gate can render angles as a list instead of raw JSON. */
+type Angle = { brief: string; mode: string };
+function parseAngles(content: string | null | undefined): { summary?: string; angles: Angle[] } | null {
+  if (!content) return null;
+  try {
+    const d = JSON.parse(content);
+    if (d && Array.isArray(d.angles)) {
+      const angles = d.angles.filter((a: unknown): a is Angle => !!a && typeof (a as Angle).brief === "string");
+      if (angles.length) return { summary: typeof d.summary === "string" ? d.summary : undefined, angles };
+    }
+  } catch {
+    /* not JSON — caller renders it as markdown instead */
+  }
+  return null;
+}
+
+/** A research `finding` artifact is JSON: `{summary, evidence:[claim strings]}`.
+ *  Parse it so the drawer renders a summary + cited-evidence list, not raw JSON. */
+function parseFinding(content: string | null | undefined): { summary?: string; evidence: string[] } | null {
+  if (!content) return null;
+  try {
+    const d = JSON.parse(content);
+    if (d && Array.isArray(d.evidence)) {
+      const evidence = d.evidence.map((e: unknown) => (typeof e === "string" ? e : JSON.stringify(e)));
+      return { summary: typeof d.summary === "string" ? d.summary : undefined, evidence };
+    }
+  } catch {
+    /* not JSON — caller renders it as markdown instead */
+  }
+  return null;
+}
 
 /** Human labels for every artifact kind (drives the Artifacts panel). */
 const ARTIFACT_LABEL: Record<string, string> = {
@@ -78,7 +109,10 @@ const KIND_META: Record<string, { icon: import("@/components/Icon").IconName; co
   review: { icon: "doc", color: "var(--accent)" },
   artifact: { icon: "doc", color: "var(--blue)" },
   progress: { icon: "spark", color: "var(--teal)" },
+  system: { icon: "cog", color: "var(--text-3)" },
 };
+/** Fallback so EVERY note gets an icon (unknown kinds included). */
+const DEFAULT_KIND_META = { icon: "cog" as import("@/components/Icon").IconName, color: "var(--text-4)" };
 
 /** A linked brain node → its record page. */
 function nodeHref(n: BrainNode): string {
@@ -163,6 +197,21 @@ export default function TaskPage() {
     [lifeGatesData, task],
   );
 
+  // What the human is approving at this gate: the gate-relevant artifacts, and
+  // (as a fallback for gates with no artifact, e.g. scope) the producing agent's
+  // most recent substantive note — the proposed angles / plan summary.
+  const gateContext = React.useMemo(() => {
+    const kinds = waitingGate ? GATE_ARTIFACT_KINDS[waitingGate.gate] ?? [] : [];
+    const artifacts = waitingGate
+      ? (artifactsData?.artifacts ?? []).filter((a) => kinds.includes(a.kind))
+      : [];
+    const note =
+      waitingGate && !artifacts.length
+        ? [...(commentsData?.comments ?? [])].reverse().find((c) => GATE_NOTE_KINDS.has(c.kind)) ?? null
+        : null;
+    return { artifacts, note };
+  }, [waitingGate, artifactsData, commentsData]);
+
   const [starting, setStarting] = React.useState(false);
   const [startErr, setStartErr] = React.useState<string | null>(null);
   const [openArtifact, setOpenArtifact] = React.useState<import("@/lib/types").Artifact | null>(null);
@@ -170,6 +219,10 @@ export default function TaskPage() {
   const [gateComment, setGateComment] = React.useState("");
   const [gateBusy, setGateBusy] = React.useState(false);
   const [gateErr, setGateErr] = React.useState<string | null>(null);
+  // Comment-on-demand: the box only appears when requesting changes (a comment
+  // is required only for that; Approve is a single click).
+  const [requesting, setRequesting] = React.useState(false);
+  React.useEffect(() => { setRequesting(false); }, [waitingGate?.gate]);
 
   // Is a lifecycle already running on this task? Drives the Start button state.
   const hasLifecycle = !!lifecycleRun && lifecycleRun.active === 1;
@@ -227,12 +280,12 @@ export default function TaskPage() {
   const headerActions = task ? (
     <>
       <span className="chip" data-testid="task-status-chip">
-        <span className="d" style={{ background: STATUS_COLOR[task.status] ?? "var(--text-4)" }} />
-        {task.status}
+        <span className="d" style={{ background: statusMeta(task.status).color }} />
+        {statusMeta(task.status).label}
       </span>
       {task.kind && KIND_BADGE[task.kind] && (
-        <span className="chip" data-testid="task-kind-chip" title={KIND_BADGE[task.kind].label}>
-          <span aria-hidden style={{ marginRight: 3 }}>{KIND_BADGE[task.kind].icon}</span>
+        <span className="kind-pill" data-kind={task.kind} data-testid="task-kind-chip" title={KIND_BADGE[task.kind].label}>
+          <Icon name={KIND_BADGE[task.kind].icon} size={12} />
           {KIND_BADGE[task.kind].label}
         </span>
       )}
@@ -240,7 +293,7 @@ export default function TaskPage() {
         <Icon name="graph" size={13} /> View in graph
       </Link>
       <button type="button" className="btn primary" data-testid="start-lifecycle" onClick={startLifecycle} disabled={starting || hasLifecycle}>
-        <Icon name="play" size={13} /> {starting ? "Starting…" : hasLifecycle ? `Lifecycle · ${lifecycleRun!.phase}` : "Start lifecycle"}
+        <Icon name="play" size={13} /> {starting ? "Starting…" : hasLifecycle ? "Lifecycle active" : "Start lifecycle"}
       </button>
     </>
   ) : undefined;
@@ -309,24 +362,95 @@ export default function TaskPage() {
                 <b style={{ fontSize: 13 }}>{GATE_LABEL[waitingGate.gate] ?? waitingGate.gate} gate</b>
                 <span className="muted" style={{ fontSize: 12 }}>· waiting on your call</span>
               </div>
-              <textarea
-                data-testid="gate-comment"
-                aria-label="Gate decision comment"
-                value={gateComment}
-                onChange={(e) => setGateComment(e.target.value)}
-                placeholder="Add a comment (required to request changes)…"
-                rows={2}
-                style={{ width: "100%", resize: "vertical", fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-2)", color: "inherit", marginBottom: 8 }}
-              />
-              {gateErr && <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>{gateErr}</div>}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className="btn primary" data-testid="gate-approve" disabled={gateBusy} onClick={() => decideGate("approve")}>
-                  <Icon name="check" size={13} /> Approve
-                </button>
-                <button type="button" className="btn" data-testid="gate-request-changes" disabled={gateBusy} onClick={() => decideGate("request-changes")}>
-                  Request changes
-                </button>
-              </div>
+
+              {/* What you're approving — surfaced inline so the decision doesn't
+                  require scrolling into the timeline. Research angles render as a
+                  list; other artifacts/notes render as markdown. */}
+              {(gateContext.artifacts.length > 0 || gateContext.note) && (
+                <div data-testid="gate-context" className="gate-context">
+                  {gateContext.artifacts.map((a) => {
+                    const parsed = parseAngles(a.content);
+                    return (
+                      <div key={a.id} className="gate-context-item">
+                        {a.kind !== "doc" && (
+                          <div className="gate-context-h">
+                            {parsed ? `Proposed angles · ${parsed.angles.length}` : (a.title ?? ARTIFACT_LABEL[a.kind] ?? a.kind)}
+                            {!a.content && (
+                              <button type="button" className="gate-context-open" onClick={() => setOpenArtifact(a)}>open ↗</button>
+                            )}
+                          </div>
+                        )}
+                        {a.kind === "doc" ? (
+                          /* A docs deliverable is HTML body sections — render the
+                             styled, sandboxed document (like the artifacts drawer),
+                             not raw tags through markdown. */
+                          <DocDeliverable artifact={a} />
+                        ) : parsed ? (
+                          <>
+                            {parsed.summary && <p className="angle-summary">{parsed.summary}</p>}
+                            <ol className="angle-list">
+                              {parsed.angles.map((ang, i) => (
+                                <li className="angle" key={i}>
+                                  <span className="angle-mode" data-mode={ang.mode === "web" ? "web" : "repo"}>
+                                    {ang.mode === "web" ? "web" : "repo"}
+                                  </span>
+                                  <span className="angle-brief">{ang.brief}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          </>
+                        ) : a.content ? (
+                          <div className="gate-context-body"><Markdown unescape>{a.content}</Markdown></div>
+                        ) : (
+                          /* Repo-pointer artifact (code spec/plan) — fetch its
+                             content from the branch and render it inline, like
+                             research angles, instead of a bare link. */
+                          <GateArtifactBody taskId={task.id} artifactId={a.id} />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {gateContext.note && (
+                    <div className="gate-context-item">
+                      <div className="gate-context-h">Summary</div>
+                      <div className="gate-context-body"><Markdown>{gateContext.note.body}</Markdown></div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {gateErr && <div className="gate-err">{gateErr}</div>}
+              {!requesting ? (
+                <div className="gate-actions">
+                  <button type="button" className="btn primary" data-testid="gate-approve" disabled={gateBusy} onClick={() => decideGate("approve")}>
+                    <Icon name="check" size={13} /> Approve
+                  </button>
+                  <button type="button" className="btn gate-reject" data-testid="gate-request-changes" disabled={gateBusy} onClick={() => { setGateErr(null); setRequesting(true); }}>
+                    Request changes
+                  </button>
+                </div>
+              ) : (
+                <div className="gate-reveal">
+                  <textarea
+                    data-testid="gate-comment"
+                    aria-label="What should change?"
+                    autoFocus
+                    value={gateComment}
+                    onChange={(e) => setGateComment(e.target.value)}
+                    placeholder="What should change? (required)"
+                    rows={2}
+                    className="gate-comment-field"
+                  />
+                  <div className="gate-actions">
+                    <button type="button" className="btn ghost" disabled={gateBusy} onClick={() => { setRequesting(false); setGateComment(""); setGateErr(null); }}>
+                      Cancel
+                    </button>
+                    <button type="button" className="btn gate-reject-solid" data-testid="gate-request-send" disabled={gateBusy || !gateComment.trim()} onClick={() => decideGate("request-changes")}>
+                      Send back to agent
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="td-meta-row">
@@ -520,20 +644,21 @@ export default function TaskPage() {
                   </div>
                 ) : null}
                 {activity.map((c) => {
-                  const meta = KIND_META[c.kind];
+                  const meta = KIND_META[c.kind] ?? DEFAULT_KIND_META;
+                  // Show the kind chip only when it adds info beyond the author
+                  // (a plain system-authored system note would read "SYSTEM system").
+                  const showChip = c.kind !== "system" && c.kind !== (c.author ?? "");
                   return (
                     <div className="td-act" key={c.id} data-testid="pipeline-note" data-kind={c.kind}>
                       <div className="td-act-h">
-                        {meta && (
-                          <span data-testid="note-kind-icon" style={{ display: "inline-flex", alignItems: "center", color: meta.color, marginRight: 2 }}>
-                            <Icon name={meta.icon} size={13} />
-                          </span>
-                        )}
+                        <span data-testid="note-kind-icon" style={{ display: "inline-flex", alignItems: "center", color: meta.color, marginRight: 2 }}>
+                          <Icon name={meta.icon} size={13} />
+                        </span>
                         <span className={"td-act-who" + (c.author === "system" ? " sys" : "")}>{c.author ?? "system"}</span>
-                        {meta && <span className="chip" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".04em" }}>{c.kind.replace(/_/g, " ")}</span>}
+                        {showChip && <span className="chip" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".04em" }}>{c.kind.replace(/_/g, " ")}</span>}
                         <span className="td-act-when mono">{formatDate(c.created_at)}</span>
                       </div>
-                      <div className="td-act-body"><Markdown>{c.body}</Markdown></div>
+                      <div className="td-act-body"><Markdown unescape>{c.body}</Markdown></div>
                     </div>
                   );
                 })}
@@ -546,8 +671,8 @@ export default function TaskPage() {
           <h6>Properties</h6>
           <MetaRow label="Status">
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[task.status] ?? "var(--text-4)" }} />
-              {task.status}
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusMeta(task.status).color }} />
+              {statusMeta(task.status).label}
             </span>
           </MetaRow>
           <MetaRow label="Priority">
@@ -595,6 +720,19 @@ function parseSteps(content: string): string[] {
     .filter((l) => l.length > 0);
 }
 
+/** Inline body for a repo-pointer artifact (code spec/plan) inside a gate — it
+ *  fetches the file content from the branch and renders it as markdown, so the
+ *  plan gate shows real context like the research gate does. */
+function GateArtifactBody({ taskId, artifactId }: { taskId: string; artifactId: string }) {
+  const { data, error, isLoading } = useSWR(
+    ["artifact-content", taskId, artifactId],
+    () => api.artifactContent(taskId, artifactId),
+  );
+  if (isLoading) return <div className="muted" style={{ fontSize: 12 }}>Loading…</div>;
+  if (error) return <div style={{ color: "var(--red)", fontSize: 12 }}>Couldn’t load: {String((error as Error).message ?? error)}</div>;
+  return <div className="gate-context-body"><Markdown unescape>{data?.content ?? ""}</Markdown></div>;
+}
+
 /** Right-side drawer rendering an artifact's markdown. The test guide gets the
  *  kid-simple treatment: big numbered steps, tickable checkboxes, print button. */
 function ArtifactDrawer({
@@ -612,6 +750,10 @@ function ArtifactDrawer({
   const isTestGuide = artifact.kind === "test_guide";
   const content = data?.content ?? "";
   const steps = isTestGuide ? parseSteps(content) : [];
+  // A research-plan artifact is JSON angles — render it as a list, not raw JSON.
+  const planAngles = parseAngles(content);
+  // A research finding is JSON {summary, evidence[]} — render structured too.
+  const findingData = parseFinding(content);
 
   // Escape closes the drawer (basic modal a11y).
   React.useEffect(() => {
@@ -669,8 +811,38 @@ function ArtifactDrawer({
                   </li>
                 ))}
               </ol>
+            ) : planAngles ? (
+              <div data-testid="artifact-angles">
+                {planAngles.summary && <p className="angle-summary" style={{ fontSize: 14, marginBottom: 14 }}>{planAngles.summary}</p>}
+                <ol className="angle-list">
+                  {planAngles.angles.map((ang, i) => (
+                    <li className="angle" key={i}>
+                      <span className="angle-mode" data-mode={ang.mode === "web" ? "web" : "repo"}>
+                        {ang.mode === "web" ? "web" : "repo"}
+                      </span>
+                      <span className="angle-brief">{ang.brief}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : findingData ? (
+              <div data-testid="artifact-finding">
+                {findingData.summary && (
+                  <p className="angle-summary" style={{ fontSize: 14, marginBottom: 14 }}>{findingData.summary}</p>
+                )}
+                {findingData.evidence.length > 0 && (
+                  <>
+                    <div className="gate-context-h" style={{ marginBottom: 8 }}>Evidence · {findingData.evidence.length}</div>
+                    <ul className="finding-evidence">
+                      {findingData.evidence.map((e, i) => (
+                        <li key={i}><Markdown unescape>{e}</Markdown></li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
             ) : (
-              <div style={{ fontSize: 13, lineHeight: 1.6 }}><Markdown>{content}</Markdown></div>
+              <div style={{ fontSize: 13, lineHeight: 1.6 }}><Markdown unescape>{content}</Markdown></div>
             )
           )}
         </div>

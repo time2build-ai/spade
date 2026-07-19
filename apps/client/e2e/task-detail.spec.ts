@@ -57,7 +57,7 @@ test.describe("task detail", () => {
     await mock(page, BASE);
     await page.goto("/task/T-1");
     await expect(page.locator(".td-title")).toHaveText("Optimize mobile checkout speed");
-    await expect(page.getByTestId("task-status-chip")).toContainText("building");
+    await expect(page.getByTestId("task-status-chip")).toContainText("Building");
     await expect(page.getByRole("link", { name: /View in graph/ })).toHaveAttribute("href", "/brain");
     // no lifecycle run yet → "Start lifecycle"
     await expect(page.getByTestId("start-lifecycle")).toContainText("Start lifecycle");

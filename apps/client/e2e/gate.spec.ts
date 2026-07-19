@@ -19,7 +19,7 @@ test.describe("gate (real)", () => {
   test("no brake → honest empty state", async ({ page }) => {
     await mock(page);
     await page.goto("/gate");
-    await expect(page.locator("body")).toContainText("No human gates right now.");
+    await expect(page.getByTestId("gate-empty")).toContainText("caught up");
     await expect(page.getByTestId("gate-conflict")).toHaveCount(0);
   });
 

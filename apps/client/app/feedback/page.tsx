@@ -3,6 +3,7 @@
 import * as React from "react";
 import useSWR from "swr";
 import { PageHead } from "@/components/ui";
+import { PageEmpty } from "@/components/PageEmpty";
 import { useProject } from "@/lib/useProject";
 import { api } from "@/lib/api";
 
@@ -34,7 +35,11 @@ export default function FeedbackPage() {
       {!project ? (
         <Empty>Select a project to see its feedback.</Empty>
       ) : !c ? (
-        <Empty>No feedback clusters yet.</Empty>
+        <PageEmpty
+          icon="flag" tone="var(--amber)" testid="feedback-empty"
+          title="No feedback yet"
+          sub="Feedback you capture gets clustered into themes and linked to the tasks that address it — so you can see what users keep asking for."
+        />
       ) : (
         <div className="fb-wrap" data-testid="feedback">
           {/* Cluster list */}

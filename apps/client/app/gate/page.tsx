@@ -47,11 +47,13 @@ export default function GatePage() {
     return (
       <div className="fade-in" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <PageHead title="Human gate" />
-        <div
-          className="muted"
-          style={{ margin: "auto", textAlign: "center", fontSize: 13, color: "var(--text-3)", padding: "40px 22px" }}
-        >
-          No human gates right now.
+        <div className="page-empty" data-testid="gate-empty" style={{ margin: "auto" }}>
+          <span className="page-empty-ic"><Icon name="check" size={26} /></span>
+          <div className="page-empty-title">You’re all caught up</div>
+          <div className="page-empty-sub">
+            When a task needs your call — approving a plan, a research scope, a merge, or a doc — it lands here.
+            Nothing’s waiting on you right now.
+          </div>
         </div>
       </div>
     );

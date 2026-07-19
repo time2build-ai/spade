@@ -10,12 +10,19 @@ import { api } from "@/lib/api";
 import type { ReleaseItem, ReleaseLanes } from "@/lib/types";
 
 /** The three deployment lanes, in promotion order. Each non-final lane can
- *  promote its tasks forward to the next env. */
-const LANES: { key: keyof ReleaseLanes; label: string; env: string; color: string; to?: { env: string; label: string } }[] = [
-  { key: "dev", label: "Development", env: "dev", color: "var(--blue)", to: { env: "staging", label: "Staging" } },
-  { key: "staging", label: "Staging", env: "staging", color: "var(--amber)", to: { env: "prod", label: "Production" } },
-  { key: "prod", label: "Production", env: "prod", color: "var(--green)" },
+ *  promote its tasks forward to the next env. `verb` distinguishes the routine
+ *  dev→staging "Promote" from the higher-stakes staging→prod "Ship". */
+const LANES: {
+  key: keyof ReleaseLanes; label: string; env: string;
+  to?: { env: string; label: string; verb: "Promote" | "Ship" };
+}[] = [
+  { key: "dev", label: "Development", env: "dev", to: { env: "staging", label: "Staging", verb: "Promote" } },
+  { key: "staging", label: "Staging", env: "staging", to: { env: "prod", label: "Production", verb: "Ship" } },
+  { key: "prod", label: "Production", env: "prod" },
 ];
+
+const ENV_CLASS: Record<string, string> = { dev: "rel-env-dev", staging: "rel-env-staging", prod: "rel-env-prod" };
+const ENV_LABEL: Record<string, string> = { dev: "Development", staging: "Staging", prod: "Production" };
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return (
@@ -43,7 +50,7 @@ export default function ReleasesPage() {
 
   const [promoting, setPromoting] = React.useState<string | null>(null);
   const [promoteErr, setPromoteErr] = React.useState<string | null>(null);
-  const [lastPr, setLastPr] = React.useState<{ pr_number?: number; pr_url?: string; from: string; to: string } | null>(null);
+  const [lastPr, setLastPr] = React.useState<{ pr_number?: number; pr_url?: string; merged?: boolean; from: string; to: string } | null>(null);
 
   const promote = React.useCallback(
     async (from: string, to: string) => {
@@ -65,6 +72,16 @@ export default function ReleasesPage() {
 
   const lanes = data?.releases;
 
+  // The promotions currently ready — one row per non-final lane that has tasks
+  // awaiting the next env. Ordered production-first (highest stakes on top).
+  const shipRows = React.useMemo(() => {
+    if (!lanes) return [];
+    return LANES.filter((l) => l.to)
+      .map((l) => ({ lane: l, to: l.to!, items: pending(lanes[l.key] ?? [], l.to!.env) }))
+      .filter((r) => r.items.length > 0)
+      .reverse(); // LANES is dev→staging→prod; reverse → staging→prod first.
+  }, [lanes]);
+
   let body: React.ReactNode;
   if (projectLoading) {
     body = <StateMessage>Loading…</StateMessage>;
@@ -80,70 +97,105 @@ export default function ReleasesPage() {
     body = <StateMessage>Loading…</StateMessage>;
   } else {
     body = (
-      <div className="rel-grid" data-testid="releases-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, padding: "0 22px 22px" }}>
-        {LANES.map((lane) => {
-          const items = lanes[lane.key] ?? [];
-          const toPromote = lane.to ? pending(items, lane.to.env) : [];
-          return (
-            <div className="col" key={lane.key} data-testid={`lane-${lane.env}`} data-lane={lane.env} style={{ display: "flex", flexDirection: "column", minHeight: 320 }}>
-              <div className="col-head">
-                <span className="col-dot" style={{ background: lane.color }} />
-                <span>{lane.label}</span>
-                <span className="count">{items.length}</span>
-              </div>
-              <div className="col-body" style={{ flex: 1 }}>
-                {items.length === 0 && (
-                  <div className="muted" style={{ fontSize: 12, padding: 8, color: "var(--text-4)" }}>—</div>
-                )}
-                {items.map((it) => (
-                  <Link
-                    key={it.run_id}
-                    href={`/task/${it.task_id}`}
-                    className="task-card"
-                    data-testid="release-card"
-                    style={{ display: "block", textDecoration: "none", color: "inherit" }}
-                  >
-                    <div className="tc-head">
-                      <span className="mono">{it.task_id}</span>
-                      {it.merge_commit ? <span className="mono" style={{ marginLeft: "auto", color: "var(--text-4)" }}>{it.merge_commit.slice(0, 7)}</span> : null}
-                    </div>
-                    <h4>{it.title ?? it.task_id}</h4>
-                  </Link>
-                ))}
-              </div>
+      <>
+        {/* ── Ready to ship: every available promotion, production-first ── */}
+        <div className="ship-panel" data-testid="ship-panel">
+          <div className="sp-head">
+            <Icon name="bolt" size={14} />
+            <span className="k">Ready to ship</span>
+            <span className="n">{shipRows.length === 1 ? "1 promotion" : `${shipRows.length} promotions`}</span>
+          </div>
+          {shipRows.length === 0 ? (
+            <div className="sp-empty">
+              <Icon name="check" size={26} />
+              <div className="t">Everything’s promoted — nothing waiting to move forward.</div>
+            </div>
+          ) : (
+            shipRows.map(({ lane, to, items }) => {
+              const busy = promoting === `${lane.env}->${to.env}`;
+              const ship = to.verb === "Ship";
+              return (
+                <div
+                  key={lane.env}
+                  className={`ship-row ${ship ? "to-prod" : "to-staging"}`}
+                  data-testid="ship-row"
+                  data-to={to.env}
+                >
+                  <div className="ship-path">
+                    <span className={`env-pill ${ENV_CLASS[lane.env]}`}><span className="dot" />{lane.label}</span>
+                    <Icon name="arrow" size={16} className="arr" />
+                    <span className={`env-pill ${ENV_CLASS[to.env]}`}><span className="dot" />{to.label}</span>
+                  </div>
+                  <div className="ship-tasks">
+                    {items.map((it) => (
+                      <Link key={it.run_id} href={`/task/${it.task_id}`} className="tl" style={{ textDecoration: "none" }}>
+                        <span className="cid">{it.task_id}</span>
+                        <span>{it.title ?? it.task_id}</span>
+                      </Link>
+                    ))}
+                  </div>
+                  <div className="ship-cta">
+                    <button
+                      type="button"
+                      className={`btn ${ship ? "ship" : "primary"}`}
+                      data-testid="promote-btn"
+                      data-from={lane.env}
+                      data-to={to.env}
+                      disabled={!!promoting}
+                      onClick={() => promote(lane.env, to.env)}
+                    >
+                      {busy ? "Promoting…" : `${to.verb} to ${to.label} →`}
+                    </button>
+                    <span className="hint">opens &amp; merges PR · {lane.env} → {to.env}</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
 
-              {lane.to && (
-                <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    data-testid="promote-btn"
-                    data-from={lane.env}
-                    data-to={lane.to.env}
-                    disabled={!!promoting || toPromote.length === 0}
-                    onClick={() => promote(lane.env, lane.to!.env)}
-                    style={{ width: "100%", justifyContent: "center" }}
-                  >
-                    <Icon name="bolt" size={13} />
-                    {promoting === `${lane.env}->${lane.to.env}` ? "Opening PR…" : `Promote to ${lane.to.label} →`}
-                  </button>
-                  {/* Auto-generated release note preview — the tasks this promotion carries. */}
-                  {toPromote.length > 0 ? (
-                    <div className="muted" data-testid="release-note" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.6 }}>
-                      <div style={{ fontWeight: 500, color: "var(--text-3)" }}>Release note · {toPromote.length} task(s)</div>
-                      {toPromote.map((it) => (
-                        <div key={it.run_id} className="mono">- {it.task_id}: {it.title ?? ""}</div>
-                      ))}
-                    </div>
+        {/* ── Lane summary strip — what's currently in each env, with a shortcut button ── */}
+        <div className="rel-summary" data-testid="releases-grid">
+          {LANES.map((lane) => {
+            const items = lanes[lane.key] ?? [];
+            const toPromote = lane.to ? pending(items, lane.to.env) : [];
+            return (
+              <div className={`scard ${ENV_CLASS[lane.env]}`} key={lane.key} data-testid={`lane-${lane.env}`} data-lane={lane.env}>
+                <div className="stop">
+                  <span className="dot" />
+                  <span className="sname">{lane.label}</span>
+                  {lane.env === "prod" && <span className="slive">● LIVE</span>}
+                  <span className="snum">{items.length}</span>
+                </div>
+                {items.length === 0 ? (
+                  <div className="sempty">Empty.</div>
+                ) : (
+                  <div className="slist">
+                    {items.map((it) => (
+                      <Link key={it.run_id} href={`/task/${it.task_id}`} className="sitem" data-testid="release-card">
+                        <span className="cid">{it.task_id}</span>
+                        <span className="stitle">{it.title ?? it.task_id}</span>
+                        {it.merge_commit ? <span className="sha">{it.merge_commit.slice(0, 7)}</span> : null}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {/* Read-only status — the single promote action lives in the ship
+                    panel above; lane cards just show what's here + what's queued. */}
+                <div className="sfoot">
+                  {!lane.to ? (
+                    <span className="final">— final stage —</span>
+                  ) : toPromote.length > 0 ? (
+                    <span className="final" data-testid="lane-awaiting">↑ {toPromote.length} awaiting promotion to {lane.to.label}</span>
                   ) : (
-                    <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Nothing awaiting promotion.</div>
+                    <span className="final">— up to date —</span>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      </>
     );
   }
 
@@ -153,8 +205,12 @@ export default function ReleasesPage() {
       {/* Header note for the last-opened promotion PR + any promote error. */}
       {lastPr && (
         <div data-testid="promotion-pr" style={{ margin: "10px 22px 0", padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(122,209,154,.3)", background: "rgba(122,209,154,.06)", fontSize: 12.5, display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="bolt" size={13} />
-          <span>Opened promotion PR {lastPr.from} → {lastPr.to}</span>
+          <Icon name={lastPr.merged ? "check" : "bolt"} size={13} />
+          <span>
+            {lastPr.merged
+              ? `Promoted ${ENV_LABEL[lastPr.from] ?? lastPr.from} → ${ENV_LABEL[lastPr.to] ?? lastPr.to} — merged`
+              : `Opened promotion PR ${ENV_LABEL[lastPr.from] ?? lastPr.from} → ${ENV_LABEL[lastPr.to] ?? lastPr.to} — merge it to finish`}
+          </span>
           {lastPr.pr_url ? (
             <a href={lastPr.pr_url} target="_blank" rel="noreferrer" className="mono" style={{ color: "var(--green)" }}>#{lastPr.pr_number}</a>
           ) : lastPr.pr_number != null ? (
