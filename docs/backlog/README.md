@@ -5,7 +5,7 @@ foundation (monorepo, design system, app shell) and the views below marked **Don
 already merged to `main`. Each remaining item has a stub spec in `ready/` or `blocked/`.
 
 **Source design:** `~/Downloads/design_handoff_spade 2/` (`views/*.jsx`, `Spade.html`, `README.md`).
-**How to run:** `make dev` → UI at http://127.0.0.1:3000 (API on :8765). Legacy UI at :8765/ui/.
+**How to run:** `make dev` → UI at http://127.0.0.1:8766 (API on :8765). Legacy UI at :8765/ui/.
 
 ## Guiding rule: honest data only
 We only build views backed by a real API endpoint. Where the handoff mock shows fields

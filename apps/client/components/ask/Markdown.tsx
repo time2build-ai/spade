@@ -28,11 +28,19 @@ function normalize(raw: string): string {
   return dedented.replace(/\n{3,}/g, "\n\n");
 }
 
-export function Markdown({ children }: { children: string }) {
+// Some content (lifecycle notes embedding an agent report that was Python-repr /
+// JSON escaped) arrives with LITERAL "\n" / "\t" instead of real whitespace, so
+// the markdown shows raw escape sequences. Turn those back into real whitespace.
+function unescapeEscapes(s: string): string {
+  return s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+}
+
+export function Markdown({ children, unescape }: { children: string; unescape?: boolean }) {
+  const src = unescape ? unescapeEscapes(children) : children;
   return (
     <div className="ask-md">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {normalize(children)}
+        {normalize(src)}
       </ReactMarkdown>
     </div>
   );

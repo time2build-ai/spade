@@ -29,12 +29,21 @@ test.describe("releases", () => {
     await mock(page);
     await page.goto("/releases");
     await expect(page.getByTestId("releases-grid")).toBeVisible();
-    await expect(page.getByTestId("lane-dev")).toBeVisible();
-    await expect(page.getByTestId("lane-staging")).toBeVisible();
-    await expect(page.getByTestId("lane-prod")).toBeVisible();
-    for (const label of ["Development", "Staging", "Production"]) {
-      await expect(page.locator(".col-head", { hasText: label })).toHaveCount(1);
-    }
+    await expect(page.getByTestId("lane-dev")).toContainText("Development");
+    await expect(page.getByTestId("lane-staging")).toContainText("Staging");
+    await expect(page.getByTestId("lane-prod")).toContainText("Production");
+  });
+
+  test("the ready-to-ship panel lists every available promotion, prod-first", async ({ page }) => {
+    await mock(page);
+    await page.goto("/releases");
+    const rows = page.getByTestId("ship-row");
+    await expect(rows).toHaveCount(2);
+    // staging→prod ("Ship") sits on top; dev→staging ("Promote") below.
+    await expect(rows.nth(0)).toHaveAttribute("data-to", "prod");
+    await expect(rows.nth(0)).toContainText("Ship to Production");
+    await expect(rows.nth(1)).toHaveAttribute("data-to", "staging");
+    await expect(rows.nth(1)).toContainText("Promote to Staging");
   });
 
   test("lanes list their tasks", async ({ page }) => {
@@ -44,29 +53,45 @@ test.describe("releases", () => {
     await expect(page.getByTestId("lane-staging")).toContainText("Refactor auth");
   });
 
-  test("dev + staging have promote buttons; production does not", async ({ page }) => {
+  test("the single promote action lives in the ship rows, not the lane cards", async ({ page }) => {
     await mock(page);
     await page.goto("/releases");
+    // Two ready promotions → two buttons, both in the ship panel. Lane cards are
+    // read-only status (no duplicate buttons).
     await expect(page.getByTestId("promote-btn")).toHaveCount(2);
+    await expect(page.getByTestId("lane-dev").getByTestId("promote-btn")).toHaveCount(0);
     await expect(page.getByTestId("lane-prod").getByTestId("promote-btn")).toHaveCount(0);
-    await expect(page.getByTestId("lane-dev").getByTestId("promote-btn")).toContainText("Promote to Staging");
+    // The dev card notes what's queued upward instead.
+    await expect(page.getByTestId("lane-dev").getByTestId("lane-awaiting")).toContainText("awaiting promotion");
   });
 
-  test("Promote opens the env PR and shows the promotion PR note", async ({ page }) => {
+  test("Promote auto-merges the env PR and shows the promoted note", async ({ page }) => {
     let promoted: { from_env?: string; to_env?: string } | null = null;
     await mock(page);
     await page.route("**/api/projects/*/promote", (r) => {
       promoted = r.request().postDataJSON();
-      return r.fulfill({ json: { pr_number: 42, pr_url: "https://gh/pr/42" } });
+      return r.fulfill({ json: { pr_number: 42, pr_url: "https://gh/pr/42", merged: true, merge_commit: "abc123" } });
     });
     await page.goto("/releases");
-    await page.getByTestId("lane-dev").getByTestId("promote-btn").click();
+    await page.getByTestId("promote-btn").filter({ hasText: "Promote to Staging" }).click();
     await expect.poll(() => promoted?.from_env).toBe("dev");
     await expect.poll(() => promoted?.to_env).toBe("staging");
+    await expect(page.getByTestId("promotion-pr")).toContainText("Promoted");
+    await expect(page.getByTestId("promotion-pr")).toContainText("merged");
     await expect(page.getByTestId("promotion-pr")).toContainText("#42");
   });
 
-  test("a lane with nothing awaiting promotion disables its button", async ({ page }) => {
+  test("when auto-merge fails, the note says the PR is open and must be merged", async ({ page }) => {
+    await mock(page);
+    await page.route("**/api/projects/*/promote", (r) =>
+      r.fulfill({ json: { pr_number: 42, pr_url: "https://gh/pr/42", merged: false, merge_error: "checks pending" } }),
+    );
+    await page.goto("/releases");
+    await page.getByTestId("promote-btn").filter({ hasText: "Promote to Staging" }).click();
+    await expect(page.getByTestId("promotion-pr")).toContainText("merge it to finish");
+  });
+
+  test("a lane with nothing awaiting promotion shows no ship row for it", async ({ page }) => {
     // dev task already in staging → nothing to promote from dev.
     await mock(page, {
       dev: [{ run_id: "r1", task_id: "T-1", title: "Done", merge_commit: "x", env_dev_at: "2026-01-03", env_staging_at: "2026-01-04", env_prod_at: null }],
@@ -74,6 +99,8 @@ test.describe("releases", () => {
       prod: [],
     });
     await page.goto("/releases");
-    await expect(page.getByTestId("lane-dev").getByTestId("promote-btn")).toBeDisabled();
+    await expect(page.getByTestId("ship-row")).toHaveCount(0);
+    await expect(page.getByTestId("ship-panel")).toContainText("Everything’s promoted");
+    await expect(page.getByTestId("lane-dev").getByTestId("lane-awaiting")).toHaveCount(0);
   });
 });

@@ -136,20 +136,16 @@ test.describe("backlog", () => {
     }
   });
 
-  test("card foot shows the building pill when status is building", async ({ page }) => {
-    await expect(page.locator('[data-testid="task-card"] .tc-foot .avatar')).toHaveCount(0);
-    const wip = page.locator('[data-testid="task-card"]', { hasText: "WIP task" });
-    await expect(wip.locator(".tc-foot")).toContainText("building");
+  test("ready card shows the Ready status beside the title", async ({ page }) => {
     const ready = page.locator('[data-testid="task-card"]', { hasText: "Ready task" });
-    await expect(ready.locator(".tc-foot")).toContainText("ready");
+    await expect(ready.getByTestId("tc-startable")).toContainText("Ready");
   });
 
-  test("a task with a waiting gate shows the amber 'waiting on you' card + Review link", async ({ page }) => {
+  test("a task with a waiting gate shows the 'Waiting on you' status beside the title", async ({ page }) => {
     const wip = page.locator('[data-testid="task-card"]', { hasText: "WIP task" });
     const review = wip.getByTestId("card-gate-review");
     await expect(review).toBeVisible();
-    await expect(review).toContainText("Review");
-    await expect(wip).toContainText("waiting on you");
+    await expect(review).toContainText("Waiting on you");
   });
 
   test("a shipped card shows env badges for the envs its run reached", async ({ page }) => {
@@ -197,6 +193,6 @@ test.describe("backlog", () => {
     const cardA = page.locator('[data-testid="task-card"]', { hasText: "Backend model" });
     const cardB = page.locator('[data-testid="task-card"]', { hasText: "API endpoints" });
     await expect(cardA.getByTestId("tc-startable")).toBeVisible();
-    await expect(cardB.getByTestId("tc-blocked")).toContainText("blocked by 1");
+    await expect(cardB.getByTestId("tc-blocked")).toContainText("Blocked");
   });
 });

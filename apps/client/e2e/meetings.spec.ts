@@ -29,7 +29,7 @@ test.describe("meetings (real)", () => {
     await page.route("**/api/projects", (r) => r.fulfill({ json: { projects: [PROJECT] } }));
     await page.route("**/api/meetings**", (r) => r.fulfill({ json: { meetings: [] } }));
     await page.goto("/meetings");
-    await expect(page.getByText("No meetings captured yet.")).toBeVisible();
+    await expect(page.getByText("No meetings yet")).toBeVisible();
     await expect(page.getByTestId("meetings")).toHaveCount(0);
   });
 
@@ -60,7 +60,7 @@ test.describe("meetings (real)", () => {
     });
 
     await page.goto("/meetings");
-    await expect(page.getByText("No meetings captured yet.")).toBeVisible();
+    await expect(page.getByText("No meetings yet")).toBeVisible();
 
     await page.getByTestId("ingest-meeting").click();
     await page.getByTestId("ingest-sample").filter({ hasText: "Todo App" }).click();

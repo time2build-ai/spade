@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Lifecycle + Task-Type Router — Test Guide</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171c22; --panel2:#1d232b; --bd:#28303a;
+    --tx:#e8ebee; --tx2:#aab3bd; --tx3:#7c8794;
+    --accent:#6ea8fe; --green:#3ecf8e; --amber:#e5a84b; --pink:#e06b9a; --purple:#c98bff; --red:#e0655f;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --panel:#ffffff; --panel2:#f0f2f5; --bd:#dce1e7;
+      --tx:#1a1f26; --tx2:#4a5560; --tx3:#79838f; --accent:#2f6fe0; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:0 0 120px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 22px}
+  header{padding:44px 22px 26px;background:linear-gradient(180deg,var(--panel),transparent);border-bottom:1px solid var(--bd);margin-bottom:30px}
+  header .wrap{padding:0}
+  h1{font-size:29px;margin:0 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--tx2);font-size:16px;margin:0}
+  .prog{margin-top:18px;height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;border:1px solid var(--bd)}
+  .prog>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .3s}
+  .progtxt{font-size:13px;color:var(--tx3);margin-top:8px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--amber);margin:38px 0 4px}
+  .trackcard{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:20px 22px;margin:14px 0 8px}
+  .tracktitle{font-size:20px;font-weight:650;margin:0 0 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pill{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid;letter-spacing:.02em}
+  .pill.easy{color:var(--green);border-color:var(--green)}
+  .pill.mid{color:var(--purple);border-color:var(--purple)}
+  .pill.deep{color:var(--amber);border-color:var(--amber)}
+  .lead{color:var(--tx2);margin:2px 0 0}
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:18px 0 0}
+  li.step{counter-increment:s;position:relative;padding:16px 16px 16px 60px;margin:12px 0;
+    background:var(--panel);border:1px solid var(--bd);border-radius:12px;transition:opacity .2s}
+  li.step::before{content:counter(s);position:absolute;left:16px;top:16px;width:30px;height:30px;
+    display:flex;align-items:center;justify-content:center;border-radius:50%;
+    background:var(--panel2);border:1px solid var(--bd);font-weight:700;font-size:14px;color:var(--accent)}
+  li.step.done{opacity:.5}
+  li.step.done::before{background:var(--green);color:#04150d;border-color:var(--green);content:"✓"}
+  .step .do{font-weight:600;margin:0 0 4px}
+  .step .do b{color:var(--accent)}
+  .see{margin:10px 0 0;padding:10px 12px;background:var(--panel2);border-left:3px solid var(--green);border-radius:0 8px 8px 0;font-size:14.5px;color:var(--tx2)}
+  .see b{color:var(--green)}
+  .chk{margin-top:12px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--tx3);user-select:none}
+  .chk input{width:17px;height:17px;accent-color:var(--green);cursor:pointer}
+  code,kbd{background:var(--panel2);border:1px solid var(--bd);border-radius:5px;padding:1px 6px;font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tx)}
+  .cmd{display:block;background:#0a0d11;border:1px solid var(--bd);border-radius:8px;padding:11px 14px;margin:10px 0 0;
+    font:13.5px/1.6 ui-monospace,Menlo,monospace;color:#cfe4ff;overflow-x:auto}
+  @media (prefers-color-scheme: light){.cmd{background:#0f1216;color:#cfe4ff}}
+  .note{background:color-mix(in srgb,var(--amber) 12%,transparent);border:1px solid color-mix(in srgb,var(--amber) 40%,transparent);
+    border-radius:10px;padding:12px 15px;margin:14px 0;font-size:14.5px;color:var(--tx)}
+  .note b{color:var(--amber)}
+  .stop{background:color-mix(in srgb,var(--red) 12%,transparent);border:1px solid color-mix(in srgb,var(--red) 40%,transparent);
+    border-radius:10px;padding:12px 15px;margin:14px 0;font-size:14.5px}
+  .stop b{color:var(--red)}
+  .cols{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0}
+  .col{font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--bd);background:var(--panel2);color:var(--tx2)}
+  .col.a{border-color:var(--amber);color:var(--amber)}
+  .kinds{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+  .kind{font-size:12.5px;padding:3px 10px;border-radius:6px;border:1px solid}
+  .k-code{color:var(--accent);border-color:var(--accent)}
+  .k-res{color:var(--purple);border-color:var(--purple)}
+  .k-doc{color:var(--green);border-color:var(--green)}
+  footer{color:var(--tx3);font-size:13px;text-align:center;margin-top:40px}
+  a{color:var(--accent)}
+  .big{font-size:17px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🧪 Task Lifecycle + Router — Test Guide</h1>
+    <p class="sub">Follow the steps in order. Tick each box. If something's off, stop and tell Claude exactly what you saw. Two things to test: the <b>router</b> (tasks get a kind) and each <b>kind's lifecycle</b>.</p>
+    <div class="prog"><i id="bar"></i></div>
+    <div class="progtxt"><span id="donecount">0</span> of <span id="total">0</span> steps done</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="note big">
+    👉 <b>Start here.</b> Do <b>Track A</b> first (5 min, no setup). Then the low-friction win is <b>Track C — Research</b> or <b>Track D — Docs</b>: those need <b>no GitHub repo</b>, just a Claude account in the pool. <b>Track B — Code</b> is the full worktree/PR/merge flow and needs a throwaway repo.
+  </div>
+
+  <div class="trackcard">
+    <div class="tracktitle">🧭 Three kinds of task</div>
+    <p class="lead">The router reads each task's title + description and suggests a kind. Each kind runs its own lifecycle:</p>
+    <div class="kinds">
+      <span class="kind k-code">✨ Code — brainstorm → build in a worktree → PR → merge (needs a repo)</span>
+      <span class="kind k-res">🔬 Research — scope → parallel investigators → synthesis → report (no repo)</span>
+      <span class="kind k-doc">📄 Docs — outline → draft → shareable styled document (no repo)</span>
+    </div>
+  </div>
+
+  <!-- ===== TRACK A ===== -->
+  <h2>Track A</h2>
+  <div class="trackcard">
+    <div class="tracktitle">👀 Quick visual tour <span class="pill easy">EASY · ~5 min</span></div>
+    <p class="lead">Start the app and look at the new screens. Nothing can break, no setup.</p>
+  </div>
+  <ol class="steps">
+    <li class="step">
+      <p class="do"><b>Start the app</b> from your terminal.</p>
+      <span class="cmd">cd /Users/thiagolopez/time2build/projects/tui-pilot
+make dev</span>
+      <div class="see"><b>You should see:</b> two servers boot; it prints the <b>UI</b> URL. Open it (usually <code>http://localhost:8766</code>). Leave the terminal running.</div>
+      <label class="chk"><input type="checkbox"> App running</label>
+    </li>
+    <li class="step">
+      <p class="do">Click <b>Backlog</b>. The board now has <b>5 universal columns</b> that every kind shares:</p>
+      <div class="cols"><span class="col">Ready</span><span class="col a">Planning</span><span class="col">In progress</span><span class="col a">Review</span><span class="col">Done</span></div>
+      <div class="see"><b>You should see:</b> task cards carry a <b>kind badge</b> — ✨ Code, 🔬 Research, or 📄 Docs. Amber columns (Planning, Review) are where work waits on <b>you</b>.</div>
+      <label class="chk"><input type="checkbox"> 5 columns + kind badges</label>
+    </li>
+    <li class="step">
+      <p class="do">Look at an <b>untyped</b> task (or a fresh one). It shows the router's <b>suggested kind</b> with a confirm / override control. There's also an <b>"Auto-tag untyped"</b> action.</p>
+      <div class="see"><b>You should see:</b> a suggestion chip (e.g. "suggested: 🔬 Research") you can accept or change. Auto-tag classifies every untyped backlog task at once.</div>
+      <label class="chk"><input type="checkbox"> Router suggestion + auto-tag present</label>
+    </li>
+    <li class="step">
+      <p class="do">Check the <b>filter</b> (All / Code / Research / Docs) and the <b>"Waiting on you"</b> view.</p>
+      <div class="see"><b>You should see:</b> filtering narrows the board to one kind; "Waiting on you" shows only cards sitting at a gate — your one-glance "what needs me?" list.</div>
+      <label class="chk"><input type="checkbox"> Filter + waiting-on-you work</label>
+    </li>
+    <li class="step">
+      <p class="do">Visit <b>Releases</b> (PLAN menu) and <b>Settings → Repository</b>.</p>
+      <div class="see"><b>You should see:</b> Releases has Development / Staging / Production lanes with Promote buttons (Code only); Settings has the Repo SSH URL + branch fields.</div>
+      <label class="chk"><input type="checkbox"> Releases + Repository settings there</label>
+    </li>
+  </ol>
+  <div class="note">✅ <b>Track A done.</b> If all boxes are ticked, the router + universal board are wired. Now drive one real task — <b>Research (C)</b> and <b>Docs (D)</b> are the easy ones (no repo).</div>
+
+  <!-- ===== TRACK C — RESEARCH ===== -->
+  <h2>Track C · 🔬 Research</h2>
+  <div class="trackcard">
+    <div class="tracktitle">Watch parallel research + synthesis <span class="pill mid">MEDIUM · no repo</span></div>
+    <p class="lead">A research task splits into angles, runs investigators in parallel, and a manager synthesizes one report. Needs a Claude account in the <b>Agent pool</b> — <b>no GitHub repo</b>.</p>
+  </div>
+  <ol class="steps">
+    <li class="step">
+      <p class="do">Create a task like <b>"Research: how does our auth flow work?"</b> (or a general one). Confirm the router's <b>🔬 Research</b> suggestion (or set it), then click <b>Start</b>.</p>
+      <div class="see"><b>You should see:</b> it starts with <b>no repo required</b> and lands in <b>Planning</b> (scoping).</div>
+      <label class="chk"><input type="checkbox"> Research task started</label>
+    </li>
+    <li class="step">
+      <p class="do">Wait for the <b>Scope gate</b> (amber). Open the task and read the proposed <b>research plan</b> (the angles). Approve it (or request changes).</p>
+      <div class="see"><b>You should see:</b> a plan artifact listing N angles; approving fans out one investigator per angle. The card shows <b>▶ N agents</b> while they run.</div>
+      <label class="chk"><input type="checkbox"> Approved the scope / angles</label>
+    </li>
+    <li class="step">
+      <p class="do">Let the investigators finish. A <b>research manager</b> then synthesizes them. Wait for the <b>Review gate</b>.</p>
+      <div class="see"><b>You should see:</b> per-angle <b>findings</b> grouped under a final <b>report</b> on the task. Read the report; approve to deliver.</div>
+      <label class="chk"><input type="checkbox"> Read the report, approved</label>
+    </li>
+    <li class="step">
+      <p class="do">Confirm delivery.</p>
+      <div class="see"><b>You should see:</b> the task moves to <b>Done → delivered ✓</b>, with the report + findings pinned, and any proposed follow-up tasks / brain nodes created.</div>
+      <label class="chk"><input type="checkbox"> Research delivered</label>
+    </li>
+  </ol>
+
+  <!-- ===== TRACK D — DOCS ===== -->
+  <h2>Track D · 📄 Docs</h2>
+  <div class="trackcard">
+    <div class="tracktitle">Produce a client deliverable <span class="pill mid">MEDIUM · no repo</span></div>
+    <p class="lead">A docs task drafts a styled, shareable document (SOW or Explainer) with diagrams. Needs an agent account — <b>no repo</b>.</p>
+  </div>
+  <ol class="steps">
+    <li class="step">
+      <p class="do">Create <b>"Write a SOW for the Q3 mobile project"</b>. Confirm <b>📄 Docs</b> (the router also suggests the template — SOW vs Explainer). Click <b>Start</b>.</p>
+      <div class="see"><b>You should see:</b> it starts (no repo) and lands in <b>Planning</b> (outline).</div>
+      <label class="chk"><input type="checkbox"> Docs task started</label>
+    </li>
+    <li class="step">
+      <p class="do">Wait for the <b>Outline gate</b>. Review the section structure and approve (or request changes — saves rework before the full draft).</p>
+      <div class="see"><b>You should see:</b> an outline artifact for the chosen template; approving moves it to drafting.</div>
+      <label class="chk"><input type="checkbox"> Approved the outline</label>
+    </li>
+    <li class="step">
+      <p class="do">Let it draft, then hit the <b>Review gate</b>. Open the <b>doc</b> artifact — it renders as a styled document (with diagrams).</p>
+      <div class="see"><b>You should see:</b> a polished, theme-aware document in a preview, plus <b>"Open document ↗"</b> and a <b>share link</b>. Approve to deliver.</div>
+      <label class="chk"><input type="checkbox"> Reviewed the styled doc, approved</label>
+    </li>
+    <li class="step">
+      <p class="do">Open the <b>share link</b> in a new tab.</p>
+      <div class="see"><b>You should see:</b> the standalone styled document at <code>/api/doc/…</code> — hand-to-a-client ready, and safe (locked, no scripts). Task is <b>delivered ✓</b>.</div>
+      <label class="chk"><input type="checkbox"> Shareable doc opens</label>
+    </li>
+  </ol>
+
+  <!-- ===== TRACK B — CODE ===== -->
+  <h2>Track B · ✨ Code</h2>
+  <div class="trackcard">
+    <div class="tracktitle">Drive a code task start-to-finish <span class="pill deep">DEEP · needs a repo</span></div>
+    <p class="lead">The full brainstorm → worktree build → test → PR → review → merge → ship flow.</p>
+  </div>
+  <div class="stop"><b>Needs first:</b> a <b>throwaway GitHub repo</b> with a <code>development</code> branch, <code>gh</code> logged in, and a Claude account in the pool. Set the repo in <b>Settings → Repository</b>. If any is missing, tell Claude.</div>
+  <ol class="steps">
+    <li class="step">
+      <p class="do">Create a small code task (e.g. <b>"Add a dark-mode toggle"</b>), confirm <b>✨ Code</b>, set the repo, and <b>Start</b>.</p>
+      <div class="see"><b>You should see:</b> it enters <b>Planning</b> (shaping: brainstorm → spec → plan) in its own worktree.</div>
+      <label class="chk"><input type="checkbox"> Code task started</label>
+    </li>
+    <li class="step">
+      <p class="do">Approve the <b>Plan gate</b> → let it build → do the hands-on <b>Manual-test gate</b> (follow its test guide) → approve.</p>
+      <div class="see"><b>You should see:</b> spec + plan + a kid-simple test guide as artifacts; the task moves through Building → PR review.</div>
+      <label class="chk"><input type="checkbox"> Plan + manual-test approved</label>
+    </li>
+    <li class="step">
+      <p class="do">A PR opens on GitHub; review findings + fixes are applied. Approve the <b>Merge gate</b>.</p>
+      <div class="see"><b>You should see:</b> the branch merges to <b>development</b>, task → <b>Shipped</b> with a <b>dev</b> badge. Promote it on the Releases page to reach staging.</div>
+      <label class="chk"><input type="checkbox"> Merged + shipped</label>
+    </li>
+  </ol>
+
+  <div class="note big">🎉 <b>All done.</b> If a task of each kind reached its terminal state with you clearing the gates, the whole thing works. If any task landed in a red <b>Blocked</b> banner, open it — the activity notes explain exactly what happened — and tell Claude.</div>
+  <footer>Task Lifecycle V2 + Task-Type Router · manual test guide</footer>
+</div>
+
+<script>
+  const boxes=[...document.querySelectorAll('.chk input')],bar=document.getElementById('bar'),dc=document.getElementById('donecount');
+  document.getElementById('total').textContent=boxes.length;
+  function sync(){let n=0;boxes.forEach(b=>{const li=b.closest('.step');if(b.checked){n++;li.classList.add('done')}else li.classList.remove('done')});dc.textContent=n;bar.style.width=(n/boxes.length*100)+'%';}
+  boxes.forEach(b=>b.addEventListener('change',sync));sync();
+</script>
+</body>
+</html>

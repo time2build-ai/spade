@@ -48,6 +48,73 @@ class GhClient(Protocol):
     def merge(self, cwd: str, pr_number: int, method: str = "squash") -> str: ...
 
 
+def list_remote_branches(repo_ssh_url: str, *, runner_factory=GitRunner) -> list[str]:
+    """List a remote's branch names via ``git ls-remote --heads`` — no clone, no
+    working copy. Lets the settings UI offer a picklist for dev/staging/prod
+    instead of free-text. Raises ``GitError`` on an empty URL or a git failure
+    (bad URL / no access / git missing)."""
+    url = (repo_ssh_url or "").strip()
+    if not url:
+        raise GitError("repo_ssh_url is empty")
+    out = runner_factory(".").run("ls-remote", "--heads", url)
+    branches = []
+    for line in out.splitlines():
+        ref = line.split("\t")[-1].strip()
+        prefix = "refs/heads/"
+        if ref.startswith(prefix):
+            branches.append(ref[len(prefix):])
+    return sorted(set(branches))
+
+
+def create_remote_branches(repo_ssh_url: str, branch_names: list[str], *,
+                           runner_factory=GitRunner) -> list[str]:
+    """Create ``branch_names`` on a remote that has none yet (a fresh/empty repo).
+
+    Clones into a temp dir; if the repo has no commit, makes a minimal initial
+    commit; then creates each branch off that base and pushes it. Existing
+    branches are left as-is. Returns the branch names now on the remote. Raises
+    ``GitError`` on an empty URL / no names / any git failure. Side-effectful:
+    this pushes to the user's remote (their explicit request)."""
+    import os
+    import shutil
+    import tempfile
+
+    url = (repo_ssh_url or "").strip()
+    seen: set[str] = set()
+    names = [n.strip() for n in branch_names if n and n.strip()]
+    names = [n for n in names if not (n in seen or seen.add(n))]  # de-dup, keep order
+    if not url:
+        raise GitError("repo_ssh_url is empty")
+    if not names:
+        raise GitError("no branch names given")
+
+    tmp = tempfile.mkdtemp(prefix="spade-branches-")
+    try:
+        runner_factory(tmp).run("clone", url, "repo")  # empty repo clones with a warning (rc 0)
+        repo = os.path.join(tmp, "repo")
+        r = runner_factory(repo)
+        if r.run_code("rev-parse", "HEAD") != 0:
+            # No commit yet — seed one so branches have something to point at.
+            r.run("checkout", "-b", names[0])
+            with open(os.path.join(repo, "README.md"), "w") as f:
+                f.write("# Repository\n\nInitialized by Spade.\n")
+            r.run("add", "README.md")
+            r.run("-c", "user.email=spade@localhost", "-c", "user.name=Spade",
+                  "commit", "-m", "Initial commit")
+            r.run("push", "-u", "origin", names[0])
+            base = names[0]
+        else:
+            base = r.run("rev-parse", "--abbrev-ref", "HEAD").strip()
+        for n in names:
+            if n == base:
+                continue
+            r.run_code("branch", n, base)  # create locally (no-op if it already exists)
+            r.run("push", "-u", "origin", n)
+        return names
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _slugify(text: str) -> str:
     """Lowercase, ascii-ish, dash-separated slug."""
     text = (text or "").strip().lower()
@@ -128,15 +195,43 @@ def commit_reached_branch(commit: str, branch: str, *, repo_dir: str,
 
 def read_at_branch(repo_path: str, branch: str, *, repo_dir: str,
                    runner_factory=GitRunner) -> str:
-    """Return the contents of `repo_path` at origin/<branch>."""
-    return runner_factory(repo_dir).run("show", f"origin/{branch}:{repo_path}")
+    """Return the contents of `repo_path` at `branch`.
+
+    Tries the LOCAL branch ref first: a feature branch at the plan gate is
+    committed to the worktree's local branch but not pushed to origin yet, so
+    ``origin/<branch>`` doesn't exist. Falls back to ``origin/<branch>`` for
+    pushed / env branches. Raises the origin error if neither resolves."""
+    r = runner_factory(repo_dir)
+    for ref in (branch, f"origin/{branch}"):
+        try:
+            return r.run("show", f"{ref}:{repo_path}")
+        except GitError:
+            continue
+    return r.run("show", f"origin/{branch}:{repo_path}")  # surface the origin error
 
 
 def promote(cfg: dict, from_branch: str, to_branch: str, title: str, body: str, *,
-            repo_dir: str, gh: GhClient) -> dict:
-    """Open a PR promoting from_branch -> to_branch. Returns {pr_number, pr_url}."""
+            repo_dir: str, gh: GhClient, auto_merge: bool = True) -> dict:
+    """Open a PR promoting from_branch -> to_branch and (auto_merge) merge it so the
+    promotion actually lands. Returns {pr_number, pr_url, merged, merge_commit?,
+    merge_error?}.
+
+    Merges with `--merge` (a merge commit, not squash) so the promoted commits stay
+    ancestors of the target env branch, and the gh-level merge does NOT delete the
+    head branch — env branches like 'development'/'staging' must survive. If the
+    merge fails (branch protection, required checks pending, conflicts), the PR is
+    left open and we return merged=False with the error, so the caller can tell the
+    user "PR opened — merge it to finish"."""
     res = gh.create_pr(repo_dir, to_branch, from_branch, title, body)
-    return {"pr_number": res["number"], "pr_url": res["url"]}
+    out: dict = {"pr_number": res["number"], "pr_url": res["url"], "merged": False}
+    if auto_merge:
+        try:
+            sha = gh.merge(repo_dir, res["number"], method="merge")
+            out["merged"] = True
+            out["merge_commit"] = sha
+        except GitError as e:
+            out["merge_error"] = str(e)
+    return out
 
 
 class RealGh:
@@ -160,6 +255,16 @@ class RealGh:
             cwd=cwd or self.repo_dir, capture_output=True, text=True,
         )
         if result.returncode != 0:
+            # Idempotent: if a PR for this head→base already exists, gh prints
+            # its URL in the error ("...already exists: https://…/pull/N"). Treat
+            # that as success and return the existing PR instead of failing, so a
+            # re-clicked Promote just re-surfaces the open promotion PR.
+            combined = (result.stderr or "") + (result.stdout or "")
+            if "already exists" in combined.lower():
+                m = re.search(r"https?://\S+/pull/\d+", combined)
+                if m:
+                    url = m.group().rstrip(".,)\"'")
+                    return {"number": _pr_number_from_url(url), "url": url}
             raise GitError(result.stderr)
         lines = [ln.strip() for ln in (result.stdout or "").splitlines() if ln.strip()]
         if not lines:
@@ -177,15 +282,24 @@ class RealGh:
             raise GitError(result.stderr)
 
     def merge(self, cwd: str, pr_number: int, method: str = "squash") -> str:
+        run_cwd = cwd or self.repo_dir
+        # No `--delete-branch`: it makes gh switch the worktree to the base branch
+        # after merging, which collides with the base branch already being checked
+        # out in the main clone ("'development' is already used by worktree").
+        # gitops.merge() removes the worktree + local/remote branch itself.
         merge_result = subprocess.run(
-            ["gh", "pr", "merge", str(pr_number), f"--{method}", "--delete-branch"],
-            cwd=cwd or self.repo_dir, capture_output=True, text=True,
+            ["gh", "pr", "merge", str(pr_number), f"--{method}"],
+            cwd=run_cwd, capture_output=True, text=True,
         )
         if merge_result.returncode != 0:
-            raise GitError(merge_result.stderr)
+            # Idempotent: an already-merged PR is not a failure — fall through and
+            # read the merge commit so a retry after a partial failure completes.
+            combined = (merge_result.stderr or "") + (merge_result.stdout or "")
+            if "already merged" not in combined.lower():
+                raise GitError(merge_result.stderr)
         view = subprocess.run(
             ["gh", "pr", "view", str(pr_number), "--json", "mergeCommit"],
-            cwd=cwd or self.repo_dir, capture_output=True, text=True,
+            cwd=run_cwd, capture_output=True, text=True,
         )
         if view.returncode != 0:
             raise GitError(view.stderr)

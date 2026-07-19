@@ -1,11 +1,11 @@
 // Capture real screenshots of the seeded "snip" app for the visual guide.
-//   node scripts/shots.mjs            (expects the app at SHOT_BASE, default :3001)
+//   node scripts/shots.mjs            (expects the app at SHOT_BASE, default :8766)
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-const BASE = process.env.SHOT_BASE ?? "http://localhost:3000";
+const BASE = process.env.SHOT_BASE ?? `http://localhost:${process.env.UI_PORT ?? "8766"}`;
 const PROJECT = process.env.SHOT_PROJECT ?? "snip";
 const PREFIX = process.env.SHOT_PREFIX ?? "";
 const ONLY = process.env.SHOT_ONLY ? process.env.SHOT_ONLY.split(",") : null;

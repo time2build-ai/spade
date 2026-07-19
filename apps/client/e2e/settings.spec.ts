@@ -25,11 +25,9 @@ test.describe("settings", () => {
     await expect(page.getByTestId("settings")).toBeVisible();
   });
 
-  test("renders grouped toggle rows + shows the real strategy/ceiling", async ({ page }) => {
+  test("renders the advanced groups + the autopilot essential row", async ({ page }) => {
     await expect(page.getByTestId("set-group")).toHaveCount(4);
-    await expect(page.getByTestId("set-row").first()).toBeVisible();
-    await expect(page.getByTestId("settings")).toContainText("round_robin");
-    await expect(page.getByTestId("settings")).toContainText("opus");
+    await expect(page.getByTestId("set-row").first()).toBeVisible(); // autopilot essential
   });
 
   test("autopilot reflects the real project field and toggles", async ({ page }) => {
@@ -53,11 +51,10 @@ test.describe("settings", () => {
     expect(patched!.body).toEqual({ autopilot: 0 });
   });
 
-  test("the groups fill the full width (grid, not a narrow column)", async ({ page }) => {
+  test("advanced settings span the full content width", async ({ page }) => {
     const groups = page.locator(".set-groups");
     await expect(groups).toBeVisible();
     const box = (await groups.boundingBox())!;
-    // spans most of the content area (>1000px on the desktop viewport), not capped at 760
     expect(box.width).toBeGreaterThan(1000);
   });
 

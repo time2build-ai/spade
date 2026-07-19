@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spade — Build Your First Project</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171c22; --panel2:#1d232b; --bd:#28303a;
+    --tx:#e8ebee; --tx2:#aab3bd; --tx3:#7c8794;
+    --accent:#6ea8fe; --green:#3ecf8e; --amber:#e5a84b; --pink:#e06b9a; --purple:#c98bff; --red:#e0655f;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --panel:#ffffff; --panel2:#eef1f5; --bd:#dce1e7;
+      --tx:#1a1f26; --tx2:#4a5560; --tx3:#79838f; --accent:#2f6fe0; }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--tx);overflow:hidden;
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+
+  /* progress bar */
+  #top{position:fixed;top:0;left:0;right:0;height:4px;background:var(--panel2);z-index:30}
+  #top>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .35s}
+
+  /* deck */
+  .deck{position:relative;height:100%;width:100%}
+  .slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+    align-items:center;padding:64px 40px 92px;opacity:0;visibility:hidden;
+    transform:translateY(14px);transition:opacity .4s ease,transform .4s ease,visibility .4s;
+    overflow-y:auto}
+  .slide.active{opacity:1;visibility:visible;transform:none}
+  .inner{max-width:840px;width:100%}
+  .center{text-align:center}
+
+  .kick{font-size:12.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--amber);font-weight:700;margin-bottom:14px}
+  .kick.b{color:var(--accent)} .kick.g{color:var(--green)} .kick.p{color:var(--purple)}
+  h1{font-size:clamp(30px,5.5vw,52px);letter-spacing:-.03em;line-height:1.05;margin-bottom:16px}
+  h2{font-size:clamp(24px,3.6vw,34px);letter-spacing:-.02em;margin-bottom:10px}
+  .lead{font-size:clamp(16px,2vw,19px);color:var(--tx2);max-width:640px}
+  .center .lead{margin-inline:auto}
+  .big{font-size:20px}
+
+  .pills{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:22px}
+  .kind{font-size:13.5px;padding:5px 13px;border-radius:8px;border:1px solid;font-weight:600}
+  .k-code{color:var(--accent);border-color:var(--accent)} .k-res{color:var(--purple);border-color:var(--purple)} .k-doc{color:var(--green);border-color:var(--green)}
+
+  /* generic card */
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:20px 22px;text-align:left}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}
+  @media (max-width:680px){.grid2{grid-template-columns:1fr}}
+
+  /* numbered mini-steps */
+  .steps{display:flex;flex-direction:column;gap:12px;margin-top:24px;text-align:left}
+  .st{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:15px 18px}
+  .st .n{flex:0 0 30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--bd);
+    color:var(--accent);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .st .t{font-size:15.5px} .st .t b{color:var(--accent)} .st .t .s{display:block;color:var(--tx2);font-size:14px;margin-top:2px}
+
+  /* model chain */
+  .chain{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:26px}
+  .chain .box{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px 15px;font-weight:600;font-size:14.5px}
+  .chain .box.gate{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:color-mix(in srgb,var(--amber) 45%,transparent);color:var(--amber)}
+  .chain .ar{color:var(--tx3)}
+
+  /* board mockup */
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:24px}
+  .lane{background:var(--panel2);border:1px solid var(--bd);border-radius:10px;padding:8px 8px 12px;min-height:120px}
+  .lane h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);text-align:center;margin-bottom:8px;font-weight:700}
+  .lane.a{border-color:color-mix(in srgb,var(--amber) 50%,transparent)} .lane.a h4{color:var(--amber)}
+  .tk{background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:7px 8px;margin-bottom:6px;font-size:11.5px;line-height:1.3}
+  .tk .kb{font-size:10px;font-weight:700;display:inline-block;padding:1px 6px;border-radius:5px;border:1px solid;margin-bottom:4px}
+  @media (max-width:680px){.board{grid-template-columns:1fr;gap:6px}.lane{min-height:0}}
+
+  /* single task card mockup */
+  .taskcard{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;max-width:360px;margin:22px auto 0;text-align:left}
+  .taskcard .kb{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;border:1px solid;display:inline-block;margin-bottom:8px}
+  .taskcard .ti{font-weight:650;font-size:15px;margin-bottom:12px}
+  .sugg{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--tx2);border-top:1px dashed var(--bd);padding-top:11px}
+  .sugg .cf{background:var(--green);color:#04150d;font-weight:700;border:none;border-radius:6px;padding:3px 10px;font-size:12.5px}
+  .sugg .ov{background:var(--panel2);border:1px solid var(--bd);border-radius:6px;padding:3px 8px;font-size:13px}
+
+  /* gate bar mockup */
+  .gate{max-width:520px;margin:22px auto 0;background:color-mix(in srgb,var(--amber) 10%,transparent);
+    border:1px solid color-mix(in srgb,var(--amber) 45%,transparent);border-radius:12px;padding:16px 18px;text-align:left}
+  .gate .gh{font-weight:700;color:var(--amber);margin-bottom:6px}
+  .gate .gb{display:flex;gap:10px;margin-top:12px}
+  .btn{border-radius:8px;padding:8px 16px;font-weight:650;font-size:14px;border:1px solid var(--bd)}
+  .btn.ok{background:var(--accent);color:#04150d;border:none} .btn.no{background:var(--panel);color:var(--tx2)}
+
+  /* example callout */
+  .ex{margin-top:22px;background:color-mix(in srgb,var(--accent) 10%,transparent);
+    border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:13px 16px;text-align:left}
+  .ex b{color:var(--accent)} .ex .q{font-style:italic;color:var(--tx)}
+  .see{margin-top:14px;background:var(--panel2);border-left:3px solid var(--green);border-radius:0 10px 10px 0;padding:12px 15px;text-align:left;font-size:15px;color:var(--tx2)}
+  .see b{color:var(--green)}
+  code,kbd{background:var(--panel2);border:1px solid var(--bd);border-radius:5px;padding:1px 6px;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tx)}
+  .term{display:inline-block;background:#0a0d11;border:1px solid var(--bd);border-radius:8px;padding:9px 16px;margin-top:20px;
+    font:14px/1.6 ui-monospace,Menlo,monospace;color:#cfe4ff}
+
+  .fine{color:var(--tx3);font-size:13.5px;margin-top:18px}
+
+  /* nav chrome */
+  #dots{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);display:flex;gap:9px;z-index:30}
+  #dots b{width:8px;height:8px;border-radius:50%;background:var(--bd);cursor:pointer;transition:all .25s}
+  #dots b.on{background:var(--accent);transform:scale(1.35)}
+  .navbtn{position:fixed;bottom:20px;z-index:30;background:var(--panel);border:1px solid var(--bd);color:var(--tx);
+    width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+  .navbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .navbtn:disabled{opacity:.3;cursor:default}
+  #prev{right:74px} #next{right:22px}
+  #count{position:fixed;bottom:31px;left:26px;z-index:30;color:var(--tx3);font-size:13px;font-variant-numeric:tabular-nums}
+  #hint{position:fixed;top:16px;right:20px;z-index:30;color:var(--tx3);font-size:12px}
+</style>
+</head>
+<body>
+<div id="top"><i id="bar"></i></div>
+<div id="hint">← → to navigate</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · TITLE -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick">Getting started · ~15 min</div>
+      <h1>🚀 Build your first<br>project with Spade</h1>
+      <p class="lead">Spade turns intentions into shipped work — and keeps you in control at every key moment. We'll follow one real client project from empty screen to delivered.</p>
+      <div class="term">make dev&nbsp;&nbsp;→&nbsp;&nbsp;http://localhost:8766</div>
+      <p class="fine">Use the arrow keys, the dots below, or the ›/‹ buttons.</p>
+    </div>
+  </section>
+
+  <!-- 2 · THE SCENARIO -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick g">Your example project</div>
+      <h1>🌿 Meet Verde</h1>
+      <p class="lead">You just signed a new client — <b>Verde</b>, a plant-care mobile app. Three things land on your plate this week. Each is a different <b>kind</b> of work, and Spade handles each its own way:</p>
+      <div class="pills">
+        <span class="kind k-res">🔬 Which plant-ID approach?</span>
+        <span class="kind k-doc">📄 Write the SOW</span>
+        <span class="kind k-code">✨ Add a reminder toggle</span>
+      </div>
+      <p class="fine">We'll set Spade up, put these on the board, and ship all three.</p>
+    </div>
+  </section>
+
+  <!-- 3 · MENTAL MODEL -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick b">The whole idea, once</div>
+      <h2>Project → Tasks → Gates</h2>
+      <p class="lead">Agents do the work. A <b>gate</b> is a deliberate pause where Spade waits for your call — nothing ships without you.</p>
+      <div class="chain">
+        <span class="box">🌿 Project</span><span class="ar">→</span>
+        <span class="box">Tasks</span><span class="ar">→</span>
+        <span class="box">a <b>kind</b></span><span class="ar">→</span>
+        <span class="box">its <b>lifecycle</b></span><span class="ar">→</span>
+        <span class="box gate">you clear gates</span>
+      </div>
+      <div class="pills">
+        <span class="kind k-code">✨ Code — build in a worktree → PR → merge</span>
+        <span class="kind k-res">🔬 Research — scope → investigate → report</span>
+        <span class="kind k-doc">📄 Docs — outline → draft → shareable doc</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · SETUP -->
+  <section class="slide">
+    <div class="inner center">
+      <div class="kick">Part 1 · Setup (once)</div>
+      <h2>Start Spade &amp; connect an account</h2>
+      <p class="lead" style="margin-inline:auto">Agents run as real <code>claude</code> sessions, so Spade needs one account in its pool first.</p>
+    </div>
+    <div class="inner">
+      <div class="steps">
+        <div class="st"><div class="n">1</div><div class="t"><b>Run <code>make dev</code></b> and open <code>localhost:8766</code>.<span class="s">You land on Home — a triage dashboard, empty for now.</span></div></div>
+        <div class="st"><div class="n">2</div><div class="t">Open <b>Agents pool</b> → <b>Scan</b> then <b>Import</b> a local login (or <b>Add / Login</b> fresh).<span class="s">One account row appears — mark it default. That's the pool agents draw from.</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · CREATE PROJECT -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick">Part 2 · Your project</div>
+      <h2>Create “Verde”</h2>
+      <p class="lead">From the <b>project switcher</b> in the top bar → <b>New project</b>. Two fields, done.</p>
+      <div class="taskcard" style="max-width:380px">
+        <div style="font-size:13px;color:var(--tx3);margin-bottom:8px">▾ New project</div>
+        <div style="font-size:13px;color:var(--tx2);margin-bottom:4px">Name</div>
+        <div style="background:var(--panel2);border:1px solid var(--bd);border-radius:7px;padding:7px 10px;margin-bottom:10px">Verde</div>
+        <div style="font-size:13px;color:var(--tx2);margin-bottom:4px">Path</div>
+        <div style="background:var(--panel2);border:1px solid var(--bd);border-radius:7px;padding:7px 10px;font-size:13px;color:var(--tx3)">~/.spade/projects/verde</div>
+        <div style="margin-top:12px"><span class="btn ok">Create</span> <span style="color:var(--tx3);font-size:12.5px;margin-left:8px">id: verde</span></div>
+      </div>
+      <p class="fine">A repo is only needed later, for the <b>Code</b> task (Settings → Repository).</p>
+    </div>
+  </section>
+
+  <!-- 6 · SEED TASKS -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick">Part 3 · Fill the board</div>
+      <h2>Where tasks come from</h2>
+      <p class="lead">There's no “New task” button on purpose — tasks are <b>grounded</b> in a real source.</p>
+      <div class="grid2">
+        <div class="card"><div style="font-weight:700;margin-bottom:6px">🎙️ Meetings</div><div style="color:var(--tx2);font-size:15px">Ingest a transcript (built-in samples included). Each action item becomes a task — with the quote it came from.</div></div>
+        <div class="card"><div style="font-weight:700;margin-bottom:6px">💬 Ask</div><div style="color:var(--tx2);font-size:15px">Describe the work in plain language. The orchestrator agent <b>proposes a breakdown</b> — tasks, features, and dependencies — for you to review.</div></div>
+      </div>
+      <div class="ex"><b>In Ask, try:</b> <span class="q">“Set up a Verde backlog: research the plant-ID approach, a SOW doc, and add a watering-reminder toggle.”</span></div>
+      <div class="see"><b>You review before anything runs:</b> the agent turns that one line into 3 tasks + 2 feature nodes with a sensible dependency. It's a <b>proposal from its own reasoning</b>, not pulled from existing data — so you check it, then clear the first gate.</div>
+    </div>
+  </section>
+
+  <!-- 7 · THE BOARD -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick">Part 3 · The board</div>
+      <h2>5 columns, every kind</h2>
+      <div class="board">
+        <div class="lane"><h4>Ready</h4>
+          <div class="tk"><span class="kb k-res">🔬</span><br>Plant-ID: on-device vs API?</div>
+          <div class="tk"><span class="kb k-doc">📄</span><br>Verde SOW</div>
+          <div class="tk"><span class="kb k-code">✨</span><br>Reminder toggle</div>
+        </div>
+        <div class="lane a"><h4>Planning</h4></div>
+        <div class="lane"><h4>In progress</h4></div>
+        <div class="lane a"><h4>Review</h4></div>
+        <div class="lane"><h4>Done</h4></div>
+      </div>
+      <p class="lead" style="margin:18px auto 0">Cards carry a <b>kind badge</b>. The two amber columns — <b>Planning</b> &amp; <b>Review</b> — are where work waits on <b>you</b>.</p>
+    </div>
+  </section>
+
+  <!-- 8 · CONFIRM KIND -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick">Part 3 · You decide the kind</div>
+      <h2>Confirm the router's guess</h2>
+      <p class="lead">A keyword <b>router</b> suggests a kind. It's only advice — you confirm or override on the card.</p>
+      <div class="taskcard">
+        <span class="kb k-res">🔬 Research</span>
+        <div class="ti">Plant-ID: on-device model vs a third-party API?</div>
+        <div class="sugg">suggests 🔬 Research <span class="cf">✓ Confirm</span> <span class="ov">✨</span><span class="ov">🔬</span><span class="ov">📄</span></div>
+      </div>
+      <p class="fine"><b>Auto-tag N untyped</b> in the toolbar classifies everything at once. Kind locks once the lifecycle starts.</p>
+    </div>
+  </section>
+
+  <!-- 9 · RESEARCH -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick p">Part 4 · Ship it 🔬</div>
+      <h2>Research — parallel investigators</h2>
+      <div class="chain">
+        <span class="box">Scoping</span><span class="ar">→</span><span class="box gate">Scope gate</span><span class="ar">→</span>
+        <span class="box">▶ N agents</span><span class="ar">→</span><span class="box">Synthesis</span><span class="ar">→</span>
+        <span class="box gate">Review gate</span><span class="ar">→</span><span class="box">Delivered ✓</span>
+      </div>
+      <div class="ex"><b>Verde task:</b> <span class="q">“Research: on-device plant-ID model vs a third-party API — which fits Verde?”</span> → open it → <b>Start lifecycle</b>.</div>
+      <div class="see"><b>What happens:</b> you approve the <b>angles</b> at the scope gate → one investigator fans out per angle (card shows <b>▶ 3 agents</b>) → a manager writes one report → you approve → <b>delivered</b>, with follow-up tasks + brain nodes created. No repo needed.</div>
+    </div>
+  </section>
+
+  <!-- 10 · DOCS -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick g">Part 5 · Ship it 📄</div>
+      <h2>Docs — a shareable deliverable</h2>
+      <div class="chain">
+        <span class="box">Outline</span><span class="ar">→</span><span class="box gate">Outline gate</span><span class="ar">→</span>
+        <span class="box">Drafting</span><span class="ar">→</span><span class="box gate">Review gate</span><span class="ar">→</span>
+        <span class="box">Delivered ✓</span>
+      </div>
+      <div class="ex"><b>Verde task:</b> <span class="q">“Write a SOW for the Verde mobile build”</span> → <b>Start lifecycle</b> (“SOW” picks the SOW template automatically).</div>
+      <div class="see"><b>What happens:</b> approve the <b>outline</b> (cheap to reshape before drafting) → the agent writes a styled, diagram-ready doc → approve → <b>Open document ↗</b> + <b>Copy share link</b>. A standalone, locked-down page at <code>/api/doc/…</code>, ready to hand the client.</div>
+    </div>
+  </section>
+
+  <!-- 11 · CODE -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick b">Part 6 · Ship it ✨</div>
+      <h2>Code — worktree → PR → merge</h2>
+      <div class="chain">
+        <span class="box">Shaping</span><span class="ar">→</span><span class="box gate">Plan gate</span><span class="ar">→</span>
+        <span class="box">Building</span><span class="ar">→</span><span class="box gate">Manual&nbsp;test</span><span class="ar">→</span>
+        <span class="box">PR review</span><span class="ar">→</span><span class="box gate">Merge gate</span><span class="ar">→</span>
+        <span class="box">Shipped</span>
+      </div>
+      <div class="ex"><b>Verde task:</b> <span class="q">“Add a watering-reminder toggle to Verde's settings”</span>. Needs a repo set in <b>Settings → Repository</b> + <code>gh</code> logged in.</div>
+      <div class="see"><b>What happens:</b> approve the <b>plan</b> → it builds on a git worktree &amp; runs tests → you do the hands-on <b>manual-test</b> gate → a <b>PR opens</b> &amp; gets reviewed → approve the <b>merge</b> → <b>Shipped</b> to your dev branch. Promote it on <b>Releases</b>.</div>
+    </div>
+  </section>
+
+  <!-- 12 · GATES -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick">The one interaction to know</div>
+      <h2>Clearing a gate</h2>
+      <p class="lead">Every kind pauses at gates. They all look like this — on the card, the task page, or the <b>Human gates</b> screen.</p>
+      <div class="gate">
+        <div class="gh">Scope review gate — waiting on your call</div>
+        <div style="color:var(--tx2);font-size:14.5px">Read what the agent produced. Approve to continue, or add a comment and request changes to send it back.</div>
+        <div style="background:var(--panel2);border:1px solid var(--bd);border-radius:8px;padding:8px 11px;margin-top:11px;color:var(--tx3);font-size:13.5px">Add a comment (required to request changes)…</div>
+        <div class="gb"><span class="btn ok">Approve</span><span class="btn no">Request changes</span></div>
+      </div>
+      <p class="fine">Toggle <b>“Waiting on you”</b> on the board for a one-glance list of everything that needs you.</p>
+    </div>
+  </section>
+
+  <!-- 13 · DONE -->
+  <section class="slide center">
+    <div class="inner">
+      <div class="kick g">You did it</div>
+      <h1>🎉 Verde shipped</h1>
+      <p class="lead">One project, three kinds of work, all delivered with you clearing the gates. That's the whole engine.</p>
+      <div class="pills">
+        <span class="kind k-res">🔬 Report delivered</span>
+        <span class="kind k-doc">📄 SOW shared</span>
+        <span class="kind k-code">✨ Toggle shipped</span>
+      </div>
+      <p class="fine">Next: explore <b>Releases</b>, the <b>Brain</b> graph, and <b>Home</b>'s cross-project triage. If a task ever lands on a red <b>Blocked</b> banner, open it — the activity notes say exactly why.</p>
+    </div>
+  </section>
+
+</div>
+
+<div id="count"></div>
+<div id="dots"></div>
+<button class="navbtn" id="prev" aria-label="Previous">‹</button>
+<button class="navbtn" id="next" aria-label="Next">›</button>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dots=document.getElementById('dots'), bar=document.getElementById('bar');
+  const prev=document.getElementById('prev'), next=document.getElementById('next'), count=document.getElementById('count');
+  let i=0;
+  slides.forEach((_,n)=>{const b=document.createElement('b');b.onclick=()=>go(n);dots.appendChild(b);});
+  const allDots=[...dots.children];
+  function go(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    allDots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    bar.style.width=((i)/(slides.length-1)*100)+'%';
+    count.textContent=(i+1)+' / '+slides.length;
+    prev.disabled=i===0; next.disabled=i===slides.length-1;
+  }
+  next.onclick=()=>go(i+1); prev.onclick=()=>go(i-1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();go(i+1);}
+    if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    if(e.key==='Home')go(0); if(e.key==='End')go(slides.length-1);
+  });
+  go(0);
+</script>
+</body>
+</html>

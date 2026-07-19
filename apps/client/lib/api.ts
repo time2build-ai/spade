@@ -271,6 +271,19 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  // Scan the remote's branches (git ls-remote, no clone) for the dev/staging/prod
+  // picklists. Throws with the git error if the URL is bad / unreachable.
+  scanBranches: (projectId: string, repoSshUrl: string) =>
+    http<{ branches: string[] }>(`/projects/${projectId}/git/branches`, {
+      method: "POST",
+      body: JSON.stringify({ repo_ssh_url: repoSshUrl }),
+    }),
+  // Create dev/staging/prod on an empty remote (seeds an initial commit). Pushes.
+  createBranches: (projectId: string, repoSshUrl: string, branches: string[]) =>
+    http<{ branches: string[] }>(`/projects/${projectId}/git/create-branches`, {
+      method: "POST",
+      body: JSON.stringify({ repo_ssh_url: repoSshUrl, branches }),
+    }),
   // Waiting lifecycle gates for a project (the gate board's home).
   lifecycleGates: (projectId: string) =>
     http<{ gates: Gate[] }>(`/projects/${projectId}/gates`),
@@ -278,7 +291,7 @@ export const api = {
   releases: (projectId: string) =>
     http<{ releases: ReleaseLanes }>(`/projects/${projectId}/releases`),
   promote: (projectId: string, from: string, to: string) =>
-    http<{ pr_number?: number; pr_url?: string }>(`/projects/${projectId}/promote`, {
+    http<{ pr_number?: number; pr_url?: string; merged?: boolean; merge_commit?: string; merge_error?: string }>(`/projects/${projectId}/promote`, {
       method: "POST",
       body: JSON.stringify({ from_env: from, to_env: to }),
     }),

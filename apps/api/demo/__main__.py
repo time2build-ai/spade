@@ -5,7 +5,7 @@
     ../../.venv/bin/python -m demo --app link-shortener
     ../../.venv/bin/python -m demo --app link-shortener --reset --account ~/.claude
 
-Then open the UI (localhost:3000), switch to the new project, and explore the
+Then open the UI (localhost:8766), switch to the new project, and explore the
 backlog, brain, decisions, orchestrator and sprint — all real.
 """
 
@@ -57,7 +57,7 @@ def main(argv=None) -> int:
     print(f"  {s['pipelines']} pipeline runs · {s['meetings']} meetings · {s['feedback_clusters']} feedback clusters")
     if s["account"]:
         print(f"  account '{s['account']}' connected — Ask the brain will work live")
-    print("\nNext: open http://localhost:3000, switch to the project, and explore the")
+    print("\nNext: open http://localhost:8766, switch to the project, and explore the")
     print("Backlog, Product brain, Decisions, Orchestrator and Sprints.\n")
     return 0
 

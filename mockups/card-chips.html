@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card chips & router suggestion — variations</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22; --bg-4:#232329;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --accent-2:#8e7dff; --green:#7ad19a; --amber:#e6b86a;
+    --red:#e87d7d; --blue:#7ab6e6; --teal:#7adcc7;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1180px;margin:0 auto 26px}
+  h1{font-size:24px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:720px}
+  .sub code{background:var(--bg-2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font:12px var(--mono)}
+  .grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:12px;padding:16px 16px 18px}
+  .variant.ref{border-style:dashed;opacity:.92}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .ref .vtag{color:var(--text-3);background:var(--bg-2);border-color:var(--line)}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12.5px;margin:2px 0 15px;min-height:32px}
+
+  /* real task-card shell */
+  .task-card{background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:11px 12px;cursor:default}
+  .tc-head{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-4);margin-bottom:8px;font-family:var(--mono)}
+  .pri{width:6px;height:6px;border-radius:50%;background:var(--red);flex:none}
+  .tc-head .feat{margin-left:auto;color:var(--text-3);text-transform:none}
+  .tc-title{font-size:13px;font-weight:500;color:var(--text);letter-spacing:-.005em;line-height:1.35;margin-bottom:10px}
+  .tc-foot{display:flex;align-items:center;gap:6px;color:var(--green);font-size:11px;font-family:var(--mono);margin-top:10px}
+  .tc-foot .dot{width:5px;height:5px;border-radius:50%;background:var(--green)}
+
+  .ic{display:inline-block;vertical-align:-2px;flex:none}
+  .kindrow{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+  .kindrow .lbl{font:10.5px var(--mono);color:var(--text-4);width:100%;margin-bottom:-4px;text-transform:uppercase;letter-spacing:.06em}
+
+  /* ---------- shared bits ---------- */
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+  /* CURRENT (reference) */
+  .c-badge{display:inline-flex;align-items:center;gap:3px;font:10px var(--mono);padding:1px 6px;border-radius:4px;background:var(--bg-3);border:1px solid var(--line);color:var(--text-2)}
+  .c-sugg{margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border-radius:8px;border:1px solid rgba(201,184,255,.3);background:rgba(201,184,255,.06);font-size:11.5px}
+  .c-sugg .s{color:var(--accent)}
+  .c-sugg .cf{margin-left:auto;padding:2px 8px;font-size:11px;border:1px solid var(--line);border-radius:5px;background:var(--bg-2);color:var(--text)}
+  .c-sugg .ov{padding:1px 5px;font-size:12px;border-radius:6px;border:1px solid var(--line);background:var(--bg-2)}
+
+  /* A · soft tinted pills */
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid}
+  .a-sugg{margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .a-sugg .lead{font:10.5px var(--mono);color:var(--text-4);text-transform:uppercase;letter-spacing:.06em}
+  .a-sugg .confirm{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:7px;background:var(--accent);color:#17121f;font-weight:600;font-size:11.5px}
+  .a-sugg .change{font-size:11px;color:var(--text-3);display:inline-flex;align-items:center;gap:3px}
+
+  /* B · segmented toggle */
+  .seg-lbl{font:10.5px var(--mono);color:var(--text-4);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
+  .seg{display:flex;background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:3px;gap:3px}
+  .seg .s{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:5px 4px;border-radius:6px;font-size:11.5px;color:var(--text-3);font-weight:500}
+  .seg .s.on{background:var(--bg-3);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .seg .s.on .ic{color:var(--accent)}
+  .b-confirm{margin-top:8px;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px;border-radius:7px;background:var(--accent);color:#17121f;font-weight:600;font-size:12px}
+
+  /* C · minimal ghost */
+  .c2-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px}
+  .c2-sugg{margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-3)}
+  .c2-sugg .k{color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:4px}
+  .c2-sugg .yes{margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:var(--green);font-weight:600}
+  .c2-sugg .change{display:inline-flex;align-items:center;gap:3px;color:var(--text-4)}
+
+  /* D · framed avatar */
+  .d-sugg{margin-top:10px;display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;background:var(--bg-1);border:1px solid var(--line);border-left:2px solid var(--accent)}
+  .d-av{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:rgba(201,184,255,.12);color:var(--accent);flex:none}
+  .d-txt{line-height:1.25}
+  .d-txt .t1{font:10px var(--mono);color:var(--text-4);text-transform:uppercase;letter-spacing:.06em}
+  .d-txt .t2{font-size:13px;font-weight:600;color:var(--text)}
+  .d-act{margin-left:auto;display:flex;align-items:center;gap:6px}
+  .d-act .ok{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:7px;background:var(--accent);color:#17121f;font-weight:600;font-size:11.5px}
+  .d-act .grp{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .d-act .grp button{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;color:var(--text-4);border-right:1px solid var(--line)}
+  .d-act .grp button:last-child{border-right:none}
+  .d-act .grp button:hover{color:var(--text);background:var(--bg-3)}
+  footer{max-width:1180px;margin:30px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Card chips &amp; router suggestion — variations</h1>
+  <p class="sub">Same real card (<code>SPD-035 · untyped · suggests Research</code>) drawn five ways, in the app's own tokens. All use existing SVG icons — <code>spark</code>=Code, <code>search</code>=Research, <code>doc</code>=Docs — no emojis. Per-kind color: Code <span style="color:var(--blue)">blue</span> · Research <span style="color:var(--accent)">lavender</span> · Docs <span style="color:var(--green)">green</span>.</p>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<footer>Pick one (or mix — e.g. B's segmented control with A's badge style). I'll wire it into <code>TaskCard.tsx</code> + <code>globals.css</code> and swap <code>KIND_META</code> emojis for <code>&lt;Icon&gt;</code>.</footer>
+
+<script>
+const ICONS = {
+  spark:'<path d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2"/>',
+  search:'<circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/>',
+  doc:'<path d="M3.5 2.5h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"/><path d="M9.5 2.5v3h3"/><path d="M5.5 8h5M5.5 10.5h5M5.5 13H8"/>',
+  check:'<path d="m3.5 8.5 3 3 6-7"/>',
+  chev:'<path d="m4 6 4 4 4-4"/>',
+  x:'<path d="m4 4 8 8M12 4l-8 8"/>',
+};
+function ic(name,size,color){return `<svg class="ic" style="color:${color||'currentColor'}" viewBox="0 0 16 16" width="${size||13}" height="${size||13}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;}
+const K = {
+  code:{icon:'spark',label:'Code',color:'var(--blue)',tint:'rgba(122,182,230,.12)',bd:'rgba(122,182,230,.4)'},
+  research:{icon:'search',label:'Research',color:'var(--accent)',tint:'rgba(201,184,255,.12)',bd:'rgba(201,184,255,.4)'},
+  docs:{icon:'doc',label:'Docs',color:'var(--green)',tint:'rgba(122,209,154,.12)',bd:'rgba(122,209,154,.4)'},
+};
+const ORDER=['code','research','docs'];
+
+// card shell with a slot for the kind badge (header) and the suggestion block
+function card(headBadge, suggestion, kindStrip){
+  return `<div class="task-card">
+    <div class="tc-head"><span class="pri"></span><span>SPD-035</span>${headBadge||''}<span class="feat">Plant Identification</span></div>
+    <div class="tc-title">Research plant-ID approach</div>
+    ${suggestion||''}
+    <div class="tc-foot"><span class="dot"></span>ready to start</div>
+  </div>${kindStrip||''}`;
+}
+function kindStrip(render){
+  return `<div class="kindrow"><span class="lbl">kind badges</span>${ORDER.map(render).join('')}</div>`;
+}
+
+const VARIANTS = [
+  {tag:'now', name:'Current', ref:true,
+   why:'Emoji badge + a busy lavender box: "suggests 🔬" text, a Confirm button, and three emoji override buttons all in one row.',
+   render:()=>card(
+     `<span class="c-badge">🔬 Research</span>`,
+     `<div class="c-sugg"><span class="s">suggests 🔬 Research</span><button class="cf">✓ Confirm</button><span style="display:flex;gap:4px"><button class="ov">✨</button><button class="ov">🔬</button><button class="ov">📄</button></span></div>`,
+     kindStrip(k=>`<span class="c-badge">${{code:'✨',research:'🔬',docs:'📄'}[k]} ${K[k].label}</span>`)
+   )},
+
+  {tag:'A', name:'Soft tinted pills',
+   why:'Kind becomes a rounded, color-tinted pill with its icon. Suggestion reads as a sentence: label → pill → a filled Confirm, with a quiet "change" affordance instead of three buttons.',
+   render:()=>{const r=K.research;return card(
+     `<span class="pill" style="color:${r.color};background:${r.tint};border-color:${r.bd}">${ic('search',12,r.color)}Research</span>`,
+     `<div class="a-sugg"><span class="lead">router</span><span class="pill" style="color:${r.color};background:${r.tint};border-color:${r.bd}">${ic('search',12,r.color)}Research</span><button class="confirm">${ic('check',12,'#17121f')}Confirm</button><button class="change">change ${ic('chev',11)}</button></div>`,
+     kindStrip(k=>`<span class="pill" style="color:${K[k].color};background:${K[k].tint};border-color:${K[k].bd}">${ic(K[k].icon,12,K[k].color)}${K[k].label}</span>`)
+   );}},
+
+  {tag:'B', name:'Segmented toggle',
+   why:'Collapses "suggest + override" into ONE control: a 3-way segmented switch with the suggested kind pre-selected. One Confirm below. Fewest concepts, no separate override cluster.',
+   render:()=>card(
+     `<span class="pill" style="color:${K.research.color};background:${K.research.tint};border-color:${K.research.bd}">${ic('search',12,K.research.color)}Research</span>`,
+     `<div class="seg-lbl">kind · router picked Research</div>
+      <div class="seg">${ORDER.map(k=>`<button class="s ${k==='research'?'on':''}">${ic(K[k].icon,12,k==='research'?K[k].color:'currentColor')}${K[k].label}</button>`).join('')}</div>
+      <button class="b-confirm">${ic('check',12,'#17121f')}Confirm kind</button>`,
+     kindStrip(k=>`<span class="pill" style="color:${K[k].color};background:${K[k].tint};border-color:${K[k].bd}">${ic(K[k].icon,12,K[k].color)}${K[k].label}</span>`)
+   )},
+
+  {tag:'C', name:'Minimal ghost',
+   why:'Lowest weight. Header badge is an icon-only colored tile (label on hover). Suggestion is a single quiet line with an inline ✓ accept and a "change" toggle — no boxed panel.',
+   render:()=>card(
+     `<span class="c2-badge" style="background:${K.research.tint}" title="Research">${ic('search',12,K.research.color)}</span>`,
+     `<div class="c2-sugg"><span>Router suggests</span><span class="k">${ic('search',11,K.research.color)}Research</span><button class="yes">${ic('check',12)}Accept</button><button class="change">${ic('chev',11)}</button></div>`,
+     kindStrip(k=>`<span class="c2-badge" style="background:${K[k].tint}" title="${K[k].label}">${ic(K[k].icon,12,K[k].color)}</span>`)
+   )},
+
+  {tag:'D', name:'Framed avatar',
+   why:'Most structured. Suggestion is a left-accent panel with a rounded icon "avatar", label/kind stacked, a filled Confirm, and the overrides as a tidy segmented icon group.',
+   render:()=>card(
+     `<span class="pill" style="color:${K.research.color};background:${K.research.tint};border-color:${K.research.bd}">${ic('search',12,K.research.color)}Research</span>`,
+     `<div class="d-sugg"><span class="d-av">${ic('search',15,K.research.color)}</span><span class="d-txt"><span class="t1">router suggests</span><span class="t2">Research</span></span><span class="d-act"><button class="ok">${ic('check',12,'#17121f')}Confirm</button><span class="grp">${ORDER.map(k=>`<button title="${K[k].label}">${ic(K[k].icon,12,K[k].color)}</button>`).join('')}</span></span></div>`,
+     kindStrip(k=>`<span class="pill" style="color:${K[k].color};background:${K[k].tint};border-color:${K[k].bd}">${ic(K[k].icon,12,K[k].color)}${K[k].label}</span>`)
+   )},
+];
+
+document.getElementById('grid').innerHTML = VARIANTS.map(v=>`
+  <div class="variant ${v.ref?'ref':''}">
+    <div class="vhead"><span class="vtag">${v.tag}</span><span class="vname">${v.name}</span></div>
+    <div class="vwhy">${v.why}</div>
+    ${v.render()}
+  </div>`).join('');
+</script>
+</body>
+</html>

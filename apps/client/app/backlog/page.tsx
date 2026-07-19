@@ -4,7 +4,7 @@ import * as React from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import { PageHead } from "@/components/ui";
-import { Icon } from "@/components/Icon";
+import { Icon, type IconName } from "@/components/Icon";
 import { Board } from "@/components/backlog/Board";
 import { BlockedBanner } from "@/components/backlog/BlockedBanner";
 import { useProject } from "@/lib/useProject";
@@ -104,14 +104,29 @@ export default function BacklogPage() {
   const [kindFilter, setKindFilter] = React.useState<"all" | "code" | "research" | "docs">("all");
   const [waitingOnly, setWaitingOnly] = React.useState(false);
   const [autoTagBusy, setAutoTagBusy] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [filterOpen, setFilterOpen] = React.useState(false);
+  const filterRef = React.useRef<HTMLDivElement>(null);
+  // Close the filter menu on an outside click.
+  React.useEffect(() => {
+    if (!filterOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [filterOpen]);
 
   const allTasks = tasksData?.tasks ?? [];
   const untypedCount = allTasks.filter((t) => t.kind == null).length;
+  const q = search.trim().toLowerCase();
   const filteredTasks = allTasks.filter((t) => {
     if (kindFilter !== "all" && (t.kind ?? null) !== kindFilter) return false;
     if (waitingOnly && !gatedTaskIds.has(t.id)) return false;
+    if (q && !`${t.id} ${t.title} ${t.feature ?? ""}`.toLowerCase().includes(q)) return false;
     return true;
   });
+  const activeFilters = (kindFilter !== "all" ? 1 : 0) + (waitingOnly ? 1 : 0);
 
   const autoTag = React.useCallback(async () => {
     if (!project || autoTagBusy) return;
@@ -162,51 +177,71 @@ export default function BacklogPage() {
   }
 
   // Filter toolbar — kind chips + a "Waiting on you" toggle + "Auto-tag untyped".
-  const KIND_CHIPS: { key: "all" | "code" | "research" | "docs"; label: string }[] = [
+  // Icons (spark/search/doc) match the card kind pills; "All" has no icon.
+  const KIND_CHIPS: { key: "all" | "code" | "research" | "docs"; label: string; icon?: IconName }[] = [
     { key: "all", label: "All" },
-    { key: "code", label: "✨ Code" },
-    { key: "research", label: "🔬 Research" },
-    { key: "docs", label: "📄 Docs" },
+    { key: "code", label: "Code", icon: "spark" },
+    { key: "research", label: "Research", icon: "search" },
+    { key: "docs", label: "Docs", icon: "doc" },
   ];
   const toolbar =
     project && tasksData ? (
-      <div
-        data-testid="board-toolbar"
-        style={{ padding: "10px 22px 0", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
-      >
-        <div style={{ display: "flex", gap: 6 }}>
-          {KIND_CHIPS.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              data-testid={`kind-filter-${c.key}`}
-              aria-pressed={kindFilter === c.key}
-              onClick={() => setKindFilter(c.key)}
-              className="btn"
-              style={{
-                padding: "3px 10px", fontSize: 12,
-                borderColor: kindFilter === c.key ? "var(--accent)" : "var(--border)",
-                color: kindFilter === c.key ? "var(--accent)" : "inherit",
-              }}
-            >
-              {c.label}
+      <div data-testid="board-toolbar" className="board-toolbar">
+        {/* Live search — matches title / id / feature. */}
+        <div className="board-search">
+          <Icon name="search" size={14} />
+          <input
+            data-testid="board-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tasks by title, id, or feature…"
+          />
+          {search && (
+            <button type="button" className="board-search-clear" aria-label="Clear search" onClick={() => setSearch("")}>
+              <Icon name="x" size={12} />
             </button>
-          ))}
+          )}
         </div>
-        <button
-          type="button"
-          data-testid="waiting-toggle"
-          aria-pressed={waitingOnly}
-          onClick={() => setWaitingOnly((v) => !v)}
-          className="btn"
-          style={{
-            padding: "3px 10px", fontSize: 12,
-            borderColor: waitingOnly ? "var(--amber)" : "var(--border)",
-            color: waitingOnly ? "var(--amber)" : "inherit",
-          }}
-        >
-          Waiting on you{gatedTaskIds.size ? ` (${gatedTaskIds.size})` : ""}
-        </button>
+
+        {/* Filter menu — kind (single) + waiting-on-you. */}
+        <div className="board-filter-wrap" ref={filterRef}>
+          <button
+            type="button" data-testid="filter-menu-btn"
+            className={"btn board-filter-btn" + (activeFilters ? " on" : "")}
+            aria-expanded={filterOpen}
+            onClick={() => setFilterOpen((v) => !v)}
+          >
+            <Icon name="tasks" size={13} /> Filter{activeFilters ? ` · ${activeFilters}` : ""}
+            <Icon name="chev" size={12} />
+          </button>
+          {filterOpen && (
+            <div className="board-filter-menu" data-testid="filter-menu">
+              <div className="bfm-h">Kind</div>
+              {KIND_CHIPS.map((c) => (
+                <button
+                  key={c.key} type="button"
+                  data-testid={`kind-filter-${c.key}`}
+                  className={"bfm-row" + (kindFilter === c.key ? " on" : "")}
+                  onClick={() => setKindFilter(c.key)}
+                >
+                  <span className="bfm-radio" />
+                  {c.icon && <Icon name={c.icon} size={13} />}
+                  {c.label}
+                </button>
+              ))}
+              <div className="bfm-div" />
+              <button
+                type="button" data-testid="waiting-toggle"
+                className={"bfm-row" + (waitingOnly ? " on" : "")}
+                onClick={() => setWaitingOnly((v) => !v)}
+              >
+                <span className="bfm-check" />
+                <Icon name="gate" size={13} /> Waiting on you{gatedTaskIds.size ? ` (${gatedTaskIds.size})` : ""}
+              </button>
+            </div>
+          )}
+        </div>
+
         {untypedCount > 0 && (
           <button
             type="button"
@@ -214,9 +249,10 @@ export default function BacklogPage() {
             onClick={autoTag}
             disabled={autoTagBusy}
             className="btn"
-            style={{ marginLeft: "auto", padding: "3px 10px", fontSize: 12 }}
+            style={{ marginLeft: "auto" }}
+            title="Apply the router’s suggested kind to every untyped task at once, instead of confirming each card."
           >
-            {autoTagBusy ? "Tagging…" : `Auto-tag ${untypedCount} untyped`}
+            {autoTagBusy ? "Classifying…" : `Classify ${untypedCount} untyped`}
           </button>
         )}
       </div>

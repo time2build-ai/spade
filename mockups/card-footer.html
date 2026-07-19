@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card footer status — on real cards</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6; --teal:#7adcc7;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1280px;margin:0 auto 22px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:760px}
+  .grid{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:20px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:14px 13px 16px}
+  .variant.ref{border-style:dashed}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin:2px 3px 3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .ref .vtag{color:var(--text-3);background:var(--bg-2);border-color:var(--line)}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12px;margin:2px 3px 13px;min-height:44px}
+  .col{display:flex;flex-direction:column;gap:8px}
+
+  /* ---- REAL task card (from the app) ---- */
+  .task-card{background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:10px 11px;cursor:default}
+  .task-card:hover{border-color:var(--line-strong)}
+  .tc-head{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-4);margin-bottom:6px;font-family:var(--mono);flex-wrap:nowrap}
+  .pri{width:6px;height:6px;border-radius:50%;background:var(--red);flex:none}
+  .tc-id{white-space:nowrap;flex:none}
+  .tc-feat{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)}
+  .kind-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid;line-height:1.4;white-space:nowrap}
+  .kind-pill.sm{font-size:10px;padding:1px 7px 1px 6px;gap:4px}
+  .kind-pill[data-kind="code"]{color:var(--blue);background:rgba(122,182,230,.12);border-color:rgba(122,182,230,.4)}
+  .kind-pill[data-kind="research"]{color:var(--accent);background:rgba(201,184,255,.12);border-color:rgba(201,184,255,.4)}
+  .kind-pill[data-kind="docs"]{color:var(--green);background:rgba(122,209,154,.12);border-color:rgba(122,209,154,.4)}
+  .tc-title{font-size:13px;font-weight:500;color:var(--text);letter-spacing:-.005em;line-height:1.35;margin-bottom:8px}
+  .intel-bar{display:flex;gap:2px;height:3px;border-radius:2px;overflow:hidden;margin:0 0 8px}
+  .intel-bar span{flex:1}
+  .tc-foot{display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--mono)}
+  .ic{display:inline-block;vertical-align:-1px}
+  .pulse{position:relative}
+  .pulse::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:1px solid currentColor;opacity:.5;animation:p 1.6s ease-out infinite}
+  @keyframes p{0%{transform:scale(.6);opacity:.6}100%{transform:scale(1.9);opacity:0}}
+
+  /* status style atoms */
+  .r-dot{width:5px;height:5px;border-radius:50%}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid;font-family:-apple-system,sans-serif}
+  .pill .pd{width:5px;height:5px;border-radius:50%;background:currentColor}
+  .iconlab{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;font-family:-apple-system,sans-serif}
+  .minlab{font-size:11.5px;font-weight:500;font-family:-apple-system,sans-serif}
+  .rulelab{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:500;font-family:-apple-system,sans-serif}
+  .rule{width:14px;height:2px;border-radius:2px;background:currentColor}
+  .codelab{font:10.5px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+  .codelab .br{color:var(--text-4)}
+  .ex-mono{font:10.5px var(--mono)}
+  footer{max-width:1280px;margin:26px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Card footer status — on real cards</h1>
+  <p class="sub">Full board cards (kind pill, id, feature, title, intel bar) with the footer status drawn six ways. Same four cards each: <b>Ready</b> · <b>Scoping</b> (running, pulsing) · <b>Investigating ▶3</b> · <b>Blocked</b>. Every state gets one consistent treatment in its real phase colour.</p>
+</div>
+
+<div class="grid" id="grid"></div>
+<footer>Pick a letter — I’ll wire it into <code>TaskCard.tsx</code> using the shared <code>statusMeta()</code> colours, and reuse it on the task header / fleet.</footer>
+
+<script>
+const KI = {
+  code:'<path d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2"/>',
+  research:'<circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/>',
+  docs:'<path d="M3.5 2.5h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"/><path d="M9.5 2.5v3h3"/><path d="M5.5 8h5M5.5 10.5h5M5.5 13H8"/>',
+};
+const FI = {
+  play:'<path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none"/>',
+  check:'<path d="m3.5 8.5 3 3 6-7"/>',
+  dots:'<circle cx="4" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="8" r="1.3" fill="currentColor" stroke="none"/>',
+  pause:'<path d="M6 4v8M10 4v8"/>',
+};
+const kindSvg=(n)=>`<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${KI[n]}</svg>`;
+const footSvg=(n,c)=>`<svg class="ic" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${FI[n]}</svg>`;
+const KLAB={code:"Code",research:"Research",docs:"Docs"};
+
+// four realistic cards, each in a different state
+const CARDS = [
+  {id:"SPD-041", kind:"code",     feat:"Settings",            title:"Add a dark-mode toggle",         intel:null,                       st:{label:"Ready",color:"var(--green)",icon:"play",code:"READY",lc:"ready to start"}},
+  {id:"SPD-035", kind:"research", feat:"Plant Identification",title:"Research plant-ID approach",      intel:null,                       st:{label:"Scoping",color:"var(--amber)",icon:"dots",code:"SCOPING",live:true,lc:"scoping"}},
+  {id:"SPD-050", kind:"research", feat:"Vendor eval",         title:"Compare plant-ID vendors",        intel:[["--blue",2],["--amber",1]], st:{label:"Investigating",color:"var(--blue)",icon:"dots",code:"INVESTIGATING",live:true,extra:"▶ 3 agents",lc:"investigating"}},
+  {id:"SPD-036", kind:"docs",     feat:"Project Scoping",     title:"Draft Statement of Work (SOW)",   intel:null,                       st:{label:"Blocked",color:"var(--red)",icon:"pause",code:"BLOCKED",extra:"· 2",lc:null}},
+];
+
+const STYLES = {
+  ref:{name:"Current",ref:true,why:"Green dot for every phase, mono text; “blocked” has no dot at all. The inconsistency you flagged.",
+    foot:(s)=> s.lc===null
+      ? `<span style="color:var(--amber)">blocked by 2</span>`
+      : `<span class="r-dot" style="background:var(--green)"></span><span style="color:var(--green)">${s.lc}${s.extra?' '+s.extra:''}</span>`},
+  A:{name:"Soft pill",why:"Each state is a rounded pill tinted in its status colour. Cohesive, badge-like; running gets a live pulse.",
+    foot:(s)=>`<span class="pill" style="color:${s.color};background:color-mix(in srgb,${s.color} 13%,transparent);border-color:color-mix(in srgb,${s.color} 35%,transparent)"><span class="pd ${s.live?'pulse':''}"></span>${s.label}</span>${s.extra?` <span class="ex-mono" style="color:var(--blue)">${s.extra}</span>`:''}`},
+  B:{name:"Icon + label",why:"A small semantic icon instead of a bare dot — play=ready, •••=working, ‖=blocked. More meaning, still tight.",
+    foot:(s)=>`<span class="iconlab" style="color:${s.color}">${footSvg(s.icon,s.color)}${s.label}${s.extra?` <span style="color:var(--text-4)">${s.extra}</span>`:''}</span>`},
+  C:{name:"Minimal label",why:"No dot, no pill — just the label in its status colour. Flattest and quietest; the title leads.",
+    foot:(s)=>`<span class="minlab" style="color:${s.color}">${s.label}${s.extra?` <span style="color:var(--text-4)">${s.extra.replace('· ','×')}</span>`:''}</span>`},
+  D:{name:"Leading rule",why:"A short colour rule before the label instead of a dot — a calmer, more designed marker.",
+    foot:(s)=>`<span class="rulelab" style="color:${s.color}"><span class="rule"></span>${s.label}${s.extra?` <span style="color:var(--text-4)">${s.extra}</span>`:''}</span>`},
+  E:{name:"Mono status code",why:"Tiny uppercase mono, bracketed — telemetry feel matching the SPD-id typography.",
+    foot:(s)=>`<span class="codelab" style="color:${s.color}"><span class="br">[</span>${s.code}<span class="br">]</span>${s.extra?` <span style="color:var(--text-4)">${s.extra}</span>`:''}</span>`},
+};
+
+function card(c, foot){
+  const intel = c.intel ? `<div class="intel-bar">${c.intel.map(([col,f])=>`<span style="background:var(${col});flex:${f}"></span>`).join('')}</div>` : '';
+  return `<div class="task-card">
+    <div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>
+      <span class="kind-pill sm" data-kind="${c.kind}">${kindSvg(c.kind)}${KLAB[c.kind]}</span>
+      <span class="tc-feat">${c.feat}</span></div>
+    <div class="tc-title">${c.title}</div>
+    ${intel}
+    <div class="tc-foot">${foot(c.st)}</div>
+  </div>`;
+}
+
+document.getElementById('grid').innerHTML = Object.entries(STYLES).map(([tag,v])=>`
+  <div class="variant ${v.ref?'ref':''}">
+    <div class="vhead"><span class="vtag">${v.ref?'now':tag}</span><span class="vname">${v.name}</span></div>
+    <div class="vwhy">${v.why}</div>
+    <div class="col">${CARDS.map(c=>card(c,v.foot)).join('')}</div>
+  </div>`).join('');
+</script>
+</body>
+</html>

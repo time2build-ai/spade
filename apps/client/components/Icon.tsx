@@ -77,6 +77,14 @@ const PATHS = {
   x: <path d="m4 4 8 8M12 4l-8 8" />,
   check: <path d="m3.5 8.5 3 3 6-7" />,
   play: <path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none" />,
+  // three-quarter arc — spins via `svg[data-icon="spinner"]` in globals.css.
+  spinner: <path d="M8 2a6 6 0 1 1-4.2 1.7" />,
+  alert: (
+    <>
+      <path d="M8 2.5 14 13H2z" />
+      <path d="M8 6.5v3M8 11.3v.1" />
+    </>
+  ),
   spark: <path d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2" />,
   cog: (
     <>

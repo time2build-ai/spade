@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where does status live on the card?</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --red:#e87d7d; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1280px;margin:0 auto 22px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:780px}
+  .grid{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:14px 13px 16px}
+  .variant.ref{border-style:dashed}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin:2px 3px 3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .ref .vtag{color:var(--text-3);background:var(--bg-2);border-color:var(--line)}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12px;margin:2px 3px 13px;min-height:46px}
+  .col{display:flex;flex-direction:column;gap:9px}
+
+  /* real card */
+  .task-card{position:relative;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:10px 11px;cursor:default;overflow:hidden}
+  .tc-head{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-4);margin-bottom:6px;font-family:var(--mono);flex-wrap:nowrap}
+  .pri{width:6px;height:6px;border-radius:50%;background:var(--red);flex:none}
+  .tc-id{white-space:nowrap;flex:none}
+  .tc-feat{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)}
+  .kind-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid;line-height:1.4;white-space:nowrap}
+  .kind-pill.sm{font-size:10px;padding:1px 7px 1px 6px;gap:4px}
+  .kind-pill[data-kind="code"]{color:var(--blue);background:rgba(122,182,230,.12);border-color:rgba(122,182,230,.4)}
+  .kind-pill[data-kind="research"]{color:var(--accent);background:rgba(201,184,255,.12);border-color:rgba(201,184,255,.4)}
+  .kind-pill[data-kind="docs"]{color:var(--green);background:rgba(122,209,154,.12);border-color:rgba(122,209,154,.4)}
+  .tc-title{font-size:13px;font-weight:500;color:var(--text);letter-spacing:-.005em;line-height:1.35}
+
+  /* status atoms */
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+  .pill.xs{font-size:10px;padding:2px 8px;gap:5px}
+  .pill .pd{width:5px;height:5px;border-radius:50%;background:currentColor}
+  .pulse{position:relative}
+  .pulse::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:1px solid currentColor;opacity:.5;animation:p 1.6s ease-out infinite}
+  @keyframes p{0%{transform:scale(.6);opacity:.6}100%{transform:scale(1.9);opacity:0}}
+  .lab{font-size:11px;font-weight:600}
+
+  footer{max-width:1280px;margin:26px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Where should status live on the card?</h1>
+  <p class="sub">You asked why it’s always in the footer — it isn’t required to be. Same three cards (<b>Ready</b> green · <b>Scoping</b> amber, running · <b>Blocked</b> red), with the status moved to a different spot in each option. One clean pill style throughout so this is only about <b>placement</b>.</p>
+</div>
+
+<div class="grid" id="grid"></div>
+<footer>Pick a placement (and we can still tune the pill style after). Colours come from the shared <code>statusMeta()</code>.</footer>
+
+<script>
+const KI={code:'<path d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2"/>',research:'<circle cx="7" cy="7" r="4"/><path d="m13 13-3-3"/>',docs:'<path d="M3.5 2.5h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z"/><path d="M9.5 2.5v3h3"/><path d="M5.5 8h5M5.5 10.5h5M5.5 13H8"/>'};
+const kindSvg=(n)=>`<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${KI[n]}</svg>`;
+const KLAB={code:"Code",research:"Research",docs:"Docs"};
+
+const CARDS=[
+  {id:"SPD-041",kind:"code",feat:"Settings",title:"Add a dark-mode toggle",st:{label:"Ready",color:"var(--green)"}},
+  {id:"SPD-035",kind:"research",feat:"Plant Identification",title:"Research plant-ID approach",st:{label:"Scoping",color:"var(--amber)",live:true}},
+  {id:"SPD-036",kind:"docs",feat:"Project Scoping",title:"Draft Statement of Work (SOW)",st:{label:"Blocked",color:"var(--red)",extra:"· 2"}},
+];
+const pill=(s,cls='')=>`<span class="pill ${cls}" style="color:${s.color};background:color-mix(in srgb,${s.color} 13%,transparent);border-color:color-mix(in srgb,${s.color} 35%,transparent)"><span class="pd ${s.live?'pulse':''}"></span>${s.label}</span>${s.extra?` <span style="font:10.5px var(--mono);color:var(--text-4)">${s.extra}</span>`:''}`;
+const kp=(c)=>`<span class="kind-pill sm" data-kind="${c.kind}">${kindSvg(c.kind)}${KLAB[c.kind]}</span>`;
+
+const PLACE={
+  ref:{name:"Footer (now)",ref:true,why:"Status sits on its own line at the bottom — furthest from the title you scan first.",
+    card:(c)=>`<div class="task-card"><div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>${kp(c)}<span class="tc-feat">${c.feat}</span></div><div class="tc-title">${c.title}</div><div style="margin-top:8px">${pill(c.st)}</div></div>`},
+
+  A:{name:"Header, right",why:"Status rides in the top row where the eye lands first; the feature drops to a quiet line under the title.",
+    card:(c)=>`<div class="task-card"><div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>${kp(c)}<span style="margin-left:auto">${pill(c.st,'xs')}</span></div><div class="tc-title">${c.title}</div><div style="font:11px var(--mono);color:var(--text-4);margin-top:6px">${c.feat}</div></div>`},
+
+  B:{name:"Corner badge",why:"A small status chip floated in the top-right corner — always same spot, doesn’t fight the header content.",
+    card:(c)=>`<div class="task-card"><span style="position:absolute;top:9px;right:9px">${pill(c.st,'xs')}</span><div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>${kp(c)}</div><div class="tc-title" style="padding-right:70px">${c.title}</div><div style="font:11px var(--mono);color:var(--text-4);margin-top:6px">${c.feat}</div></div>`},
+
+  C:{name:"Left status rail",why:"A colour rail down the left edge = the status colour (ambient, scannable down a column). Small label by the title.",
+    card:(c)=>`<div class="task-card" style="border-left:3px solid ${c.st.color};padding-left:13px"><div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>${kp(c)}<span class="tc-feat">${c.feat}</span></div><div class="tc-title">${c.title}</div><div style="margin-top:7px;display:flex;align-items:center;gap:6px"><span class="pd ${c.st.live?'pulse':''}" style="width:5px;height:5px;border-radius:50%;background:${c.st.color}"></span><span class="lab" style="color:${c.st.color}">${c.st.label}${c.st.extra?`<span style="color:var(--text-4);font-weight:400"> ${c.st.extra}</span>`:''}</span></div></div>`},
+
+  D:{name:"Top strip",why:"A thin full-width colour bar at the very top of the card. Colour codes status at a glance; label optional under the title.",
+    card:(c)=>`<div class="task-card" style="padding-top:0"><div style="height:3px;margin:0 -11px 10px;background:${c.st.color};opacity:.85"></div><div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>${kp(c)}<span class="tc-feat">${c.feat}</span></div><div class="tc-title">${c.title}</div><div style="margin-top:7px"><span class="lab" style="color:${c.st.color}">${c.st.label}${c.st.extra?`<span style="color:var(--text-4);font-weight:400"> ${c.st.extra}</span>`:''}</span></div></div>`},
+
+  E:{name:"Beside the title",why:"Status label inline right after the title — read the task and its state in one glance, no separate line.",
+    card:(c)=>`<div class="task-card"><div class="tc-head"><span class="pri"></span><span class="tc-id">${c.id}</span>${kp(c)}<span class="tc-feat">${c.feat}</span></div><div style="display:flex;align-items:baseline;gap:8px"><div class="tc-title" style="flex:1;min-width:0">${c.title}</div><span class="pd ${c.st.live?'pulse':''}" style="width:5px;height:5px;border-radius:50%;background:${c.st.color};flex:none;align-self:center"></span><span class="lab" style="color:${c.st.color};white-space:nowrap">${c.st.label}</span></div></div>`},
+};
+
+document.getElementById('grid').innerHTML=Object.entries(PLACE).map(([tag,v])=>`
+  <div class="variant ${v.ref?'ref':''}">
+    <div class="vhead"><span class="vtag">${v.ref?'now':tag}</span><span class="vname">${v.name}</span></div>
+    <div class="vwhy">${v.why}</div>
+    <div class="col">${CARDS.map(c=>v.card(c)).join('')}</div>
+  </div>`).join('');
+</script>
+</body>
+</html>

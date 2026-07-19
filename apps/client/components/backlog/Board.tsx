@@ -1,7 +1,17 @@
 import * as React from "react";
 import { TaskCard } from "./TaskCard";
+import { Icon, type IconName } from "@/components/Icon";
 import { tasksByColumn, taskExecutionStates, type BoardColumn } from "@/lib/adapters";
 import type { BrainNode, LifecycleRun, LifecycleTemplates, Task } from "@/lib/types";
+
+/** Per-column empty state: an icon + a line on what lands there. */
+const EMPTY: Record<BoardColumn, { icon: IconName; title: string; sub: string }> = {
+  "Ready": { icon: "flag", title: "Nothing ready", sub: "Unblocked tasks wait here, ready to start." },
+  "Planning": { icon: "spark", title: "Nothing in planning", sub: "Tasks being scoped or shaped show up here." },
+  "In progress": { icon: "orch", title: "No agents working", sub: "Started tasks and their agents appear here." },
+  "Review": { icon: "gate", title: "Nothing to review", sub: "Tasks waiting on your call land here." },
+  "Done": { icon: "check", title: "Nothing shipped yet", sub: "Delivered and shipped tasks collect here." },
+};
 
 /**
  * The 5 UNIVERSAL board columns (Task-Type Router). Every kind's phases map into
@@ -58,11 +68,12 @@ export function Board({ tasks, nodesById, templates, gatedTaskIds, runsByTask }:
                 />
               ))}
               {items.length === 0 && (
-                <div
-                  className="muted"
-                  style={{ fontSize: 12, padding: 8, color: "var(--text-4)" }}
-                >
-                  —
+                <div className="col-empty" data-testid="col-empty">
+                  <span className="col-empty-ic" style={{ color: col.color }}>
+                    <Icon name={EMPTY[col.key].icon} size={20} />
+                  </span>
+                  <div className="col-empty-title">{EMPTY[col.key].title}</div>
+                  <div className="col-empty-sub">{EMPTY[col.key].sub}</div>
                 </div>
               )}
             </div>

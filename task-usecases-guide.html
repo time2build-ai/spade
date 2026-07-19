@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spade — Sample Projects &amp; Use Cases to Test</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171c22; --panel2:#1d232b; --bd:#28303a;
+    --tx:#e8ebee; --tx2:#aab3bd; --tx3:#7c8794;
+    --accent:#6ea8fe; --green:#3ecf8e; --amber:#e5a84b; --pink:#e06b9a; --purple:#c98bff; --red:#e0655f;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --panel:#ffffff; --panel2:#f0f2f5; --bd:#dce1e7;
+      --tx:#1a1f26; --tx2:#4a5560; --tx3:#79838f; --accent:#2f6fe0; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:0 0 120px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  header{padding:44px 22px 26px;background:linear-gradient(180deg,var(--panel),transparent);border-bottom:1px solid var(--bd);margin-bottom:26px}
+  header .wrap{padding:0}
+  h1{font-size:29px;margin:0 0 6px;letter-spacing:-.02em}
+  .sub{color:var(--tx2);font-size:16px;margin:0;max-width:720px}
+  .prog{margin-top:18px;height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;border:1px solid var(--bd)}
+  .prog>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .3s}
+  .progtxt{font-size:13px;color:var(--tx3);margin-top:8px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--amber);margin:40px 0 4px}
+  .proj{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:20px 22px;margin:14px 0 10px}
+  .projtitle{font-size:21px;font-weight:650;margin:0 0 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pill{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid;letter-spacing:.02em;white-space:nowrap}
+  .pill.norepo{color:var(--green);border-color:var(--green)}
+  .pill.repo{color:var(--amber);border-color:var(--amber)}
+  .lead{color:var(--tx2);margin:2px 0 0}
+  .meta{margin-top:12px;font-size:14px;color:var(--tx2)}
+  .meta b{color:var(--tx)}
+
+  .uc{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:15px 17px 15px 17px;margin:12px 0;transition:opacity .2s}
+  .uc.done{opacity:.5}
+  .uchead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  .ucnum{font-size:12px;font-weight:700;color:var(--tx3);background:var(--panel2);border:1px solid var(--bd);border-radius:6px;padding:1px 8px}
+  .uctitle{font-weight:650;font-size:16px}
+  .kind{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:6px;border:1px solid;white-space:nowrap}
+  .k-code{color:var(--accent);border-color:var(--accent)}
+  .k-res{color:var(--purple);border-color:var(--purple)}
+  .k-doc{color:var(--green);border-color:var(--green)}
+  .why{color:var(--tx3);font-size:13.5px;margin:2px 0 10px}
+  .field{margin:8px 0}
+  .flabel{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px}
+  .copyrow{display:flex;gap:8px;align-items:stretch}
+  .copyval{flex:1;background:#0a0d11;border:1px solid var(--bd);border-radius:8px;padding:9px 12px;
+    font:13.5px/1.5 ui-monospace,Menlo,monospace;color:#cfe4ff;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+  @media (prefers-color-scheme: light){.copyval{background:#0f1216;color:#cfe4ff}}
+  .copybtn{flex:0 0 auto;background:var(--panel2);border:1px solid var(--bd);border-radius:8px;color:var(--tx2);
+    font-size:12.5px;font-weight:600;padding:0 12px;cursor:pointer;transition:.15s}
+  .copybtn:hover{border-color:var(--accent);color:var(--accent)}
+  .copybtn.ok{border-color:var(--green);color:var(--green)}
+  .verify{margin:10px 0 0;padding:9px 12px;background:var(--panel2);border-left:3px solid var(--green);border-radius:0 8px 8px 0;font-size:14px;color:var(--tx2)}
+  .verify b{color:var(--green)}
+  .gates{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0 0}
+  .gate{font-size:11.5px;padding:2px 9px;border-radius:20px;border:1px solid var(--amber);color:var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent)}
+  .chk{margin-top:11px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;color:var(--tx3);user-select:none}
+  .chk input{width:17px;height:17px;accent-color:var(--green);cursor:pointer}
+
+  code,kbd{background:var(--panel2);border:1px solid var(--bd);border-radius:5px;padding:1px 6px;font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tx)}
+  .cmd{display:block;background:#0a0d11;border:1px solid var(--bd);border-radius:8px;padding:11px 14px;margin:10px 0 0;
+    font:13.5px/1.6 ui-monospace,Menlo,monospace;color:#cfe4ff;overflow-x:auto}
+  @media (prefers-color-scheme: light){.cmd{background:#0f1216;color:#cfe4ff}}
+  .note{background:color-mix(in srgb,var(--amber) 12%,transparent);border:1px solid color-mix(in srgb,var(--amber) 40%,transparent);
+    border-radius:10px;padding:12px 15px;margin:14px 0;font-size:14.5px;color:var(--tx)}
+  .note b{color:var(--amber)}
+  .note.big{font-size:16px}
+  .router{background:var(--panel);border:1px solid var(--bd);border-radius:12px;overflow:hidden;margin:12px 0}
+  .router table{width:100%;border-collapse:collapse;font-size:14px}
+  .router th{text-align:left;padding:9px 14px;background:var(--panel2);color:var(--tx3);font-size:12px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd)}
+  .router td{padding:9px 14px;border-bottom:1px solid var(--bd);color:var(--tx2);vertical-align:top}
+  .router tr:last-child td{border-bottom:none}
+  .router td code{font-size:12.5px}
+  footer{color:var(--tx3);font-size:13px;text-align:center;margin-top:40px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🗂️ Sample Projects &amp; Use Cases</h1>
+    <p class="sub">Two ready-made projects with realistic tasks. <b>Copy each task straight into Spade</b>, confirm the router's kind, drive it through its gates, and tick the box. Start with <b>Project 1 — no GitHub repo needed</b>.</p>
+    <div class="prog"><i id="bar"></i></div>
+    <div class="progtxt"><span id="donecount">0</span> of <span id="total">0</span> use cases done</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="note big">
+    ⚙️ <b>Setup once.</b> Start the app, then create both projects on the Projects page.
+    <span class="cmd">cd /Users/thiagolopez/time2build/projects/tui-pilot
+make dev   # then open the printed UI URL (usually http://localhost:8766)</span>
+    You'll also need <b>at least one Claude account in the Agent pool</b> (Settings) — the agents are real <code>claude</code> sessions. Project 2 additionally needs a throwaway GitHub repo.
+  </div>
+
+  <!-- =================== PROJECT 1 =================== -->
+  <h2>Project 1</h2>
+  <div class="proj">
+    <div class="projtitle">🧠 “Nimbus AI” — client advisory <span class="pill norepo">✓ NO REPO NEEDED</span></div>
+    <p class="lead">A consulting engagement: the client wants research and written deliverables, no code. This exercises the <b>Research</b> and <b>Docs</b> lifecycles — the fastest way to see the whole thing work end-to-end.</p>
+    <p class="meta"><b>Create it:</b> Projects → New → name it <code>Nimbus AI</code>. Leave the repository blank. Open its Backlog. Now add each use case below.</p>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-1</span><span class="uctitle">Compare vector databases</span><span class="kind k-res">expect 🔬 Research</span></div>
+    <p class="why">General research → should fan out into parallel investigators + one synthesized report. This is the marquee use case.</p>
+    <div class="field"><div class="flabel">Title</div>
+      <div class="copyrow"><div class="copyval">Research: top vector databases for RAG in 2026 and their tradeoffs</div><button class="copybtn">Copy</button></div></div>
+    <div class="field"><div class="flabel">Description</div>
+      <div class="copyrow"><div class="copyval">Compare pgvector, Pinecone, Weaviate, Qdrant and Milvus on cost, scale, latency, hybrid search and ops burden. Recommend one for a mid-size client.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> router suggests 🔬 Research → confirm → Start (no repo prompt). Approve the <b>scope</b> (the angle list), then watch the card show <b>▶ N agents</b> running in parallel. A manager merges them into one report grouped over per-angle findings.</div>
+    <div class="gates"><span class="gate">⚑ Scope gate</span><span class="gate">⚑ Review gate</span></div>
+    <label class="chk"><input type="checkbox"> Delivered — report + findings pinned</label>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-2</span><span class="uctitle">SOW for the engagement</span><span class="kind k-doc">expect 📄 Docs</span></div>
+    <p class="why">"SOW" should trigger Docs <b>and</b> auto-pick the <b>SOW template</b>. Produces a shareable styled document.</p>
+    <div class="field"><div class="flabel">Title</div>
+      <div class="copyrow"><div class="copyval">Write a SOW for the Nimbus AI advisory engagement</div><button class="copybtn">Copy</button></div></div>
+    <div class="field"><div class="flabel">Description</div>
+      <div class="copyrow"><div class="copyval">Statement of work covering scope, deliverables, timeline, milestones, assumptions and pricing for a 6-week AI advisory engagement.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> suggestion says 📄 Docs and names the <b>SOW</b> template. Approve the <b>outline</b>, let it draft, then open the doc — it renders styled. Open the <b>share link</b> (<code>/api/doc/…</code>) in a new tab: standalone, client-ready, no scripts.</div>
+    <div class="gates"><span class="gate">⚑ Outline gate</span><span class="gate">⚑ Review gate</span></div>
+    <label class="chk"><input type="checkbox"> Delivered — shareable SOW opens</label>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-3</span><span class="uctitle">Explainer with diagrams</span><span class="kind k-doc">expect 📄 Docs</span></div>
+    <p class="why">Different Docs template (Explainer) with mermaid diagrams — confirms template selection isn't hardcoded to SOW.</p>
+    <div class="field"><div class="flabel">Title</div>
+      <div class="copyrow"><div class="copyval">Explainer doc: how RAG works, for a non-technical client</div><button class="copybtn">Copy</button></div></div>
+    <div class="field"><div class="flabel">Description</div>
+      <div class="copyrow"><div class="copyval">Plain-language explanation of retrieval-augmented generation with a diagram of the ingest → embed → retrieve → generate flow. Audience: a non-technical stakeholder.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> suggestion names the <b>Explainer</b> template (not SOW). Final doc contains a rendered <b>diagram</b>. Same gate flow as UC-2.</div>
+    <div class="gates"><span class="gate">⚑ Outline gate</span><span class="gate">⚑ Review gate</span></div>
+    <label class="chk"><input type="checkbox"> Delivered — explainer w/ diagram</label>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-4</span><span class="uctitle">Request changes at a gate</span><span class="kind k-res">any kind</span></div>
+    <p class="why">Gates aren't just "approve". Test the <b>reject → rework</b> path so you trust the human-in-the-loop.</p>
+    <div class="field"><div class="flabel">What to do</div>
+      <div class="copyrow"><div class="copyval">On UC-1's scope gate (or UC-2's outline), click "Request changes" and type a note like: add a section on hybrid search cost.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> the task goes <b>back</b> to the agent (not forward), your note appears in the <b>activity log</b>, and a revised artifact comes back to the same gate. Then approve.</div>
+    <div class="gates"><span class="gate">⚑ same gate re-opens</span></div>
+    <label class="chk"><input type="checkbox"> Reject → rework → re-review works</label>
+  </div>
+
+  <!-- =================== PROJECT 2 =================== -->
+  <h2>Project 2</h2>
+  <div class="proj">
+    <div class="projtitle">📱 “Acme Mobile” — product with a codebase <span class="pill repo">⚑ NEEDS A REPO</span></div>
+    <p class="lead">A real product project. Exercises the full <b>Code</b> lifecycle (worktree → PR → merge → ship) plus <b>code-research</b> against the repo.</p>
+    <p class="meta"><b>Create it:</b> Projects → New → <code>Acme Mobile</code>. In <b>Settings → Repository</b> set the SSH URL of a <b>throwaway GitHub repo</b> that has a <code>development</code> branch, with <code>gh</code> logged in. If you don't have one, tell Claude and I'll help you spin one up.</p>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-5</span><span class="uctitle">Small feature, full flow</span><span class="kind k-code">expect ✨ Code</span></div>
+    <p class="why">The headline Code lifecycle: brainstorm → plan → build in a worktree → manual-test guide → PR → review → merge.</p>
+    <div class="field"><div class="flabel">Title</div>
+      <div class="copyrow"><div class="copyval">Add a dark-mode toggle to the settings screen</div><button class="copybtn">Copy</button></div></div>
+    <div class="field"><div class="flabel">Description</div>
+      <div class="copyrow"><div class="copyval">Add a toggle in Settings that switches the app between light and dark themes and persists the choice.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> confirm ✨ Code → Start builds in an isolated worktree. Approve the <b>plan</b>; at the <b>manual-test gate</b> follow the kid-simple test guide it wrote; a <b>real PR</b> opens on GitHub; approve the <b>merge gate</b> → task <b>Shipped</b> with a <code>dev</code> badge.</div>
+    <div class="gates"><span class="gate">⚑ Plan gate</span><span class="gate">⚑ Manual-test gate</span><span class="gate">⚑ Merge gate</span></div>
+    <label class="chk"><input type="checkbox"> Shipped to development</label>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-6</span><span class="uctitle">Research the existing code</span><span class="kind k-res">expect 🔬 Research</span></div>
+    <p class="why">Research <i>inside a repo</i> — investigators grep the codebase instead of the web. Same fan-out, different source.</p>
+    <div class="field"><div class="flabel">Title</div>
+      <div class="copyrow"><div class="copyval">Research: how does our auth token refresh currently work?</div><button class="copybtn">Copy</button></div></div>
+    <div class="field"><div class="flabel">Description</div>
+      <div class="copyrow"><div class="copyval">Trace where tokens are stored, when they refresh, and any race conditions or edge cases in the current auth flow. Cite files.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> router picks 🔬 Research even inside a code project. Findings <b>cite real files/paths</b> from the repo. Delivered as a report, no PR.</div>
+    <div class="gates"><span class="gate">⚑ Scope gate</span><span class="gate">⚑ Review gate</span></div>
+    <label class="chk"><input type="checkbox"> Code-research delivered w/ file cites</label>
+  </div>
+
+  <div class="uc">
+    <div class="uchead"><span class="ucnum">UC-7</span><span class="uctitle">Promote through environments</span><span class="kind k-code">Releases page</span></div>
+    <p class="why">After UC-5 ships to development, confirm the environment chain you described: dev → staging → prod.</p>
+    <div class="field"><div class="flabel">What to do</div>
+      <div class="copyrow"><div class="copyval">Open Releases. Find the dark-mode feature in Development. Click Promote → it opens a PR to staging. Merge it, then promote staging → production.</div><button class="copybtn">Copy</button></div></div>
+    <div class="verify"><b>Verify:</b> Releases shows <b>Development / Staging / Production</b> lanes; Promote opens the correct env PR each hop; the badge on the task tracks where it's shipped.</div>
+    <div class="gates"><span class="gate">⚑ Promote = opens env PR</span></div>
+    <label class="chk"><input type="checkbox"> Promoted dev → staging (→ prod)</label>
+  </div>
+
+  <!-- =================== ROUTER SPOT-CHECK =================== -->
+  <h2>Bonus · router spot-check</h2>
+  <div class="note">
+    <b>60-second classification test.</b> Create these titles (you don't have to Start them) and just read the router's suggested kind. It should match the right column below. This proves the router reads intent, not just keywords blindly.
+  </div>
+  <div class="router">
+    <table>
+      <thead><tr><th>Type this title</th><th>Should suggest</th></tr></thead>
+      <tbody>
+        <tr><td><code>Fix crash when opening the profile page offline</code></td><td>✨ Code</td></tr>
+        <tr><td><code>Research: which payment providers support instant payouts?</code></td><td>🔬 Research</td></tr>
+        <tr><td><code>Write an SOW for the onboarding revamp</code></td><td>📄 Docs (SOW)</td></tr>
+        <tr><td><code>Investigate why our build times doubled last month</code></td><td>🔬 Research</td></tr>
+        <tr><td><code>Explainer: how our billing engine handles proration</code></td><td>📄 Docs (Explainer)</td></tr>
+        <tr><td><code>Refactor the notification service to use a queue</code></td><td>✨ Code</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <label class="chk" style="font-size:14px"><input type="checkbox"> Router suggestions matched (override any that don't — that's the point of confirm)</label>
+
+  <div class="note big" style="margin-top:30px">🎉 <b>That's the full surface.</b> Each kind reached its terminal state under your control, the router classified correctly (with confirm/override as the safety net), gates both approved <i>and</i> rejected cleanly, and code shipped through the env chain. Anything land in a red <b>Blocked</b> banner? Open it — the activity notes say exactly what happened — and tell Claude.</div>
+  <footer>Spade · sample projects &amp; use-case test guide · pairs with <code>task-lifecycle-test-guide.html</code></footer>
+</div>
+
+<script>
+  // progress
+  const boxes=[...document.querySelectorAll('.chk input')],bar=document.getElementById('bar'),dc=document.getElementById('donecount');
+  document.getElementById('total').textContent=boxes.length;
+  function sync(){let n=0;boxes.forEach(b=>{const uc=b.closest('.uc');if(b.checked){n++;uc&&uc.classList.add('done')}else uc&&uc.classList.remove('done')});dc.textContent=n;bar.style.width=(n/boxes.length*100)+'%';}
+  boxes.forEach(b=>b.addEventListener('change',sync));sync();
+  // copy buttons
+  document.querySelectorAll('.copybtn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const val=btn.previousElementSibling.textContent;
+      navigator.clipboard.writeText(val).then(()=>{
+        const t=btn.textContent;btn.textContent='Copied ✓';btn.classList.add('ok');
+        setTimeout(()=>{btn.textContent=t;btn.classList.remove('ok')},1200);
+      });
+    });
+  });
+</script>
+</body>
+</html>

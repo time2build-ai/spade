@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI logs — filter by ticket</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --bg-1:#111114; --bg-2:#16161a; --bg-3:#1c1c22;
+    --line:#26262d; --line-2:#2f2f37; --line-strong:#3a3a44;
+    --text:#ecedef; --text-2:#b9bac1; --text-3:#82838c; --text-4:#5b5c66;
+    --accent:#c9b8ff; --green:#7ad19a; --amber:#e6b86a; --blue:#7ab6e6;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:34px 26px 90px}
+  .head{max-width:1250px;margin:0 auto 22px}
+  h1{font-size:23px;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--text-2);max-width:760px}
+  .grid{max-width:1250px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px;align-items:start}
+  .variant{background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:14px 14px 16px}
+  .vhead{display:flex;align-items:baseline;gap:8px;margin:2px 2px 3px}
+  .vtag{font:11px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:1px 7px}
+  .vname{font-size:15px;font-weight:600}
+  .vwhy{color:var(--text-3);font-size:12px;margin:2px 2px 12px;min-height:44px}
+
+  /* the sessions panel (like the real cli-runs sidebar) */
+  .panel{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;min-height:300px}
+  .panel-h{font:10px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text-4);margin:2px 2px 8px}
+  .run{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:8px 10px;border-radius:7px;margin-bottom:3px}
+  .run:hover{background:var(--bg-1)}
+  .run.on{background:linear-gradient(90deg,rgba(201,184,255,.1),transparent)}
+  .run-title{display:flex;align-items:baseline;gap:6px;min-width:0}
+  .tid{flex:none;font:10.5px var(--mono);color:var(--accent);background:rgba(201,184,255,.1);border:1px solid rgba(201,184,255,.25);border-radius:5px;padding:0 5px}
+  .ttitle{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .role{font:10px var(--mono);color:var(--text-4);margin-top:2px}
+  .role .live{color:var(--green)}
+
+  /* A: search box */
+  .search{display:flex;align-items:center;gap:7px;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;margin-bottom:9px}
+  .search input{flex:1;background:none;border:none;outline:none;color:var(--text);font:12px var(--mono)}
+  .search input::placeholder{color:var(--text-4)}
+  .search .ic{color:var(--text-4)}
+
+  /* B: ticket chips */
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+  .chip{font:11px var(--mono);padding:3px 9px;border-radius:20px;border:1px solid var(--line);background:var(--bg-2);color:var(--text-3);cursor:pointer}
+  .chip .c{color:var(--text-4)}
+  .chip.on{border-color:var(--accent);color:var(--accent);background:rgba(201,184,255,.08)}
+  .chip.on .c{color:var(--accent)}
+
+  /* C: grouped */
+  .group-h{display:flex;align-items:center;gap:7px;padding:8px 6px 6px;cursor:pointer}
+  .group-h .tid{font-size:11px}
+  .group-h .gt{font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .group-h .cnt{margin-left:auto;font:10px var(--mono);color:var(--text-4)}
+  .group-h .chev{color:var(--text-4);font-size:11px;transition:transform .15s}
+  .group.closed .chev{transform:rotate(-90deg)}
+  .group.closed .group-body{display:none}
+  .group-body{padding-left:8px;border-left:1px solid var(--line);margin-left:8px}
+  footer{max-width:1250px;margin:26px auto 0;color:var(--text-4);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>CLI / logs — filter by ticket</h1>
+  <p class="sub">The live-sessions list, three ways to narrow to one ticket. Same 5 sessions each: <b>SPD-035</b> (Scoping · Synthesis · Synthesis) and <b>SPD-037</b> (Shaping · Building).</p>
+</div>
+
+<div class="grid" id="grid"></div>
+<footer>Pick a letter (or a mix — e.g. chips + a search box). I’ll wire it into <code>app/cli/page.tsx</code>. The ticket set comes from the live sessions, so it stays in sync automatically.</footer>
+
+<script>
+const S = [
+  {tid:"SPD-035", title:"Research plant-ID approach", role:"Scoping", live:true},
+  {tid:"SPD-035", title:"Research plant-ID approach", role:"Synthesis", live:true},
+  {tid:"SPD-035", title:"Research plant-ID approach", role:"Synthesis", live:true},
+  {tid:"SPD-037", title:"Add watering-reminder toggle", role:"Shaping", live:true},
+  {tid:"SPD-037", title:"Add watering-reminder toggle", role:"Building", live:true},
+];
+const TICKETS = [...new Set(S.map(s=>s.tid))];
+const runHTML = (s, on)=>`<button class="run ${on?'on':''}">
+  <div class="run-title"><span class="tid">${s.tid}</span><span class="ttitle">${s.title}</span></div>
+  <div class="role"><span class="live">●</span> ${s.role}</div></button>`;
+
+const VARIANTS = {
+  A:{name:"Search box", why:"A filter input at the top — type a ticket (or title) to narrow. Familiar, scales to many tickets, zero clicks to see all.",
+     render:(root)=>{
+       root.innerHTML = `<div class="panel"><div class="panel-h">Live sessions · 5</div>
+         <div class="search"><span class="ic">🔍</span><input placeholder="Filter by ticket…" value=""></div>
+         <div class="list">${S.map((s,i)=>runHTML(s,i===0)).join('')}</div></div>`;
+       const inp=root.querySelector('input'), list=root.querySelector('.list'), h=root.querySelector('.panel-h');
+       inp.oninput=()=>{const q=inp.value.trim().toLowerCase();
+         const f=S.filter(s=>!q||s.tid.toLowerCase().includes(q)||s.title.toLowerCase().includes(q));
+         list.innerHTML=f.map((s,i)=>runHTML(s,i===0)).join('')||'<div class="role" style="padding:12px 6px">No sessions match.</div>';
+         h.textContent=`Live sessions · ${f.length}`;};
+     }},
+  B:{name:"Ticket chips ★", why:"A row of ticket pills with counts — one click to focus a ticket, click All to clear. Fastest for a handful of active tickets; you see them at a glance.",
+     render:(root)=>{
+       const chips=[{id:"all",label:"All",n:S.length}].concat(TICKETS.map(t=>({id:t,label:t,n:S.filter(s=>s.tid===t).length})));
+       let sel="all";
+       root.innerHTML=`<div class="panel"><div class="panel-h">Live sessions</div>
+         <div class="chips">${chips.map(c=>`<span class="chip ${c.id===sel?'on':''}" data-id="${c.id}">${c.label} <span class="c">${c.n}</span></span>`).join('')}</div>
+         <div class="list"></div></div>`;
+       const draw=()=>{const f=sel==="all"?S:S.filter(s=>s.tid===sel);
+         root.querySelector('.list').innerHTML=f.map((s,i)=>runHTML(s,i===0)).join('');
+         root.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.id===sel));};
+       root.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{sel=c.dataset.id;draw();});
+       draw();
+     }},
+  C:{name:"Grouped by ticket", why:"No filter needed — sessions are grouped under a collapsible ticket header. Every agent for a ticket sits together; collapse the ones you’re ignoring.",
+     render:(root)=>{
+       root.innerHTML=`<div class="panel"><div class="panel-h">Live sessions · by ticket</div>
+         ${TICKETS.map((t,gi)=>{const rows=S.filter(s=>s.tid===t);
+           return `<div class="group ${gi>1?'closed':''}">
+             <div class="group-h"><span class="chev">▾</span><span class="tid">${t}</span><span class="gt">${rows[0].title}</span><span class="cnt">${rows.length}</span></div>
+             <div class="group-body">${rows.map((s,i)=>`<button class="run ${gi===0&&i===0?'on':''}"><div class="role"><span class="live">●</span> ${s.role}</div></button>`).join('')}</div>
+           </div>`;}).join('')}</div>`;
+       root.querySelectorAll('.group-h').forEach(h=>h.onclick=()=>h.parentElement.classList.toggle('closed'));
+     }},
+};
+
+const g=document.getElementById('grid');
+for(const [tag,v] of Object.entries(VARIANTS)){
+  const el=document.createElement('div'); el.className='variant';
+  el.innerHTML=`<div class="vhead"><span class="vtag">${tag}</span><span class="vname">${v.name}</span></div><div class="vwhy">${v.why}</div><div class="host"></div>`;
+  g.appendChild(el); v.render(el.querySelector('.host'));
+}
+</script>
+</body>
+</html>
